@@ -1,0 +1,9 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+TestResults/
+publish/
+work/dotnet/
+work/dotnet-install.ps1
