@@ -23,6 +23,9 @@ public sealed class TrackingController : IDisposable
     private AppState _state;
     private EyeTimeAccumulator _accumulator;
     private DateTimeOffset _lastSaveAt;
+    private int _tickInProgress;
+    private bool _hasPendingImmediateSave;
+    private bool _pendingReminderNotification;
     private bool _disposed;
 
     public TrackingController(NotificationService notificationService)
@@ -115,20 +118,19 @@ public sealed class TrackingController : IDisposable
 
     private void OnTimerTick(object? state)
     {
-        TrackingUpdatedEventArgs? update = null;
-
-        if (!Monitor.TryEnter(_gate))
+        if (Interlocked.Exchange(ref _tickInProgress, 1) == 1)
         {
             return;
         }
 
+        TrackingUpdatedEventArgs? update = null;
+        AppState? stateToSave = null;
+        DateTimeOffset? saveStartedAt = null;
+        var shouldShowReminder = false;
+        var saveIsImmediate = false;
+
         try
         {
-            if (_disposed)
-            {
-                return;
-            }
-
             var now = DateTimeOffset.Now;
             var snapshot = new ActivitySnapshot(
                 now,
@@ -137,22 +139,59 @@ public sealed class TrackingController : IDisposable
                 SystemInformation.UserInteractive,
                 false);
 
-            _accumulator.Tick(snapshot, _state.Settings);
-            var record = PersistAccumulatorLocked();
-
-            if (_reminderPolicy.ShouldNotify(record, _state.Settings))
+            lock (_gate)
             {
-                _notificationService.ShowDailyReminder();
-                _reminderPolicy.MarkShown(record);
-                _accumulator.Today.ReminderShown = true;
+                if (_disposed)
+                {
+                    return;
+                }
+
+                _accumulator.Tick(snapshot, _state.Settings);
+                var record = PersistAccumulatorLocked();
+
+                if (_reminderPolicy.ShouldNotify(record, _state.Settings))
+                {
+                    _reminderPolicy.MarkShown(record);
+                    _accumulator.Today.ReminderShown = true;
+                    _hasPendingImmediateSave = true;
+                    _pendingReminderNotification = true;
+                }
+
+                if (_hasPendingImmediateSave)
+                {
+                    stateToSave = CloneStateLocked();
+                    saveStartedAt = now;
+                    shouldShowReminder = _pendingReminderNotification;
+                    saveIsImmediate = true;
+                }
+                else if (now - _lastSaveAt >= SaveInterval)
+                {
+                    stateToSave = CloneStateLocked();
+                    saveStartedAt = now;
+                }
+
+                update = CreateUpdateLocked(record);
             }
 
-            if (now - _lastSaveAt >= SaveInterval)
+            var saveSucceeded = SaveSnapshot(stateToSave, saveStartedAt);
+
+            if (shouldShowReminder && saveSucceeded)
             {
-                SaveLocked(now);
+                lock (_gate)
+                {
+                    _pendingReminderNotification = false;
+                }
+
+                TryShowDailyReminder();
             }
 
-            update = CreateUpdateLocked(record);
+            if (saveIsImmediate && saveSucceeded)
+            {
+                lock (_gate)
+                {
+                    _hasPendingImmediateSave = false;
+                }
+            }
         }
         catch (Exception)
         {
@@ -160,7 +199,7 @@ public sealed class TrackingController : IDisposable
         }
         finally
         {
-            Monitor.Exit(_gate);
+            Interlocked.Exchange(ref _tickInProgress, 0);
         }
 
         if (update is not null)
@@ -175,6 +214,56 @@ public sealed class TrackingController : IDisposable
         record.TotalSeconds = _accumulator.Today.TotalSeconds;
         record.ReminderShown = _accumulator.Today.ReminderShown;
         return record;
+    }
+
+    private AppState CloneStateLocked()
+    {
+        return new AppState
+        {
+            Settings = _state.Settings,
+            Records = _state.Records
+                .Select(record => new DailyRecord(record.Date)
+                {
+                    TotalSeconds = record.TotalSeconds,
+                    ReminderShown = record.ReminderShown
+                })
+                .ToList()
+        };
+    }
+
+    private bool SaveSnapshot(AppState? stateToSave, DateTimeOffset? saveStartedAt)
+    {
+        if (stateToSave is null || saveStartedAt is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            _stateStore.Save(stateToSave);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+
+        lock (_gate)
+        {
+            _lastSaveAt = saveStartedAt.Value;
+        }
+
+        return true;
+    }
+
+    private void TryShowDailyReminder()
+    {
+        try
+        {
+            _notificationService.ShowDailyReminder();
+        }
+        catch (Exception)
+        {
+        }
     }
 
     private void SaveLocked(DateTimeOffset savedAt)
