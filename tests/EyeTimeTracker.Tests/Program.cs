@@ -14,6 +14,11 @@ static ActivitySnapshot Snapshot(DateTimeOffset now, int idleSeconds, bool audio
     return new ActivitySnapshot(now, TimeSpan.FromSeconds(idleSeconds), audio, unlocked, false);
 }
 
+static ActivitySnapshot SnapshotWithIdleTime(DateTimeOffset now, TimeSpan idleTime, bool audio = false, bool unlocked = true)
+{
+    return new ActivitySnapshot(now, idleTime, audio, unlocked, false);
+}
+
 static void TestDoesNotBackfillLongIdleGap()
 {
     var settings = TrackerSettings.Default;
@@ -54,6 +59,31 @@ static void TestAudioCountsWithoutInput()
     AssertEqual(30L, acc.Today.TotalSeconds, nameof(TestAudioCountsWithoutInput));
 }
 
+static void TestSparseAudioDoesNotBackfillElapsed()
+{
+    var settings = TrackerSettings.Default with { CountAudio = true };
+    var acc = new EyeTimeAccumulator(new DateOnly(2026, 6, 26));
+    var t0 = new DateTimeOffset(2026, 6, 26, 12, 0, 0, TimeSpan.Zero);
+
+    acc.Tick(Snapshot(t0, idleSeconds: 600, audio: false), settings);
+    acc.Tick(Snapshot(t0.AddMinutes(4).AddSeconds(59), idleSeconds: 899, audio: true), settings);
+
+    AssertEqual(0L, acc.Today.TotalSeconds, nameof(TestSparseAudioDoesNotBackfillElapsed));
+}
+
+static void TestFractionalTicksAreTruncated()
+{
+    var settings = TrackerSettings.Default with { CountAudio = false };
+    var acc = new EyeTimeAccumulator(new DateOnly(2026, 6, 26));
+    var t0 = new DateTimeOffset(2026, 6, 26, 13, 0, 0, TimeSpan.Zero);
+
+    acc.Tick(SnapshotWithIdleTime(t0, TimeSpan.Zero), settings);
+    acc.Tick(SnapshotWithIdleTime(t0.AddMilliseconds(600), TimeSpan.FromMilliseconds(600)), settings);
+    acc.Tick(SnapshotWithIdleTime(t0.AddMilliseconds(1200), TimeSpan.FromMilliseconds(1200)), settings);
+
+    AssertEqual(0L, acc.Today.TotalSeconds, nameof(TestFractionalTicksAreTruncated));
+}
+
 static void TestDateRolloverStartsNewDay()
 {
     var settings = TrackerSettings.Default;
@@ -70,5 +100,7 @@ static void TestDateRolloverStartsNewDay()
 TestDoesNotBackfillLongIdleGap();
 TestIdleThresholdStopsCounting();
 TestAudioCountsWithoutInput();
+TestSparseAudioDoesNotBackfillElapsed();
+TestFractionalTicksAreTruncated();
 TestDateRolloverStartsNewDay();
 Console.WriteLine("All tests passed.");

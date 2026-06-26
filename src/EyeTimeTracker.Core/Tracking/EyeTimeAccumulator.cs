@@ -5,6 +5,7 @@ namespace EyeTimeTracker.Core.Tracking;
 public sealed class EyeTimeAccumulator
 {
     private static readonly TimeSpan MaxCountableElapsed = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan MaxNormalTickElapsed = TimeSpan.FromSeconds(30);
     private DateTimeOffset? _lastTick;
 
     public EyeTimeAccumulator(DateOnly today, long initialSeconds = 0, bool reminderShown = false)
@@ -73,7 +74,7 @@ public sealed class EyeTimeAccumulator
         var intervalEnd = snapshot.Timestamp;
         var intervalStart = intervalEnd - elapsed;
 
-        var audioSeconds = settings.CountAudio && snapshot.IsAudioActive
+        var audioSeconds = settings.CountAudio && snapshot.IsAudioActive && elapsed <= MaxNormalTickElapsed
             ? elapsed.TotalSeconds
             : 0;
 
@@ -83,7 +84,7 @@ public sealed class EyeTimeAccumulator
         var inputEnd = Min(intervalEnd, activeUntil);
         var inputSeconds = inputEnd > inputStart ? (inputEnd - inputStart).TotalSeconds : 0;
 
-        return (long)Math.Round(Math.Max(audioSeconds, inputSeconds));
+        return (long)Math.Floor(Math.Max(audioSeconds, inputSeconds));
     }
 
     private static DateTimeOffset Max(DateTimeOffset left, DateTimeOffset right)
