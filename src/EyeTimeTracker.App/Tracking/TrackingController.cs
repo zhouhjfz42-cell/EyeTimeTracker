@@ -94,6 +94,21 @@ public sealed class TrackingController : IDisposable
         }
     }
 
+    public IReadOnlyList<DailyRecord> GetRecordsSnapshot()
+    {
+        lock (_gate)
+        {
+            PersistAccumulatorLocked();
+            return _state.Records
+                .Select(record => new DailyRecord(record.Date)
+                {
+                    TotalSeconds = record.TotalSeconds,
+                    ReminderShown = record.ReminderShown
+                })
+                .ToList();
+        }
+    }
+
     public void SaveNow()
     {
         StateSaveSnapshot snapshot;
