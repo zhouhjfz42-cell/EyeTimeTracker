@@ -7,6 +7,7 @@ public sealed class TrayApplicationContext : ApplicationContext
 {
     private readonly NotifyIcon _notifyIcon;
     private readonly ContextMenuStrip _menu;
+    private readonly Control _uiDispatcher;
     private readonly TrackingController _controller;
     private readonly StartupManager _startupManager;
     private MainForm? _mainForm;
@@ -19,6 +20,9 @@ public sealed class TrayApplicationContext : ApplicationContext
         _menu.Items.Add(new ToolStripSeparator());
         _menu.Items.Add(new ToolStripMenuItem("\u9000\u51fa", null, (_, _) => ExitApplication()));
 
+        _uiDispatcher = new Control();
+        _ = _uiDispatcher.Handle;
+
         _notifyIcon = new NotifyIcon
         {
             Icon = SystemIcons.Application,
@@ -28,7 +32,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         };
         _notifyIcon.DoubleClick += (_, _) => OpenMainWindow();
 
-        _controller = new TrackingController(new NotificationService(_notifyIcon));
+        _controller = new TrackingController(new NotificationService(_notifyIcon, _uiDispatcher));
         _startupManager = new StartupManager();
         ApplyStartupSetting();
     }
@@ -82,6 +86,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         _controller.Dispose();
         _notifyIcon.Visible = false;
         _notifyIcon.Dispose();
+        _uiDispatcher.Dispose();
         _menu.Dispose();
         ExitThread();
     }
