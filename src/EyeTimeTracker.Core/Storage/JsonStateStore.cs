@@ -79,7 +79,7 @@ public sealed class JsonStateStore
         }
 
         state.Settings ??= TrackerSettings.Default;
-        state.Today ??= new DailyRecord(DateOnly.FromDateTime(DateTime.Today));
+        state.Records ??= new List<DailyRecord>();
         return state;
     }
 }

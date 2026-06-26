@@ -102,23 +102,28 @@ static void TestDateRolloverStartsNewDay()
 static void TestReminderOnlyOncePerDay()
 {
     var settings = TrackerSettings.Default with { ReminderThresholdSeconds = 19800 };
-    var record = new DailyRecord(new DateOnly(2026, 6, 26))
+    var dailyRecord = new DailyRecord(new DateOnly(2026, 6, 26))
     {
         TotalSeconds = 19800
     };
     var policy = new DailyReminderPolicy();
 
-    AssertEqual(true, policy.ShouldNotify(record, settings), nameof(TestReminderOnlyOncePerDay) + " first");
+    AssertEqual(true, policy.ShouldNotify(dailyRecord, settings), nameof(TestReminderOnlyOncePerDay) + " first");
 
-    policy.MarkShown(record);
+    policy.MarkShown(dailyRecord);
 
-    AssertEqual(false, policy.ShouldNotify(record, settings), nameof(TestReminderOnlyOncePerDay) + " after shown");
+    AssertEqual(false, policy.ShouldNotify(dailyRecord, settings), nameof(TestReminderOnlyOncePerDay) + " after shown");
 }
 
 static void TestJsonStateRoundTrip()
 {
     var path = Path.Combine(Path.GetTempPath(), "eye-time-tracker-tests", $"{Guid.NewGuid()}.json");
     var store = new JsonStateStore(path);
+    var savedRecord = new DailyRecord(new DateOnly(2026, 6, 26))
+    {
+        TotalSeconds = 12345,
+        ReminderShown = true
+    };
     var state = new AppState
     {
         Settings = TrackerSettings.Default with
@@ -128,20 +133,45 @@ static void TestJsonStateRoundTrip()
             ReminderThresholdSeconds = 19800,
             StartWithWindows = false
         },
-        Today = new DailyRecord(new DateOnly(2026, 6, 26))
-        {
-            TotalSeconds = 12345,
-            ReminderShown = true
-        }
+        Records = [savedRecord]
     };
 
     store.Save(state);
     var loaded = store.Load();
+    var loadedRecord = loaded.Records[0];
 
     AssertEqual(state.Settings, loaded.Settings, nameof(TestJsonStateRoundTrip) + " settings");
-    AssertEqual(state.Today.Date, loaded.Today.Date, nameof(TestJsonStateRoundTrip) + " date");
-    AssertEqual(state.Today.TotalSeconds, loaded.Today.TotalSeconds, nameof(TestJsonStateRoundTrip) + " seconds");
-    AssertEqual(state.Today.ReminderShown, loaded.Today.ReminderShown, nameof(TestJsonStateRoundTrip) + " reminder shown");
+    AssertEqual(1, loaded.Records.Count, nameof(TestJsonStateRoundTrip) + " records count");
+    AssertEqual(savedRecord.Date, loadedRecord.Date, nameof(TestJsonStateRoundTrip) + " date");
+    AssertEqual(savedRecord.TotalSeconds, loadedRecord.TotalSeconds, nameof(TestJsonStateRoundTrip) + " seconds");
+    AssertEqual(savedRecord.ReminderShown, loadedRecord.ReminderShown, nameof(TestJsonStateRoundTrip) + " reminder shown");
+}
+
+static void TestGetOrCreateRecordReusesExistingRecord()
+{
+    var state = new AppState();
+    var date = new DateOnly(2026, 6, 26);
+
+    var first = state.GetOrCreateRecord(date);
+    first.TotalSeconds = 42;
+    var second = state.GetOrCreateRecord(date);
+    var nextDay = state.GetOrCreateRecord(date.AddDays(1));
+
+    AssertEqual(true, ReferenceEquals(first, second), nameof(TestGetOrCreateRecordReusesExistingRecord) + " same reference");
+    AssertEqual(2, state.Records.Count, nameof(TestGetOrCreateRecordReusesExistingRecord) + " records count");
+    AssertEqual(42L, second.TotalSeconds, nameof(TestGetOrCreateRecordReusesExistingRecord) + " reused seconds");
+    AssertEqual(date.AddDays(1), nextDay.Date, nameof(TestGetOrCreateRecordReusesExistingRecord) + " new date");
+}
+
+static void TestMissingJsonReturnsDefaultState()
+{
+    var path = Path.Combine(Path.GetTempPath(), "eye-time-tracker-tests", $"{Guid.NewGuid()}.json");
+    var store = new JsonStateStore(path);
+
+    var loaded = store.Load();
+
+    AssertEqual(TrackerSettings.Default, loaded.Settings, nameof(TestMissingJsonReturnsDefaultState) + " settings");
+    AssertEqual(0, loaded.Records.Count, nameof(TestMissingJsonReturnsDefaultState) + " records count");
 }
 
 static void TestInvalidJsonReturnsDefaultState()
@@ -154,9 +184,7 @@ static void TestInvalidJsonReturnsDefaultState()
     var loaded = store.Load();
 
     AssertEqual(TrackerSettings.Default, loaded.Settings, nameof(TestInvalidJsonReturnsDefaultState) + " settings");
-    AssertEqual(DateOnly.FromDateTime(DateTime.Today), loaded.Today.Date, nameof(TestInvalidJsonReturnsDefaultState) + " date");
-    AssertEqual(0L, loaded.Today.TotalSeconds, nameof(TestInvalidJsonReturnsDefaultState) + " seconds");
-    AssertEqual(false, loaded.Today.ReminderShown, nameof(TestInvalidJsonReturnsDefaultState) + " reminder shown");
+    AssertEqual(0, loaded.Records.Count, nameof(TestInvalidJsonReturnsDefaultState) + " records count");
 }
 
 TestDoesNotBackfillLongIdleGap();
@@ -167,5 +195,7 @@ TestFractionalTicksAreTruncated();
 TestDateRolloverStartsNewDay();
 TestReminderOnlyOncePerDay();
 TestJsonStateRoundTrip();
+TestGetOrCreateRecordReusesExistingRecord();
+TestMissingJsonReturnsDefaultState();
 TestInvalidJsonReturnsDefaultState();
 Console.WriteLine("All tests passed.");
