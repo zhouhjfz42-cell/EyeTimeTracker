@@ -1,4 +1,6 @@
 using EyeTimeTracker.Core.Models;
+using EyeTimeTracker.Core.Reminders;
+using EyeTimeTracker.Core.Storage;
 using EyeTimeTracker.Core.Tracking;
 
 static void AssertEqual<T>(T expected, T actual, string name)
@@ -97,10 +99,73 @@ static void TestDateRolloverStartsNewDay()
     AssertEqual(0L, acc.Today.TotalSeconds, nameof(TestDateRolloverStartsNewDay) + " seconds");
 }
 
+static void TestReminderOnlyOncePerDay()
+{
+    var settings = TrackerSettings.Default with { ReminderThresholdSeconds = 19800 };
+    var record = new DailyRecord(new DateOnly(2026, 6, 26))
+    {
+        TotalSeconds = 19800
+    };
+    var policy = new DailyReminderPolicy();
+
+    AssertEqual(true, policy.ShouldNotify(record, settings), nameof(TestReminderOnlyOncePerDay) + " first");
+
+    policy.MarkShown(record);
+
+    AssertEqual(false, policy.ShouldNotify(record, settings), nameof(TestReminderOnlyOncePerDay) + " after shown");
+}
+
+static void TestJsonStateRoundTrip()
+{
+    var path = Path.Combine(Path.GetTempPath(), "eye-time-tracker-tests", $"{Guid.NewGuid()}.json");
+    var store = new JsonStateStore(path);
+    var state = new AppState
+    {
+        Settings = TrackerSettings.Default with
+        {
+            IdleThresholdSeconds = 240,
+            CountAudio = false,
+            ReminderThresholdSeconds = 19800,
+            StartWithWindows = false
+        },
+        Today = new DailyRecord(new DateOnly(2026, 6, 26))
+        {
+            TotalSeconds = 12345,
+            ReminderShown = true
+        }
+    };
+
+    store.Save(state);
+    var loaded = store.Load();
+
+    AssertEqual(state.Settings, loaded.Settings, nameof(TestJsonStateRoundTrip) + " settings");
+    AssertEqual(state.Today.Date, loaded.Today.Date, nameof(TestJsonStateRoundTrip) + " date");
+    AssertEqual(state.Today.TotalSeconds, loaded.Today.TotalSeconds, nameof(TestJsonStateRoundTrip) + " seconds");
+    AssertEqual(state.Today.ReminderShown, loaded.Today.ReminderShown, nameof(TestJsonStateRoundTrip) + " reminder shown");
+}
+
+static void TestInvalidJsonReturnsDefaultState()
+{
+    var path = Path.Combine(Path.GetTempPath(), "eye-time-tracker-tests", $"{Guid.NewGuid()}.json");
+    Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+    File.WriteAllText(path, "{ invalid json");
+    var store = new JsonStateStore(path);
+
+    var loaded = store.Load();
+
+    AssertEqual(TrackerSettings.Default, loaded.Settings, nameof(TestInvalidJsonReturnsDefaultState) + " settings");
+    AssertEqual(DateOnly.FromDateTime(DateTime.Today), loaded.Today.Date, nameof(TestInvalidJsonReturnsDefaultState) + " date");
+    AssertEqual(0L, loaded.Today.TotalSeconds, nameof(TestInvalidJsonReturnsDefaultState) + " seconds");
+    AssertEqual(false, loaded.Today.ReminderShown, nameof(TestInvalidJsonReturnsDefaultState) + " reminder shown");
+}
+
 TestDoesNotBackfillLongIdleGap();
 TestIdleThresholdStopsCounting();
 TestAudioCountsWithoutInput();
 TestSparseAudioDoesNotBackfillElapsed();
 TestFractionalTicksAreTruncated();
 TestDateRolloverStartsNewDay();
+TestReminderOnlyOncePerDay();
+TestJsonStateRoundTrip();
+TestInvalidJsonReturnsDefaultState();
 Console.WriteLine("All tests passed.");
