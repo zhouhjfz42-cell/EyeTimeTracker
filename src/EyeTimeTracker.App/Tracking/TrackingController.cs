@@ -13,6 +13,7 @@ public sealed class TrackingController : IDisposable
     private static readonly TimeSpan SaveInterval = TimeSpan.FromMinutes(1);
 
     private readonly object _gate = new();
+    private readonly object _saveGate = new();
     private readonly JsonStateStore _stateStore;
     private readonly IdleTimeProvider _idleTimeProvider;
     private readonly AudioActivityProvider _audioActivityProvider;
@@ -23,6 +24,8 @@ public sealed class TrackingController : IDisposable
     private AppState _state;
     private EyeTimeAccumulator _accumulator;
     private DateTimeOffset _lastSaveAt;
+    private long _nextSaveVersion;
+    private long _lastSavedVersion;
     private int _tickInProgress;
     private bool _hasPendingImmediateSave;
     private bool _pendingReminderNotification;
@@ -93,15 +96,23 @@ public sealed class TrackingController : IDisposable
 
     public void SaveNow()
     {
+        StateSaveSnapshot snapshot;
+        var now = DateTimeOffset.Now;
+
         lock (_gate)
         {
             PersistAccumulatorLocked();
-            SaveLocked(DateTimeOffset.Now);
+            snapshot = CreateSaveSnapshotLocked(now);
         }
+
+        TrySaveSnapshot(snapshot);
     }
 
     public void Dispose()
     {
+        StateSaveSnapshot snapshot;
+        var now = DateTimeOffset.Now;
+
         lock (_gate)
         {
             if (_disposed)
@@ -112,8 +123,10 @@ public sealed class TrackingController : IDisposable
             _disposed = true;
             _timer.Dispose();
             PersistAccumulatorLocked();
-            SaveLocked(DateTimeOffset.Now);
+            snapshot = CreateSaveSnapshotLocked(now);
         }
+
+        TrySaveSnapshot(snapshot);
     }
 
     private void OnTimerTick(object? state)
@@ -124,8 +137,7 @@ public sealed class TrackingController : IDisposable
         }
 
         TrackingUpdatedEventArgs? update = null;
-        AppState? stateToSave = null;
-        DateTimeOffset? saveStartedAt = null;
+        StateSaveSnapshot? snapshotToSave = null;
         var shouldShowReminder = false;
         var saveIsImmediate = false;
 
@@ -159,21 +171,19 @@ public sealed class TrackingController : IDisposable
 
                 if (_hasPendingImmediateSave)
                 {
-                    stateToSave = CloneStateLocked();
-                    saveStartedAt = now;
+                    snapshotToSave = CreateSaveSnapshotLocked(now);
                     shouldShowReminder = _pendingReminderNotification;
                     saveIsImmediate = true;
                 }
                 else if (now - _lastSaveAt >= SaveInterval)
                 {
-                    stateToSave = CloneStateLocked();
-                    saveStartedAt = now;
+                    snapshotToSave = CreateSaveSnapshotLocked(now);
                 }
 
                 update = CreateUpdateLocked(record);
             }
 
-            var saveSucceeded = SaveSnapshot(stateToSave, saveStartedAt);
+            var saveSucceeded = TrySaveSnapshot(snapshotToSave);
 
             if (shouldShowReminder && saveSucceeded)
             {
@@ -216,6 +226,11 @@ public sealed class TrackingController : IDisposable
         return record;
     }
 
+    private StateSaveSnapshot CreateSaveSnapshotLocked(DateTimeOffset savedAt)
+    {
+        return new StateSaveSnapshot(CloneStateLocked(), savedAt, ++_nextSaveVersion);
+    }
+
     private AppState CloneStateLocked()
     {
         return new AppState
@@ -231,28 +246,38 @@ public sealed class TrackingController : IDisposable
         };
     }
 
-    private bool SaveSnapshot(AppState? stateToSave, DateTimeOffset? saveStartedAt)
+    private bool TrySaveSnapshot(StateSaveSnapshot? snapshot)
     {
-        if (stateToSave is null || saveStartedAt is null)
+        if (snapshot is null)
         {
             return false;
         }
 
-        try
+        lock (_saveGate)
         {
-            _stateStore.Save(stateToSave);
-        }
-        catch (Exception)
-        {
-            return false;
-        }
+            if (snapshot.Version <= _lastSavedVersion)
+            {
+                return true;
+            }
 
-        lock (_gate)
-        {
-            _lastSaveAt = saveStartedAt.Value;
-        }
+            try
+            {
+                _stateStore.Save(snapshot.State);
+            }
+            catch (Exception)
+            {
+                return false;
+            }
 
-        return true;
+            _lastSavedVersion = snapshot.Version;
+
+            lock (_gate)
+            {
+                _lastSaveAt = snapshot.SavedAt;
+            }
+
+            return true;
+        }
     }
 
     private void TryShowDailyReminder()
@@ -264,12 +289,6 @@ public sealed class TrackingController : IDisposable
         catch (Exception)
         {
         }
-    }
-
-    private void SaveLocked(DateTimeOffset savedAt)
-    {
-        _stateStore.Save(_state);
-        _lastSaveAt = savedAt;
     }
 
     private TrackingUpdatedEventArgs CreateUpdateLocked(DailyRecord record)
@@ -314,3 +333,5 @@ public sealed record TrackingUpdatedEventArgs(
     long TotalSeconds,
     bool ReminderShown,
     bool IsCounting);
+
+internal sealed record StateSaveSnapshot(AppState State, DateTimeOffset SavedAt, long Version);
