@@ -49,6 +49,21 @@ static void TestIdleThresholdStopsCounting()
     AssertEqual(180L, acc.Today.TotalSeconds, nameof(TestIdleThresholdStopsCounting));
 }
 
+static void TestContinuousRecentInputCountsEachNormalTick()
+{
+    var settings = TrackerSettings.Default with { IdleThresholdSeconds = 180, CountAudio = false };
+    var acc = new EyeTimeAccumulator(new DateOnly(2026, 6, 26));
+    var t0 = new DateTimeOffset(2026, 6, 26, 10, 30, 0, TimeSpan.Zero);
+
+    acc.Tick(Snapshot(t0, idleSeconds: 0), settings);
+    for (var seconds = 10; seconds <= 300; seconds += 10)
+    {
+        acc.Tick(Snapshot(t0.AddSeconds(seconds), idleSeconds: 0), settings);
+    }
+
+    AssertEqual(300L, acc.Today.TotalSeconds, nameof(TestContinuousRecentInputCountsEachNormalTick));
+}
+
 static void TestAudioCountsWithoutInput()
 {
     var settings = TrackerSettings.Default with { CountAudio = true };
@@ -189,6 +204,7 @@ static void TestInvalidJsonReturnsDefaultState()
 
 TestDoesNotBackfillLongIdleGap();
 TestIdleThresholdStopsCounting();
+TestContinuousRecentInputCountsEachNormalTick();
 TestAudioCountsWithoutInput();
 TestSparseAudioDoesNotBackfillElapsed();
 TestFractionalTicksAreTruncated();

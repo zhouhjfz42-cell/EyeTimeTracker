@@ -78,13 +78,17 @@ public sealed class EyeTimeAccumulator
             ? elapsed.TotalSeconds
             : 0;
 
+        var recentInputSeconds = snapshot.IdleTime.TotalSeconds <= settings.IdleThresholdSeconds && elapsed <= MaxNormalTickElapsed
+            ? elapsed.TotalSeconds
+            : 0;
+
         var lastInputAt = snapshot.Timestamp - snapshot.IdleTime;
         var activeUntil = lastInputAt + TimeSpan.FromSeconds(settings.IdleThresholdSeconds);
         var inputStart = Max(intervalStart, lastInputAt);
         var inputEnd = Min(intervalEnd, activeUntil);
         var inputSeconds = inputEnd > inputStart ? (inputEnd - inputStart).TotalSeconds : 0;
 
-        return (long)Math.Floor(Math.Max(audioSeconds, inputSeconds));
+        return (long)Math.Floor(Math.Max(audioSeconds, Math.Max(recentInputSeconds, inputSeconds)));
     }
 
     private static DateTimeOffset Max(DateTimeOffset left, DateTimeOffset right)
