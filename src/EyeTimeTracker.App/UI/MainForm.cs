@@ -15,6 +15,10 @@ public sealed class MainForm : Form
     private readonly NumericUpDown _idleThresholdMinutes;
     private readonly CheckBox _countAudio;
     private readonly CheckBox _startWithWindows;
+    private DateOnly? _displayResetDate;
+    private long _todayDisplayBaseline;
+    private long _weekDisplayBaseline;
+    private long _monthDisplayBaseline;
     private bool _loadingSettings;
     private bool _closingForExit;
 
@@ -28,7 +32,7 @@ public sealed class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         MinimizeBox = true;
-        ClientSize = new Size(360, 300);
+        ClientSize = new Size(360, 340);
 
         var root = new TableLayoutPanel
         {
@@ -59,10 +63,11 @@ public sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 3
+            RowCount = 4
         };
         settings.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         settings.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 124));
+        settings.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         settings.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         settings.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         settings.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
@@ -94,6 +99,16 @@ public sealed class MainForm : Form
         };
         settings.Controls.Add(_startWithWindows, 0, 2);
         settings.SetColumnSpan(_startWithWindows, 2);
+
+        var resetDisplay = new Button
+        {
+            Text = "\u91cd\u7f6e\u663e\u793a",
+            Dock = DockStyle.Right,
+            Width = 104
+        };
+        resetDisplay.Click += (_, _) => ResetDisplayedStatistics();
+        settings.Controls.Add(resetDisplay, 0, 3);
+        settings.SetColumnSpan(resetDisplay, 2);
 
         root.Controls.Add(summary, 0, 0);
         root.Controls.Add(new Panel(), 0, 1);
@@ -235,11 +250,50 @@ public sealed class MainForm : Form
         var today = current.Date;
         var weekStart = today.AddDays(-GetMondayOffset(today.DayOfWeek));
         var monthStart = new DateOnly(today.Year, today.Month, 1);
+        var todayTotal = current.TotalSeconds;
+        var weekTotal = SumRecords(records, weekStart, today);
+        var monthTotal = SumRecords(records, monthStart, today);
 
-        _todayValue.Text = FormatDuration(current.TotalSeconds);
+        if (_displayResetDate is not null && _displayResetDate != today)
+        {
+            ClearDisplayReset();
+        }
+
+        if (_displayResetDate == today)
+        {
+            todayTotal -= _todayDisplayBaseline;
+            weekTotal -= _weekDisplayBaseline;
+            monthTotal -= _monthDisplayBaseline;
+        }
+
+        _todayValue.Text = FormatDuration(todayTotal);
         _statusValue.Text = current.IsCounting ? "\u8ba1\u65f6\u4e2d" : "\u6682\u505c";
-        _weekValue.Text = FormatDuration(SumRecords(records, weekStart, today));
-        _monthValue.Text = FormatDuration(SumRecords(records, monthStart, today));
+        _weekValue.Text = FormatDuration(weekTotal);
+        _monthValue.Text = FormatDuration(monthTotal);
+    }
+
+    private void ResetDisplayedStatistics()
+    {
+        var current = _controller.Current;
+        var records = _controller.GetRecordsSnapshot();
+        var today = current.Date;
+        var weekStart = today.AddDays(-GetMondayOffset(today.DayOfWeek));
+        var monthStart = new DateOnly(today.Year, today.Month, 1);
+
+        _displayResetDate = today;
+        _todayDisplayBaseline = current.TotalSeconds;
+        _weekDisplayBaseline = SumRecords(records, weekStart, today);
+        _monthDisplayBaseline = SumRecords(records, monthStart, today);
+
+        UpdateSummary(current);
+    }
+
+    private void ClearDisplayReset()
+    {
+        _displayResetDate = null;
+        _todayDisplayBaseline = 0;
+        _weekDisplayBaseline = 0;
+        _monthDisplayBaseline = 0;
     }
 
     private static int GetMondayOffset(DayOfWeek dayOfWeek)
