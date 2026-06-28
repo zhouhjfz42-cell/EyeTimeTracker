@@ -9,6 +9,7 @@ public sealed class MainForm : Form
     private readonly TrackingController _controller;
     private readonly StartupManager _startupManager;
     private readonly Label _todayValue;
+    private readonly Label _yesterdayValue;
     private readonly Label _statusValue;
     private readonly Label _weekValue;
     private readonly Label _monthValue;
@@ -17,6 +18,7 @@ public sealed class MainForm : Form
     private readonly CheckBox _startWithWindows;
     private DateOnly? _displayResetDate;
     private long _todayDisplayBaseline;
+    private long _yesterdayDisplayBaseline;
     private long _weekDisplayBaseline;
     private long _monthDisplayBaseline;
     private bool _loadingSettings;
@@ -55,7 +57,7 @@ public sealed class MainForm : Form
         summary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
         _todayValue = AddSummaryRow(summary, 0, "\u4eca\u5929");
-        _statusValue = AddSummaryRow(summary, 1, "\u72b6\u6001");
+        _yesterdayValue = AddSummaryRow(summary, 1, "\u6628\u5929");
         _weekValue = AddSummaryRow(summary, 2, "\u672c\u5468");
         _monthValue = AddSummaryRow(summary, 3, "\u672c\u6708");
 
@@ -100,6 +102,10 @@ public sealed class MainForm : Form
         settings.Controls.Add(_startWithWindows, 0, 2);
         settings.SetColumnSpan(_startWithWindows, 2);
 
+        _statusValue = CreateLabel("");
+        _statusValue.Font = new Font(_statusValue.Font, FontStyle.Bold);
+        settings.Controls.Add(_statusValue, 0, 3);
+
         var resetDisplay = new Button
         {
             Text = "\u91cd\u7f6e\u663e\u793a",
@@ -107,8 +113,7 @@ public sealed class MainForm : Form
             Width = 104
         };
         resetDisplay.Click += (_, _) => ResetDisplayedStatistics();
-        settings.Controls.Add(resetDisplay, 0, 3);
-        settings.SetColumnSpan(resetDisplay, 2);
+        settings.Controls.Add(resetDisplay, 1, 3);
 
         root.Controls.Add(summary, 0, 0);
         root.Controls.Add(new Panel(), 0, 1);
@@ -248,9 +253,11 @@ public sealed class MainForm : Form
     {
         var records = _controller.GetRecordsSnapshot();
         var today = current.Date;
+        var yesterday = today.AddDays(-1);
         var weekStart = today.AddDays(-GetMondayOffset(today.DayOfWeek));
         var monthStart = new DateOnly(today.Year, today.Month, 1);
         var todayTotal = current.TotalSeconds;
+        var yesterdayTotal = RecordSeconds(records, yesterday);
         var weekTotal = SumRecords(records, weekStart, today);
         var monthTotal = SumRecords(records, monthStart, today);
 
@@ -262,12 +269,14 @@ public sealed class MainForm : Form
         if (_displayResetDate == today)
         {
             todayTotal -= _todayDisplayBaseline;
+            yesterdayTotal -= _yesterdayDisplayBaseline;
             weekTotal -= _weekDisplayBaseline;
             monthTotal -= _monthDisplayBaseline;
         }
 
         _todayValue.Text = FormatDuration(todayTotal);
-        _statusValue.Text = current.IsCounting ? "\u8ba1\u65f6\u4e2d" : "\u6682\u505c";
+        _yesterdayValue.Text = FormatDuration(yesterdayTotal);
+        _statusValue.Text = current.IsCounting ? "\u72b6\u6001\uff1a\u8ba1\u65f6\u4e2d" : "\u72b6\u6001\uff1a\u6682\u505c";
         _weekValue.Text = FormatDuration(weekTotal);
         _monthValue.Text = FormatDuration(monthTotal);
     }
@@ -277,11 +286,13 @@ public sealed class MainForm : Form
         var current = _controller.Current;
         var records = _controller.GetRecordsSnapshot();
         var today = current.Date;
+        var yesterday = today.AddDays(-1);
         var weekStart = today.AddDays(-GetMondayOffset(today.DayOfWeek));
         var monthStart = new DateOnly(today.Year, today.Month, 1);
 
         _displayResetDate = today;
         _todayDisplayBaseline = current.TotalSeconds;
+        _yesterdayDisplayBaseline = RecordSeconds(records, yesterday);
         _weekDisplayBaseline = SumRecords(records, weekStart, today);
         _monthDisplayBaseline = SumRecords(records, monthStart, today);
 
@@ -292,6 +303,7 @@ public sealed class MainForm : Form
     {
         _displayResetDate = null;
         _todayDisplayBaseline = 0;
+        _yesterdayDisplayBaseline = 0;
         _weekDisplayBaseline = 0;
         _monthDisplayBaseline = 0;
     }
@@ -306,6 +318,11 @@ public sealed class MainForm : Form
         return records
             .Where(record => record.Date >= start && record.Date <= end)
             .Sum(record => record.TotalSeconds);
+    }
+
+    private static long RecordSeconds(IEnumerable<DailyRecord> records, DateOnly date)
+    {
+        return records.FirstOrDefault(record => record.Date == date)?.TotalSeconds ?? 0;
     }
 
     private static string FormatDuration(long totalSeconds)
