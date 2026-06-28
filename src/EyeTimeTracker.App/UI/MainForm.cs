@@ -24,12 +24,13 @@ public sealed class MainForm : Form
     private bool _loadingSettings;
     private bool _closingForExit;
 
-    public MainForm(TrackingController controller, StartupManager startupManager)
+    public MainForm(TrackingController controller, StartupManager startupManager, Icon appIcon)
     {
         _controller = controller ?? throw new ArgumentNullException(nameof(controller));
         _startupManager = startupManager ?? throw new ArgumentNullException(nameof(startupManager));
 
         Text = "\u7528\u773c\u65f6\u95f4\u8bb0\u5f55";
+        Icon = (Icon)(appIcon ?? throw new ArgumentNullException(nameof(appIcon))).Clone();
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;

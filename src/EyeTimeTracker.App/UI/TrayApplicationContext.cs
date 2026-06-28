@@ -5,6 +5,7 @@ namespace EyeTimeTracker.App.UI;
 
 public sealed class TrayApplicationContext : ApplicationContext
 {
+    private readonly Icon _appIcon;
     private readonly NotifyIcon _notifyIcon;
     private readonly ContextMenuStrip _menu;
     private readonly Control _uiDispatcher;
@@ -22,10 +23,11 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         _uiDispatcher = new Control();
         _ = _uiDispatcher.Handle;
+        _appIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? SystemIcons.Application;
 
         _notifyIcon = new NotifyIcon
         {
-            Icon = SystemIcons.Application,
+            Icon = _appIcon,
             Text = "\u7528\u773c\u65f6\u95f4\u8bb0\u5f55",
             ContextMenuStrip = _menu,
             Visible = true
@@ -41,7 +43,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     {
         if (_mainForm is null || _mainForm.IsDisposed)
         {
-            _mainForm = new MainForm(_controller, _startupManager);
+            _mainForm = new MainForm(_controller, _startupManager, _appIcon);
         }
 
         if (!_mainForm.Visible)
@@ -86,6 +88,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         _controller.Dispose();
         _notifyIcon.Visible = false;
         _notifyIcon.Dispose();
+        _appIcon.Dispose();
         _uiDispatcher.Dispose();
         _menu.Dispose();
         ExitThread();
