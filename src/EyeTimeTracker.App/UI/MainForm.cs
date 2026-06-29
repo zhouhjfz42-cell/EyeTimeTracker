@@ -659,12 +659,15 @@ public sealed class MainForm : Form
             _minutesInput = new TextBox
             {
                 Text = ReminderMinutes.ToString(),
-                Bounds = new Rectangle(22, 19, 174, 44),
+                Bounds = new Rectangle(22, 14, 160, 52),
                 BorderStyle = BorderStyle.None,
-                Font = new Font("Microsoft YaHei UI", 22F, FontStyle.Bold, GraphicsUnit.Point),
+                Font = new Font("Microsoft YaHei UI", 20F, FontStyle.Bold, GraphicsUnit.Point),
                 ForeColor = TextPrimary,
                 BackColor = Color.FromArgb(249, 253, 251),
-                MaxLength = 5
+                MaxLength = 5,
+                Multiline = true,
+                WordWrap = false,
+                ScrollBars = ScrollBars.None
             };
             _minutesInput.KeyPress += OnMinutesKeyPress;
             _minutesInput.TextChanged += (_, _) => UpdateHint();
@@ -673,9 +676,9 @@ public sealed class MainForm : Form
             inputShell.Controls.Add(new FitTextLabel
             {
                 Text = "\u5206\u949f",
-                Bounds = new Rectangle(196, 18, 82, 44),
-                MaxFontSize = 14F,
-                MinFontSize = 13F,
+                Bounds = new Rectangle(184, 15, 92, 50),
+                MaxFontSize = 15F,
+                MinFontSize = 14F,
                 FontStyle = FontStyle.Regular,
                 ForeColor = TextSecondary,
                 BackColor = Color.Transparent,
