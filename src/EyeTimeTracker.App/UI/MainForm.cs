@@ -518,6 +518,74 @@ public sealed class MainForm : Form
         }
     }
 
+    private sealed class CloseIconButton : Control
+    {
+        private bool _hovered;
+        private bool _pressed;
+
+        public CloseIconButton()
+        {
+            Cursor = Cursors.Hand;
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+        }
+
+        protected override void OnMouseEnter(EventArgs e)
+        {
+            _hovered = true;
+            Invalidate();
+        }
+
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            _hovered = false;
+            _pressed = false;
+            Invalidate();
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            _pressed = true;
+            Invalidate();
+        }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            _pressed = false;
+            Invalidate();
+
+            if (ClientRectangle.Contains(e.Location))
+            {
+                OnClick(EventArgs.Empty);
+            }
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            var fillColor = _pressed
+                ? Color.FromArgb(220, 226, 232)
+                : _hovered
+                    ? Color.FromArgb(232, 236, 240)
+                    : Color.FromArgb(242, 244, 247);
+
+            using (var fill = new SolidBrush(fillColor))
+            {
+                e.Graphics.FillEllipse(fill, 0, 0, Width - 1, Height - 1);
+            }
+
+            using var pen = new Pen(TextSecondary, 2.2F)
+            {
+                StartCap = LineCap.Round,
+                EndCap = LineCap.Round
+            };
+            var centerX = Width / 2F;
+            var centerY = Height / 2F;
+            const float half = 6.4F;
+            e.Graphics.DrawLine(pen, centerX - half, centerY - half, centerX + half, centerY + half);
+            e.Graphics.DrawLine(pen, centerX + half, centerY - half, centerX - half, centerY + half);
+        }
+    }
+
     private sealed class ReminderThresholdDialog : Form
     {
         private readonly TextBox _minutesInput;
@@ -557,15 +625,9 @@ public sealed class MainForm : Form
                 TextAlign = ContentAlignment.MiddleLeft
             });
 
-            var closeButton = new RoundedButton
+            var closeButton = new CloseIconButton
             {
-                Text = "\u00d7",
-                Bounds = new Rectangle(332, 22, 38, 38),
-                ButtonColor = Color.FromArgb(242, 244, 247),
-                HoverColor = Color.FromArgb(232, 236, 240),
-                PressedColor = Color.FromArgb(220, 226, 232),
-                TextColor = TextSecondary,
-                Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Bold, GraphicsUnit.Point)
+                Bounds = new Rectangle(332, 22, 38, 38)
             };
             closeButton.Click += (_, _) =>
             {
@@ -588,7 +650,7 @@ public sealed class MainForm : Form
 
             var inputShell = new RoundedPanel
             {
-                Bounds = new Rectangle(28, 116, 336, 72),
+                Bounds = new Rectangle(28, 114, 336, 80),
                 FillColor = Color.FromArgb(249, 253, 251),
                 BorderColor = Color.FromArgb(206, 226, 218),
                 Radius = 18
@@ -597,9 +659,9 @@ public sealed class MainForm : Form
             _minutesInput = new TextBox
             {
                 Text = ReminderMinutes.ToString(),
-                Bounds = new Rectangle(22, 17, 184, 46),
+                Bounds = new Rectangle(22, 19, 174, 44),
                 BorderStyle = BorderStyle.None,
-                Font = new Font("Microsoft YaHei UI", 26F, FontStyle.Bold, GraphicsUnit.Point),
+                Font = new Font("Microsoft YaHei UI", 22F, FontStyle.Bold, GraphicsUnit.Point),
                 ForeColor = TextPrimary,
                 BackColor = Color.FromArgb(249, 253, 251),
                 MaxLength = 5
@@ -611,7 +673,7 @@ public sealed class MainForm : Form
             inputShell.Controls.Add(new FitTextLabel
             {
                 Text = "\u5206\u949f",
-                Bounds = new Rectangle(204, 18, 74, 42),
+                Bounds = new Rectangle(196, 18, 82, 44),
                 MaxFontSize = 14F,
                 MinFontSize = 13F,
                 FontStyle = FontStyle.Regular,
