@@ -114,30 +114,13 @@ public sealed class MainForm : Form
             TextAlign = ContentAlignment.MiddleLeft
         });
 
-        statusDot = new StatusDot
-        {
-            Bounds = new Rectangle(326, 58, 18, 18)
-        };
-        root.Controls.Add(statusDot);
-
-        statusValue = new FitTextLabel
-        {
-            Text = "\u7edf\u8ba1\u4e2d",
-            Bounds = new Rectangle(352, 30, 180, 76),
-            MaxFontSize = 22F,
-            MinFontSize = 20F,
-            FontStyle = FontStyle.Regular,
-            ForeColor = TextPrimary,
-            BackColor = Color.Transparent,
-            TextAlign = ContentAlignment.MiddleLeft
-        };
-        root.Controls.Add(statusValue);
-
-        root.Controls.Add(new Label
+        root.Controls.Add(new FitTextLabel
         {
             Text = "\u952e\u9f20\u52a8\u4f5c\u3001\u5a92\u4f53\u64ad\u653e\u65f6\u8ba1\u5165\u7edf\u8ba1",
-            Bounds = new Rectangle(34, 96, 570, 34),
-            Font = new Font("Microsoft YaHei UI", 11F, FontStyle.Regular, GraphicsUnit.Point),
+            Bounds = new Rectangle(34, 96, 600, 42),
+            MaxFontSize = 11F,
+            MinFontSize = 10F,
+            FontStyle = FontStyle.Regular,
             ForeColor = TextSecondary,
             BackColor = Color.Transparent,
             TextAlign = ContentAlignment.MiddleLeft
@@ -152,6 +135,25 @@ public sealed class MainForm : Form
             BackColor = Color.Transparent,
             TextAlign = ContentAlignment.MiddleLeft
         });
+
+        statusDot = new StatusDot
+        {
+            Bounds = new Rectangle(142, 163, 16, 16)
+        };
+        root.Controls.Add(statusDot);
+
+        statusValue = new FitTextLabel
+        {
+            Text = "\u7edf\u8ba1\u4e2d",
+            Bounds = new Rectangle(166, 148, 160, 46),
+            MaxFontSize = 14F,
+            MinFontSize = 12F,
+            FontStyle = FontStyle.Regular,
+            ForeColor = TextSecondary,
+            BackColor = Color.Transparent,
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+        root.Controls.Add(statusValue);
 
         todayValue = new FitTextLabel
         {
