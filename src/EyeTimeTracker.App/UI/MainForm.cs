@@ -126,11 +126,13 @@ public sealed class MainForm : Form
             TextAlign = ContentAlignment.MiddleLeft
         });
 
-        root.Controls.Add(new Label
+        root.Controls.Add(new FitTextLabel
         {
             Text = "\u4eca\u5929",
-            Bounds = new Rectangle(34, 148, 84, 46),
-            Font = new Font("Microsoft YaHei UI", 14F, FontStyle.Regular, GraphicsUnit.Point),
+            Bounds = new Rectangle(34, 148, 104, 46),
+            MaxFontSize = 14F,
+            MinFontSize = 14F,
+            FontStyle = FontStyle.Regular,
             ForeColor = TextSecondary,
             BackColor = Color.Transparent,
             TextAlign = ContentAlignment.MiddleLeft
@@ -138,7 +140,7 @@ public sealed class MainForm : Form
 
         statusDot = new StatusDot
         {
-            Bounds = new Rectangle(130, 163, 16, 16)
+            Bounds = new Rectangle(154, 163, 16, 16)
         };
         root.Controls.Add(statusDot);
         statusDot.BringToFront();
@@ -146,7 +148,7 @@ public sealed class MainForm : Form
         statusValue = new FitTextLabel
         {
             Text = "\u7edf\u8ba1\u4e2d",
-            Bounds = new Rectangle(154, 148, 160, 46),
+            Bounds = new Rectangle(178, 148, 160, 46),
             MaxFontSize = 14F,
             MinFontSize = 12F,
             FontStyle = FontStyle.Regular,
