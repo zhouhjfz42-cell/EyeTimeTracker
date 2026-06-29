@@ -15,10 +15,10 @@ public sealed class MainForm : Form
     private static readonly Color BorderColor = Color.FromArgb(225, 232, 229);
 
     private readonly TrackingController _controller;
-    private readonly Label _todayValue;
-    private readonly Label _yesterdayValue;
-    private readonly Label _weekValue;
-    private readonly Label _monthValue;
+    private readonly FitTextLabel _todayValue;
+    private readonly FitTextLabel _yesterdayValue;
+    private readonly FitTextLabel _weekValue;
+    private readonly FitTextLabel _monthValue;
     private readonly Label _statusValue;
     private readonly StatusDot _statusDot;
     private DateOnly? _displayResetDate;
@@ -95,10 +95,10 @@ public sealed class MainForm : Form
 
     private void BuildDashboard(
         Control root,
-        out Label todayValue,
-        out Label yesterdayValue,
-        out Label weekValue,
-        out Label monthValue,
+        out FitTextLabel todayValue,
+        out FitTextLabel yesterdayValue,
+        out FitTextLabel weekValue,
+        out FitTextLabel monthValue,
         out StatusDot statusDot,
         out Label statusValue)
     {
@@ -149,15 +149,16 @@ public sealed class MainForm : Form
             TextAlign = ContentAlignment.MiddleLeft
         });
 
-        todayValue = new Label
+        todayValue = new FitTextLabel
         {
             Text = "0\u5206\u949f",
-            Bounds = new Rectangle(34, 194, 590, 94),
-            Font = new Font("Microsoft YaHei UI", 44F, FontStyle.Bold, GraphicsUnit.Point),
+            Bounds = new Rectangle(34, 194, 600, 104),
+            MaxFontSize = 44F,
+            MinFontSize = 24F,
+            FontStyle = FontStyle.Bold,
             ForeColor = AccentGreen,
             BackColor = Color.Transparent,
-            TextAlign = ContentAlignment.MiddleLeft,
-            AutoEllipsis = false
+            TextAlign = ContentAlignment.MiddleLeft
         };
         root.Controls.Add(todayValue);
 
@@ -180,19 +181,20 @@ public sealed class MainForm : Form
         root.Controls.Add(resetDisplay);
     }
 
-    private static Control BuildMetricCard(string title, Rectangle bounds, out Label value)
+    private static Control BuildMetricCard(string title, Rectangle bounds, out FitTextLabel value)
     {
         var card = CreateMetricShell(bounds);
         AddMetricTitle(card, title);
-        value = new Label
+        value = new FitTextLabel
         {
             Text = "0\u5206\u949f",
-            Bounds = new Rectangle(24, 62, bounds.Width - 48, 56),
-            Font = new Font("Microsoft YaHei UI", 22F, FontStyle.Bold, GraphicsUnit.Point),
+            Bounds = new Rectangle(24, 58, bounds.Width - 40, 66),
+            MaxFontSize = 22F,
+            MinFontSize = 14F,
+            FontStyle = FontStyle.Bold,
             ForeColor = TextPrimary,
             TextAlign = ContentAlignment.MiddleLeft,
-            BackColor = Color.Transparent,
-            AutoEllipsis = false
+            BackColor = Color.Transparent
         };
         card.Controls.Add(value);
         return card;
@@ -202,15 +204,16 @@ public sealed class MainForm : Form
     {
         var card = CreateMetricShell(bounds);
         AddMetricTitle(card, title);
-        card.Controls.Add(new Label
+        card.Controls.Add(new FitTextLabel
         {
             Text = value,
-            Bounds = new Rectangle(24, 62, bounds.Width - 48, 56),
-            Font = new Font("Microsoft YaHei UI", 22F, FontStyle.Bold, GraphicsUnit.Point),
+            Bounds = new Rectangle(24, 58, bounds.Width - 40, 66),
+            MaxFontSize = 22F,
+            MinFontSize = 14F,
+            FontStyle = FontStyle.Bold,
             ForeColor = TextPrimary,
             TextAlign = ContentAlignment.MiddleLeft,
-            BackColor = Color.Transparent,
-            AutoEllipsis = false
+            BackColor = Color.Transparent
         });
         return card;
     }
@@ -493,6 +496,84 @@ public sealed class MainForm : Form
             var y = (Height - size) / 2;
             using var brush = new SolidBrush(IsActive ? AccentGreen : Color.FromArgb(152, 162, 179));
             e.Graphics.FillEllipse(brush, x, y, size, size);
+        }
+    }
+
+    private sealed class FitTextLabel : Control
+    {
+        public float MaxFontSize { get; set; } = 20F;
+
+        public float MinFontSize { get; set; } = 10F;
+
+        public FontStyle FontStyle { get; set; } = FontStyle.Regular;
+
+        public ContentAlignment TextAlign { get; set; } = ContentAlignment.MiddleLeft;
+
+        public FitTextLabel()
+        {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            SetStyle(ControlStyles.SupportsTransparentBackColor, true);
+        }
+
+        protected override void OnTextChanged(EventArgs e)
+        {
+            Invalidate();
+            base.OnTextChanged(e);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            if (BackColor.A == 255)
+            {
+                e.Graphics.Clear(BackColor);
+            }
+
+            e.Graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+            var bounds = ClientRectangle;
+            if (bounds.Width <= 0 || bounds.Height <= 0 || string.IsNullOrEmpty(Text))
+            {
+                return;
+            }
+
+            using var font = CreateFittingFont(e.Graphics, bounds);
+            using var brush = new SolidBrush(ForeColor);
+            using var format = CreateStringFormat();
+            e.Graphics.DrawString(Text, font, brush, bounds, format);
+        }
+
+        private Font CreateFittingFont(Graphics graphics, Rectangle bounds)
+        {
+            for (var size = MaxFontSize; size >= MinFontSize; size -= 0.5F)
+            {
+                var font = new Font("Microsoft YaHei UI", size, FontStyle, GraphicsUnit.Point);
+                var measured = graphics.MeasureString(Text, font, bounds.Width, StringFormat.GenericTypographic);
+                if (measured.Width <= bounds.Width && measured.Height <= bounds.Height)
+                {
+                    return font;
+                }
+
+                font.Dispose();
+            }
+
+            return new Font("Microsoft YaHei UI", MinFontSize, FontStyle, GraphicsUnit.Point);
+        }
+
+        private StringFormat CreateStringFormat()
+        {
+            var format = (StringFormat)StringFormat.GenericTypographic.Clone();
+            format.FormatFlags |= StringFormatFlags.NoClip;
+            format.Trimming = StringTrimming.None;
+            format.Alignment = TextAlign is ContentAlignment.TopRight or ContentAlignment.MiddleRight or ContentAlignment.BottomRight
+                ? StringAlignment.Far
+                : TextAlign is ContentAlignment.TopCenter or ContentAlignment.MiddleCenter or ContentAlignment.BottomCenter
+                    ? StringAlignment.Center
+                    : StringAlignment.Near;
+            format.LineAlignment = TextAlign is ContentAlignment.BottomLeft or ContentAlignment.BottomCenter or ContentAlignment.BottomRight
+                ? StringAlignment.Far
+                : TextAlign is ContentAlignment.TopLeft or ContentAlignment.TopCenter or ContentAlignment.TopRight
+                    ? StringAlignment.Near
+                    : StringAlignment.Center;
+            return format;
         }
     }
 

@@ -37,6 +37,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         _controller = new TrackingController(new NotificationService(_notifyIcon, _uiDispatcher));
         _startupManager = new StartupManager();
         ApplyStartupSetting();
+        OpenMainWindow();
     }
 
     private void OpenMainWindow()
