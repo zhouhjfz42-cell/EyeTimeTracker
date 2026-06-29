@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>用眼时间记录 - 三种简约科技风方向</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      background: #f5f7f8;
+      color: #111827;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 32px;
+      background:
+        radial-gradient(circle at 18% 8%, rgba(83, 197, 171, 0.12), transparent 30%),
+        radial-gradient(circle at 86% 12%, rgba(80, 143, 255, 0.10), transparent 28%),
+        #f5f7f8;
+    }
+
+    header {
+      max-width: 1180px;
+      margin: 0 auto 24px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      letter-spacing: 0;
+      font-weight: 760;
+    }
+
+    .intro {
+      margin: 8px 0 0;
+      color: #667085;
+      font-size: 15px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(280px, 1fr));
+      gap: 18px;
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+
+    .direction {
+      border: 1px solid rgba(17, 24, 39, 0.08);
+      border-radius: 24px;
+      padding: 18px;
+      background: rgba(255, 255, 255, 0.78);
+      box-shadow: 0 18px 60px rgba(17, 24, 39, 0.08);
+      backdrop-filter: blur(18px);
+    }
+
+    .direction h2 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 760;
+    }
+
+    .direction p {
+      margin: 6px 0 16px;
+      color: #667085;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .previews {
+      display: grid;
+      grid-template-columns: 0.88fr 1fr;
+      gap: 12px;
+      align-items: start;
+    }
+
+    .phone, .desktop {
+      overflow: hidden;
+      border: 1px solid rgba(17, 24, 39, 0.08);
+      background: #fff;
+      box-shadow: 0 10px 30px rgba(17, 24, 39, 0.06);
+    }
+
+    .phone {
+      height: 430px;
+      border-radius: 28px;
+      padding: 18px 14px;
+    }
+
+    .desktop {
+      height: 250px;
+      border-radius: 18px;
+      padding: 14px;
+    }
+
+    .statusbar, .windowbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: #667085;
+      font-size: 10px;
+      margin-bottom: 16px;
+    }
+
+    .windowbar { margin-bottom: 12px; }
+
+    .dots { display: flex; gap: 5px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: #d0d5dd; }
+
+    .app-title {
+      font-size: 18px;
+      font-weight: 760;
+      margin-bottom: 4px;
+      letter-spacing: 0;
+    }
+
+    .caption {
+      color: #667085;
+      font-size: 10px;
+      line-height: 1.35;
+      margin-bottom: 18px;
+    }
+
+    .hero-time {
+      font-size: 36px;
+      line-height: 1;
+      font-weight: 780;
+      letter-spacing: 0;
+      margin-bottom: 5px;
+    }
+
+    .hero-label {
+      color: #667085;
+      font-size: 11px;
+      margin-bottom: 18px;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .metric {
+      border-radius: 16px;
+      padding: 10px;
+      background: #f6f7f9;
+    }
+
+    .metric span {
+      display: block;
+      color: #667085;
+      font-size: 10px;
+      margin-bottom: 5px;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 16px;
+      letter-spacing: 0;
+    }
+
+    .pill-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 14px;
+      font-size: 11px;
+      color: #344054;
+    }
+
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #12b76a;
+      box-shadow: 0 0 0 5px rgba(18, 183, 106, 0.12);
+    }
+
+    .button-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .btn {
+      flex: 1;
+      border: 0;
+      border-radius: 999px;
+      padding: 9px 10px;
+      font-size: 11px;
+      font-weight: 650;
+      background: #111827;
+      color: white;
+      text-align: center;
+    }
+
+    .btn.secondary {
+      color: #344054;
+      background: rgba(17, 24, 39, 0.06);
+    }
+
+    .desktop-layout {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 12px;
+      align-items: stretch;
+      height: 185px;
+    }
+
+    .desktop-main {
+      border-radius: 16px;
+      padding: 14px;
+      background: #f6f7f9;
+    }
+
+    .desktop-side {
+      display: grid;
+      gap: 8px;
+    }
+
+    .mini-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-radius: 12px;
+      padding: 9px 10px;
+      background: #f6f7f9;
+      font-size: 11px;
+    }
+
+    .mini-row strong { font-size: 13px; }
+
+    .health .accent { color: #16a67d; }
+    .health .desktop-main, .health .metric { background: #f0faf6; }
+    .health .btn { background: #16a67d; }
+
+    .vision .phone, .vision .desktop {
+      background: linear-gradient(145deg, rgba(255,255,255,.88), rgba(236,244,255,.78));
+    }
+    .vision .desktop-main, .vision .metric, .vision .mini-row {
+      background: rgba(255,255,255,.62);
+      border: 1px solid rgba(255,255,255,.78);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.9);
+    }
+    .vision .accent { color: #2478ff; }
+    .vision .btn { background: #2478ff; }
+
+    .mac .phone, .mac .desktop { background: #fbfbfd; }
+    .mac .accent { color: #111827; }
+    .mac .metric, .mac .desktop-main, .mac .mini-row {
+      background: #ffffff;
+      border: 1px solid #eceef2;
+    }
+    .mac .btn { background: #1d1d1f; }
+
+    .choice {
+      margin-top: 16px;
+      border: 1px solid rgba(17, 24, 39, 0.08);
+      border-radius: 16px;
+      padding: 11px 12px;
+      color: #344054;
+      background: rgba(255,255,255,.65);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    @media (max-width: 980px) {
+      body { padding: 18px; }
+      .grid { grid-template-columns: 1fr; }
+      .previews { grid-template-columns: 1fr 1.2fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>用眼时间记录：三种简约科技风方向</h1>
+    <p class="intro">先看气质和信息层级。正式开发时会分别适配 PC 小窗和 Android 页面。</p>
+  </header>
+
+  <main class="grid">
+    <section class="direction health">
+      <h2>A. Apple Health 风</h2>
+      <p>白底、健康绿、柔和卡片。更像健康统计工具，克制、亲和、适合长期使用。</p>
+      <div class="previews">
+        <div class="phone">
+          <div class="statusbar"><span>15:30</span><span>5G 41%</span></div>
+          <div class="app-title">用眼时间</div>
+          <div class="caption">亮屏 + 动作或媒体播放时计时</div>
+          <div class="hero-time accent">2小时 18分</div>
+          <div class="hero-label">今天</div>
+          <div class="metrics">
+            <div class="metric"><span>昨天</span><strong>1小时 42分</strong></div>
+            <div class="metric"><span>本周</span><strong>8小时 05分</strong></div>
+            <div class="metric"><span>本月</span><strong>31小时</strong></div>
+            <div class="metric"><span>提醒</span><strong>5小时30分</strong></div>
+          </div>
+          <div class="pill-row"><i class="live-dot"></i>统计中</div>
+          <div class="button-row"><div class="btn">重新启动</div><div class="btn secondary">重置显示</div></div>
+        </div>
+        <div class="desktop">
+          <div class="windowbar"><span>用眼时间</span><span class="dots"><i class="dot"></i><i class="dot"></i><i class="dot"></i></span></div>
+          <div class="desktop-layout">
+            <div class="desktop-main">
+              <div class="caption">今天</div>
+              <div class="hero-time accent">2小时18分</div>
+              <div class="pill-row"><i class="live-dot"></i>统计中</div>
+            </div>
+            <div class="desktop-side">
+              <div class="mini-row"><span>昨天</span><strong>1小时42分</strong></div>
+              <div class="mini-row"><span>本周</span><strong>8小时05分</strong></div>
+              <div class="mini-row"><span>本月</span><strong>31小时</strong></div>
+              <div class="button-row"><div class="btn secondary">重置</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="choice">推荐：最贴合“护眼”和健康统计，不容易过时。</div>
+    </section>
+
+    <section class="direction vision">
+      <h2>B. Apple Vision 科技风</h2>
+      <p>浅玻璃、蓝青色、高级感更明显。视觉更“科技”，但实现成本和一致性要求更高。</p>
+      <div class="previews">
+        <div class="phone">
+          <div class="statusbar"><span>15:30</span><span>5G 41%</span></div>
+          <div class="app-title">Eye Time</div>
+          <div class="caption">Screen attention estimate</div>
+          <div class="hero-time accent">2小时 18分</div>
+          <div class="hero-label">今日屏幕注视</div>
+          <div class="metrics">
+            <div class="metric"><span>昨天</span><strong>1小时42分</strong></div>
+            <div class="metric"><span>本周</span><strong>8小时05分</strong></div>
+            <div class="metric"><span>本月</span><strong>31小时</strong></div>
+            <div class="metric"><span>状态</span><strong>Live</strong></div>
+          </div>
+          <div class="pill-row"><i class="live-dot"></i>前台服务运行中</div>
+          <div class="button-row"><div class="btn">重新启动</div><div class="btn secondary">重置显示</div></div>
+        </div>
+        <div class="desktop">
+          <div class="windowbar"><span>Eye Time</span><span class="dots"><i class="dot"></i><i class="dot"></i><i class="dot"></i></span></div>
+          <div class="desktop-layout">
+            <div class="desktop-main">
+              <div class="caption">Today</div>
+              <div class="hero-time accent">2:18</div>
+              <div class="pill-row"><i class="live-dot"></i>Live tracking</div>
+            </div>
+            <div class="desktop-side">
+              <div class="mini-row"><span>Yesterday</span><strong>1:42</strong></div>
+              <div class="mini-row"><span>Week</span><strong>8:05</strong></div>
+              <div class="mini-row"><span>Month</span><strong>31h</strong></div>
+              <div class="button-row"><div class="btn secondary">Reset View</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="choice">适合想要更“未来感”的版本，但可能比工具本身更抢戏。</div>
+    </section>
+
+    <section class="direction mac">
+      <h2>C. macOS 工具风</h2>
+      <p>信息密度高，接近系统工具。PC 上会很舒服，Android 上会稍显冷淡。</p>
+      <div class="previews">
+        <div class="phone">
+          <div class="statusbar"><span>15:30</span><span>5G 41%</span></div>
+          <div class="app-title">用眼时间记录</div>
+          <div class="caption">屏幕亮起时，根据动作与媒体播放估算</div>
+          <div class="hero-time accent">2小时18分</div>
+          <div class="hero-label">今天</div>
+          <div class="metrics">
+            <div class="metric"><span>昨天</span><strong>1小时42分</strong></div>
+            <div class="metric"><span>本周</span><strong>8小时05分</strong></div>
+            <div class="metric"><span>本月</span><strong>31小时</strong></div>
+            <div class="metric"><span>阈值</span><strong>3分钟</strong></div>
+          </div>
+          <div class="pill-row"><i class="live-dot"></i>统计中</div>
+          <div class="button-row"><div class="btn">重启统计</div><div class="btn secondary">重置显示</div></div>
+        </div>
+        <div class="desktop">
+          <div class="windowbar"><span>用眼时间记录</span><span class="dots"><i class="dot"></i><i class="dot"></i><i class="dot"></i></span></div>
+          <div class="desktop-layout">
+            <div class="desktop-main">
+              <div class="caption">今天</div>
+              <div class="hero-time accent">2小时18分</div>
+              <div class="pill-row"><i class="live-dot"></i>统计中</div>
+            </div>
+            <div class="desktop-side">
+              <div class="mini-row"><span>昨天</span><strong>1小时42分</strong></div>
+              <div class="mini-row"><span>本周</span><strong>8小时05分</strong></div>
+              <div class="mini-row"><span>本月</span><strong>31小时</strong></div>
+              <div class="button-row"><div class="btn secondary">设置</div><div class="btn secondary">重置</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="choice">适合偏效率工具的桌面应用，移动端健康感弱一些。</div>
+    </section>
+  </main>
+</body>
+</html>
