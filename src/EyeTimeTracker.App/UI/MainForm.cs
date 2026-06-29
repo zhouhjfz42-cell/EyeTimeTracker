@@ -7,37 +7,31 @@ namespace EyeTimeTracker.App.UI;
 
 public sealed class MainForm : Form
 {
-    private static readonly Color PageBackground = Color.FromArgb(245, 248, 247);
-    private static readonly Color CardBackground = Color.White;
-    private static readonly Color SoftGreen = Color.FromArgb(239, 250, 246);
+    private static readonly Color PageBackground = Color.FromArgb(248, 251, 250);
+    private static readonly Color SoftGreen = Color.FromArgb(238, 249, 245);
     private static readonly Color AccentGreen = Color.FromArgb(22, 166, 125);
     private static readonly Color TextPrimary = Color.FromArgb(17, 24, 39);
     private static readonly Color TextSecondary = Color.FromArgb(102, 112, 133);
-    private static readonly Color BorderColor = Color.FromArgb(229, 234, 231);
+    private static readonly Color BorderColor = Color.FromArgb(225, 232, 229);
 
     private readonly TrackingController _controller;
-    private readonly StartupManager _startupManager;
     private readonly Label _todayValue;
     private readonly Label _yesterdayValue;
-    private readonly Label _statusValue;
-    private readonly StatusDot _statusDot;
     private readonly Label _weekValue;
     private readonly Label _monthValue;
-    private readonly NumericUpDown _idleThresholdMinutes;
-    private readonly CheckBox _countAudio;
-    private readonly CheckBox _startWithWindows;
+    private readonly Label _statusValue;
+    private readonly StatusDot _statusDot;
     private DateOnly? _displayResetDate;
     private long _todayDisplayBaseline;
     private long _yesterdayDisplayBaseline;
     private long _weekDisplayBaseline;
     private long _monthDisplayBaseline;
-    private bool _loadingSettings;
     private bool _closingForExit;
 
     public MainForm(TrackingController controller, StartupManager startupManager, Icon appIcon)
     {
         _controller = controller ?? throw new ArgumentNullException(nameof(controller));
-        _startupManager = startupManager ?? throw new ArgumentNullException(nameof(startupManager));
+        _ = startupManager ?? throw new ArgumentNullException(nameof(startupManager));
 
         AutoScaleMode = AutoScaleMode.Dpi;
         Text = "\u7528\u773c\u65f6\u95f4\u8bb0\u5f55";
@@ -46,7 +40,7 @@ public sealed class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         MinimizeBox = true;
-        ClientSize = new Size(430, 512);
+        ClientSize = new Size(540, 650);
         BackColor = PageBackground;
         Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
 
@@ -54,44 +48,35 @@ public sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             BackColor = PageBackground,
-            Padding = new Padding(22, 20, 22, 18),
+            Padding = new Padding(28, 28, 28, 24),
             ColumnCount = 1,
             RowCount = 5
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 132));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 158));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 128));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 246));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 86));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-        var todayCard = BuildTodayCard(out var todayValue);
-        var metricsGrid = BuildMetricsGrid(out var yesterdayValue, out var weekValue, out var monthValue);
-        var settingsCard = BuildSettingsCard(out var idleThresholdMinutes, out var countAudio, out var startWithWindows);
-        var footer = BuildFooter(out var statusDot, out var statusValue);
+        var header = BuildHeader(out var statusDot, out var statusValue);
+        var today = BuildTodayBlock(out var todayValue);
+        var metrics = BuildMetricsGrid(out var yesterdayValue, out var weekValue, out var monthValue);
+        var actions = BuildActions();
 
         _todayValue = todayValue;
         _yesterdayValue = yesterdayValue;
         _weekValue = weekValue;
         _monthValue = monthValue;
-        _idleThresholdMinutes = idleThresholdMinutes;
-        _countAudio = countAudio;
-        _startWithWindows = startWithWindows;
         _statusDot = statusDot;
         _statusValue = statusValue;
 
-        root.Controls.Add(BuildHeader(), 0, 0);
-        root.Controls.Add(todayCard, 0, 1);
-        root.Controls.Add(metricsGrid, 0, 2);
-        root.Controls.Add(settingsCard, 0, 3);
-        root.Controls.Add(footer, 0, 4);
+        root.Controls.Add(header, 0, 0);
+        root.Controls.Add(today, 0, 1);
+        root.Controls.Add(metrics, 0, 2);
+        root.Controls.Add(actions, 0, 3);
         Controls.Add(root);
 
-        _idleThresholdMinutes.ValueChanged += (_, _) => SaveSettingsFromControls();
-        _countAudio.CheckedChanged += (_, _) => SaveSettingsFromControls();
-        _startWithWindows.CheckedChanged += (_, _) => SaveSettingsFromControls();
         _controller.Updated += OnTrackingUpdated;
-
-        LoadSettings();
         UpdateSummary(_controller.Current);
     }
 
@@ -123,9 +108,104 @@ public sealed class MainForm : Form
         base.Dispose(disposing);
     }
 
-    private static Control BuildHeader()
+    private static Control BuildHeader(out StatusDot statusDot, out Label statusValue)
     {
         var header = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = PageBackground,
+            ColumnCount = 2,
+            RowCount = 2,
+            Margin = Padding.Empty
+        };
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 76));
+        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
+        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+
+        var titleLine = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = PageBackground,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Margin = Padding.Empty,
+            Padding = new Padding(0, 16, 0, 0)
+        };
+        titleLine.Controls.Add(new Label
+        {
+            Text = "\u7528\u773c\u65f6\u95f4",
+            AutoSize = true,
+            Font = new Font("Microsoft YaHei UI", 22F, FontStyle.Bold, GraphicsUnit.Point),
+            ForeColor = TextPrimary,
+            Margin = new Padding(0, 0, 14, 0)
+        });
+
+        var statusPill = new RoundedPanel
+        {
+            Width = 96,
+            Height = 32,
+            FillColor = Color.White,
+            BorderColor = BorderColor,
+            Radius = 16,
+            Margin = new Padding(0, 11, 0, 0),
+            Padding = new Padding(10, 0, 10, 0)
+        };
+        var statusLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Color.Transparent,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = Padding.Empty
+        };
+        statusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 18));
+        statusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+        statusDot = new StatusDot
+        {
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, 0, 6, 0)
+        };
+        statusValue = new Label
+        {
+            Text = "\u7edf\u8ba1\u4e2d",
+            Dock = DockStyle.Fill,
+            Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Regular, GraphicsUnit.Point),
+            ForeColor = TextPrimary,
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+        statusLayout.Controls.Add(statusDot, 0, 0);
+        statusLayout.Controls.Add(statusValue, 1, 0);
+        statusPill.Controls.Add(statusLayout);
+        titleLine.Controls.Add(statusPill);
+
+        var avatar = new AvatarPlaceholder
+        {
+            Dock = DockStyle.Fill,
+            Margin = new Padding(10, 10, 0, 8)
+        };
+
+        var subtitle = new Label
+        {
+            Text = "\u4eae\u5c4f + \u52a8\u4f5c\u6216\u5a92\u4f53\u64ad\u653e\u65f6\u8ba1\u65f6",
+            Dock = DockStyle.Fill,
+            Font = new Font("Microsoft YaHei UI", 11F, FontStyle.Regular, GraphicsUnit.Point),
+            ForeColor = TextSecondary,
+            TextAlign = ContentAlignment.TopLeft,
+            AutoEllipsis = false
+        };
+
+        header.Controls.Add(titleLine, 0, 0);
+        header.Controls.Add(avatar, 1, 0);
+        header.SetRowSpan(avatar, 2);
+        header.Controls.Add(subtitle, 0, 1);
+        return header;
+    }
+
+    private static Control BuildTodayBlock(out Label todayValue)
+    {
+        var block = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             BackColor = PageBackground,
@@ -133,81 +213,29 @@ public sealed class MainForm : Form
             RowCount = 2,
             Margin = Padding.Empty
         };
-        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
-        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
+        block.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        block.RowStyles.Add(new RowStyle(SizeType.Absolute, 86));
 
-        header.Controls.Add(new Label
-        {
-            Text = "\u7528\u773c\u65f6\u95f4",
-            Dock = DockStyle.Fill,
-            Font = new Font("Microsoft YaHei UI", 18F, FontStyle.Bold, GraphicsUnit.Point),
-            ForeColor = TextPrimary,
-            TextAlign = ContentAlignment.MiddleLeft
-        }, 0, 0);
-        header.Controls.Add(new Label
-        {
-            Text = "\u952e\u9f20\u6d3b\u52a8\u6216\u97f3\u9891\u64ad\u653e\u65f6\u8ba1\u65f6",
-            Dock = DockStyle.Fill,
-            Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular, GraphicsUnit.Point),
-            ForeColor = TextSecondary,
-            TextAlign = ContentAlignment.MiddleLeft
-        }, 0, 1);
-        return header;
-    }
-
-    private static Control BuildTodayCard(out Label todayValue)
-    {
-        var card = new RoundedPanel
-        {
-            Dock = DockStyle.Fill,
-            FillColor = SoftGreen,
-            BorderColor = Color.FromArgb(213, 241, 231),
-            Radius = 22,
-            Margin = new Padding(0, 4, 0, 12),
-            Padding = new Padding(18, 15, 18, 15)
-        };
-
-        var layout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = Color.Transparent,
-            ColumnCount = 1,
-            RowCount = 3
-        };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
-
-        layout.Controls.Add(new Label
+        block.Controls.Add(new Label
         {
             Text = "\u4eca\u5929",
             Dock = DockStyle.Fill,
-            Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Regular, GraphicsUnit.Point),
+            Font = new Font("Microsoft YaHei UI", 14F, FontStyle.Regular, GraphicsUnit.Point),
             ForeColor = TextSecondary,
-            TextAlign = ContentAlignment.MiddleLeft
+            TextAlign = ContentAlignment.BottomLeft
         }, 0, 0);
 
         todayValue = new Label
         {
             Text = "0\u5206\u949f",
             Dock = DockStyle.Fill,
-            Font = new Font("Microsoft YaHei UI", 26F, FontStyle.Bold, GraphicsUnit.Point),
+            Font = new Font("Microsoft YaHei UI", 40F, FontStyle.Bold, GraphicsUnit.Point),
             ForeColor = AccentGreen,
-            TextAlign = ContentAlignment.MiddleLeft,
-            AutoEllipsis = true
+            TextAlign = ContentAlignment.BottomLeft,
+            AutoEllipsis = false
         };
-        layout.Controls.Add(todayValue, 0, 1);
-        layout.Controls.Add(new Label
-        {
-            Text = "\u63a5\u8fd1 5\u5c0f\u65f630\u5206\u65f6\u63d0\u9192",
-            Dock = DockStyle.Fill,
-            Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular, GraphicsUnit.Point),
-            ForeColor = TextSecondary,
-            TextAlign = ContentAlignment.MiddleLeft
-        }, 0, 2);
-
-        card.Controls.Add(layout);
-        return card;
+        block.Controls.Add(todayValue, 0, 1);
+        return block;
     }
 
     private static Control BuildMetricsGrid(out Label yesterdayValue, out Label weekValue, out Label monthValue)
@@ -216,32 +244,72 @@ public sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             BackColor = PageBackground,
-            ColumnCount = 3,
-            RowCount = 1,
-            Margin = new Padding(0, 0, 0, 12)
+            ColumnCount = 2,
+            RowCount = 2,
+            Margin = Padding.Empty
         };
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.34F));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        grid.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        grid.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
 
         grid.Controls.Add(BuildMetricCard("\u6628\u5929", out yesterdayValue), 0, 0);
         grid.Controls.Add(BuildMetricCard("\u672c\u5468", out weekValue), 1, 0);
-        grid.Controls.Add(BuildMetricCard("\u672c\u6708", out monthValue), 2, 0);
+        grid.Controls.Add(BuildMetricCard("\u672c\u6708", out monthValue), 0, 1);
+        grid.Controls.Add(BuildStaticMetricCard("\u63d0\u9192", "5\u5c0f\u65f630\u5206"), 1, 1);
         return grid;
     }
 
     private static Control BuildMetricCard(string title, out Label value)
     {
-        var card = new RoundedPanel
+        var card = CreateMetricShell();
+        var layout = CreateMetricLayout(title);
+        value = new Label
+        {
+            Text = "0\u5206\u949f",
+            Dock = DockStyle.Fill,
+            Font = new Font("Microsoft YaHei UI", 20F, FontStyle.Bold, GraphicsUnit.Point),
+            ForeColor = TextPrimary,
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = false
+        };
+        layout.Controls.Add(value, 0, 1);
+        card.Controls.Add(layout);
+        return card;
+    }
+
+    private static Control BuildStaticMetricCard(string title, string value)
+    {
+        var card = CreateMetricShell();
+        var layout = CreateMetricLayout(title);
+        layout.Controls.Add(new Label
+        {
+            Text = value,
+            Dock = DockStyle.Fill,
+            Font = new Font("Microsoft YaHei UI", 20F, FontStyle.Bold, GraphicsUnit.Point),
+            ForeColor = TextPrimary,
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = false
+        }, 0, 1);
+        card.Controls.Add(layout);
+        return card;
+    }
+
+    private static RoundedPanel CreateMetricShell()
+    {
+        return new RoundedPanel
         {
             Dock = DockStyle.Fill,
-            FillColor = CardBackground,
-            BorderColor = BorderColor,
-            Radius = 18,
-            Margin = new Padding(0, 0, 9, 0),
-            Padding = new Padding(12, 10, 12, 10)
+            FillColor = SoftGreen,
+            BorderColor = Color.FromArgb(226, 245, 238),
+            Radius = 24,
+            Margin = new Padding(0, 0, 16, 16),
+            Padding = new Padding(18, 14, 18, 12)
         };
+    }
 
+    private static TableLayoutPanel CreateMetricLayout(string title)
+    {
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -249,211 +317,48 @@ public sealed class MainForm : Form
             ColumnCount = 1,
             RowCount = 2
         };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.Controls.Add(new Label
         {
             Text = title,
             Dock = DockStyle.Fill,
-            Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular, GraphicsUnit.Point),
+            Font = new Font("Microsoft YaHei UI", 11F, FontStyle.Regular, GraphicsUnit.Point),
             ForeColor = TextSecondary,
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, 0);
-
-        value = new Label
-        {
-            Text = "0\u5206\u949f",
-            Dock = DockStyle.Fill,
-            Font = new Font("Microsoft YaHei UI", 11F, FontStyle.Bold, GraphicsUnit.Point),
-            ForeColor = TextPrimary,
-            TextAlign = ContentAlignment.MiddleLeft,
-            AutoEllipsis = true
-        };
-        layout.Controls.Add(value, 0, 1);
-        card.Controls.Add(layout);
-        return card;
+        return layout;
     }
 
-    private Control BuildSettingsCard(out NumericUpDown idleThresholdMinutes, out CheckBox countAudio, out CheckBox startWithWindows)
+    private Control BuildActions()
     {
-        var card = new RoundedPanel
-        {
-            Dock = DockStyle.Fill,
-            FillColor = CardBackground,
-            BorderColor = BorderColor,
-            Radius = 22,
-            Margin = new Padding(0, 0, 0, 12),
-            Padding = new Padding(16, 14, 16, 14)
-        };
-
-        var layout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = Color.Transparent,
-            ColumnCount = 2,
-            RowCount = 4
-        };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-
-        layout.Controls.Add(CreateSmallLabel("\u952e\u9f20\u7a7a\u95f2\u9608\u503c\uff08\u5206\u949f\uff09"), 0, 0);
-        idleThresholdMinutes = new NumericUpDown
-        {
-            Dock = DockStyle.Fill,
-            Minimum = 1,
-            Maximum = 120,
-            TextAlign = HorizontalAlignment.Right,
-            BorderStyle = BorderStyle.FixedSingle,
-            BackColor = Color.White,
-            ForeColor = TextPrimary,
-            Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Regular, GraphicsUnit.Point)
-        };
-        layout.Controls.Add(idleThresholdMinutes, 1, 0);
-
-        countAudio = CreateCheckBox("\u97f3\u9891\u8ba1\u65f6");
-        layout.Controls.Add(countAudio, 0, 1);
-        layout.SetColumnSpan(countAudio, 2);
-
-        startWithWindows = CreateCheckBox("\u5f00\u673a\u81ea\u542f");
-        layout.Controls.Add(startWithWindows, 0, 2);
-        layout.SetColumnSpan(startWithWindows, 2);
-
-        var buttons = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.RightToLeft,
-            BackColor = Color.Transparent,
-            Padding = new Padding(0, 8, 0, 0),
-            Margin = Padding.Empty
-        };
-        var resetDisplay = new RoundedButton
-        {
-            Text = "\u91cd\u7f6e\u663e\u793a",
-            Width = 112,
-            Height = 34,
-            ButtonColor = Color.FromArgb(239, 242, 244),
-            HoverColor = Color.FromArgb(229, 235, 238),
-            PressedColor = Color.FromArgb(218, 226, 229),
-            TextColor = TextPrimary
-        };
-        resetDisplay.Click += (_, _) => ResetDisplayedStatistics();
-        buttons.Controls.Add(resetDisplay);
-        layout.Controls.Add(buttons, 0, 3);
-        layout.SetColumnSpan(buttons, 2);
-
-        card.Controls.Add(layout);
-        return card;
-    }
-
-    private static Control BuildFooter(out StatusDot statusDot, out Label statusValue)
-    {
-        var footer = new TableLayoutPanel
+        var actions = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             BackColor = PageBackground,
             ColumnCount = 3,
             RowCount = 1,
-            Margin = Padding.Empty
+            Margin = Padding.Empty,
+            Padding = new Padding(0, 14, 0, 0)
         };
-        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 18));
-        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 0));
+        actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+        actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
 
-        statusDot = new StatusDot
+        var resetDisplay = new RoundedButton
         {
+            Text = "\u91cd\u7f6e\u663e\u793a",
             Dock = DockStyle.Fill,
-            Margin = new Padding(0, 7, 8, 0)
+            Height = 52,
+            ButtonColor = AccentGreen,
+            HoverColor = Color.FromArgb(19, 145, 111),
+            PressedColor = Color.FromArgb(17, 124, 96),
+            TextColor = Color.White,
+            Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Bold, GraphicsUnit.Point)
         };
-        footer.Controls.Add(statusDot, 0, 0);
-
-        statusValue = new Label
-        {
-            Text = "",
-            Dock = DockStyle.Fill,
-            Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular, GraphicsUnit.Point),
-            ForeColor = TextSecondary,
-            TextAlign = ContentAlignment.MiddleLeft
-        };
-        footer.Controls.Add(statusValue, 1, 0);
-        return footer;
-    }
-
-    private static Label CreateSmallLabel(string text)
-    {
-        return new Label
-        {
-            Text = text,
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleLeft,
-            ForeColor = TextSecondary,
-            Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular, GraphicsUnit.Point),
-            AutoEllipsis = true
-        };
-    }
-
-    private static CheckBox CreateCheckBox(string text)
-    {
-        return new CheckBox
-        {
-            Text = text,
-            Dock = DockStyle.Fill,
-            AutoSize = true,
-            ForeColor = TextPrimary,
-            BackColor = Color.Transparent,
-            Font = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Regular, GraphicsUnit.Point),
-            FlatStyle = FlatStyle.System
-        };
-    }
-
-    private void LoadSettings()
-    {
-        _loadingSettings = true;
-        try
-        {
-            var settings = _controller.Settings;
-            _idleThresholdMinutes.Value = Math.Clamp(settings.IdleThresholdSeconds / 60, 1, 120);
-            _countAudio.Checked = settings.CountAudio;
-            _startWithWindows.Checked = settings.StartWithWindows;
-        }
-        finally
-        {
-            _loadingSettings = false;
-        }
-    }
-
-    private void SaveSettingsFromControls()
-    {
-        if (_loadingSettings)
-        {
-            return;
-        }
-
-        var settings = _controller.Settings with
-        {
-            IdleThresholdSeconds = (int)_idleThresholdMinutes.Value * 60,
-            CountAudio = _countAudio.Checked,
-            StartWithWindows = _startWithWindows.Checked
-        };
-
-        _controller.Settings = settings;
-        _controller.SaveNow();
-        ApplyStartupSetting(settings.StartWithWindows);
-        UpdateSummary(_controller.Current);
-    }
-
-    private void ApplyStartupSetting(bool enabled)
-    {
-        try
-        {
-            _startupManager.SetEnabled(enabled);
-        }
-        catch (Exception)
-        {
-        }
+        resetDisplay.Click += (_, _) => ResetDisplayedStatistics();
+        actions.Controls.Add(resetDisplay, 1, 0);
+        return actions;
     }
 
     private void OnTrackingUpdated(object? sender, TrackingUpdatedEventArgs e)
@@ -561,7 +466,7 @@ public sealed class MainForm : Form
         var duration = TimeSpan.FromSeconds(Math.Max(0, totalSeconds));
         var totalHours = (int)duration.TotalHours;
         return totalHours > 0
-            ? string.Format("{0}\u5c0f\u65f6 {1:00}\u5206\u949f", totalHours, duration.Minutes)
+            ? string.Format("{0}\u5c0f\u65f6 {1:00}\u5206", totalHours, duration.Minutes)
             : string.Format("{0}\u5206\u949f", duration.Minutes);
     }
 
@@ -584,7 +489,7 @@ public sealed class MainForm : Form
 
     private sealed class RoundedPanel : Panel
     {
-        public Color FillColor { get; set; } = CardBackground;
+        public Color FillColor { get; set; } = Color.White;
 
         public Color BorderColor { get; set; } = MainForm.BorderColor;
 
@@ -628,7 +533,7 @@ public sealed class MainForm : Form
             FlatAppearance.BorderSize = 0;
             UseVisualStyleBackColor = false;
             Cursor = Cursors.Hand;
-            Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold, GraphicsUnit.Point);
+            Font = new Font("Microsoft YaHei UI", 11F, FontStyle.Bold, GraphicsUnit.Point);
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
         }
 
@@ -707,11 +612,31 @@ public sealed class MainForm : Form
         protected override void OnPaint(PaintEventArgs e)
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            var size = Math.Min(10, Math.Min(Width, Height));
+            var size = Math.Min(12, Math.Min(Width, Height));
             var x = (Width - size) / 2;
             var y = (Height - size) / 2;
             using var brush = new SolidBrush(IsActive ? AccentGreen : Color.FromArgb(152, 162, 179));
             e.Graphics.FillEllipse(brush, x, y, size, size);
+        }
+    }
+
+    private sealed class AvatarPlaceholder : Control
+    {
+        public AvatarPlaceholder()
+        {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            var size = Math.Min(58, Math.Min(Width, Height));
+            var x = (Width - size) / 2;
+            var y = (Height - size) / 2;
+            using var fill = new SolidBrush(Color.White);
+            using var pen = new Pen(Color.FromArgb(255, 77, 86), 5);
+            e.Graphics.FillEllipse(fill, x, y, size, size);
+            e.Graphics.DrawEllipse(pen, x + 2, y + 2, size - 4, size - 4);
         }
     }
 }
