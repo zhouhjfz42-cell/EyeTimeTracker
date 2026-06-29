@@ -105,7 +105,7 @@ public sealed class MainForm : Form
         root.Controls.Add(new Label
         {
             Text = "\u7528\u773c\u65f6\u95f4",
-            Bounds = new Rectangle(34, 42, 190, 50),
+            Bounds = new Rectangle(34, 38, 250, 58),
             Font = new Font("Microsoft YaHei UI", 22F, FontStyle.Bold, GraphicsUnit.Point),
             ForeColor = TextPrimary,
             BackColor = Color.Transparent,
@@ -114,14 +114,14 @@ public sealed class MainForm : Form
 
         statusDot = new StatusDot
         {
-            Bounds = new Rectangle(238, 58, 18, 18)
+            Bounds = new Rectangle(296, 58, 18, 18)
         };
         root.Controls.Add(statusDot);
 
         statusValue = new Label
         {
             Text = "\u7edf\u8ba1\u4e2d",
-            Bounds = new Rectangle(260, 50, 130, 34),
+            Bounds = new Rectangle(318, 50, 130, 34),
             Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Regular, GraphicsUnit.Point),
             ForeColor = TextPrimary,
             BackColor = Color.Transparent,
@@ -142,7 +142,7 @@ public sealed class MainForm : Form
         root.Controls.Add(new Label
         {
             Text = "\u4eca\u5929",
-            Bounds = new Rectangle(34, 154, 120, 36),
+            Bounds = new Rectangle(34, 148, 160, 46),
             Font = new Font("Microsoft YaHei UI", 14F, FontStyle.Regular, GraphicsUnit.Point),
             ForeColor = TextSecondary,
             BackColor = Color.Transparent,
