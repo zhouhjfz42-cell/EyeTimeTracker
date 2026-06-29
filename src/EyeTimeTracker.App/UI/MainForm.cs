@@ -40,28 +40,17 @@ public sealed class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         MinimizeBox = true;
-        ClientSize = new Size(640, 760);
+        ClientSize = new Size(660, 760);
         BackColor = PageBackground;
         Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
 
-        var root = new TableLayoutPanel
+        var root = new Panel
         {
             Dock = DockStyle.Fill,
-            BackColor = PageBackground,
-            Padding = new Padding(28, 28, 28, 24),
-            ColumnCount = 1,
-            RowCount = 5
+            BackColor = PageBackground
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 116));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 158));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 318));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-        var header = BuildHeader(out var statusDot, out var statusValue);
-        var today = BuildTodayBlock(out var todayValue);
-        var metrics = BuildMetricsGrid(out var yesterdayValue, out var weekValue, out var monthValue);
-        var actions = BuildActions();
+        BuildDashboard(root, out var todayValue, out var yesterdayValue, out var weekValue, out var monthValue, out var statusDot, out var statusValue);
 
         _todayValue = todayValue;
         _yesterdayValue = yesterdayValue;
@@ -70,10 +59,6 @@ public sealed class MainForm : Form
         _statusDot = statusDot;
         _statusValue = statusValue;
 
-        root.Controls.Add(header, 0, 0);
-        root.Controls.Add(today, 0, 1);
-        root.Controls.Add(metrics, 0, 2);
-        root.Controls.Add(actions, 0, 3);
         Controls.Add(root);
 
         _controller.Updated += OnTrackingUpdated;
@@ -108,238 +93,83 @@ public sealed class MainForm : Form
         base.Dispose(disposing);
     }
 
-    private static Control BuildHeader(out StatusDot statusDot, out Label statusValue)
+    private void BuildDashboard(
+        Control root,
+        out Label todayValue,
+        out Label yesterdayValue,
+        out Label weekValue,
+        out Label monthValue,
+        out StatusDot statusDot,
+        out Label statusValue)
     {
-        var header = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = PageBackground,
-            ColumnCount = 1,
-            RowCount = 2,
-            Margin = Padding.Empty
-        };
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
-        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-
-        var titleLine = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = PageBackground,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            Margin = Padding.Empty,
-            Padding = new Padding(0, 18, 0, 0)
-        };
-        titleLine.Controls.Add(new Label
+        root.Controls.Add(new Label
         {
             Text = "\u7528\u773c\u65f6\u95f4",
-            AutoSize = true,
+            Bounds = new Rectangle(34, 42, 190, 50),
             Font = new Font("Microsoft YaHei UI", 22F, FontStyle.Bold, GraphicsUnit.Point),
             ForeColor = TextPrimary,
-            Margin = new Padding(0, 0, 14, 0)
-        });
-
-        var statusPill = new RoundedPanel
-        {
-            Width = 96,
-            Height = 32,
-            FillColor = Color.White,
-            BorderColor = BorderColor,
-            Radius = 16,
-            Margin = new Padding(0, 12, 0, 0),
-            Padding = new Padding(10, 0, 8, 0)
-        };
-        var statusLayout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
             BackColor = Color.Transparent,
-            ColumnCount = 2,
-            RowCount = 1,
-            Margin = Padding.Empty
-        };
-        statusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 18));
-        statusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            TextAlign = ContentAlignment.MiddleLeft
+        });
 
         statusDot = new StatusDot
         {
-            Dock = DockStyle.Fill,
-            Margin = new Padding(0, 1, 6, 0)
+            Bounds = new Rectangle(238, 58, 18, 18)
         };
+        root.Controls.Add(statusDot);
+
         statusValue = new Label
         {
             Text = "\u7edf\u8ba1\u4e2d",
-            Dock = DockStyle.Fill,
+            Bounds = new Rectangle(260, 50, 130, 34),
             Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Regular, GraphicsUnit.Point),
             ForeColor = TextPrimary,
+            BackColor = Color.Transparent,
             TextAlign = ContentAlignment.MiddleLeft
         };
-        statusLayout.Controls.Add(statusDot, 0, 0);
-        statusLayout.Controls.Add(statusValue, 1, 0);
-        statusPill.Controls.Add(statusLayout);
-        titleLine.Controls.Add(statusPill);
+        root.Controls.Add(statusValue);
 
-        var subtitle = new Label
+        root.Controls.Add(new Label
         {
             Text = "\u4eae\u5c4f + \u52a8\u4f5c\u6216\u5a92\u4f53\u64ad\u653e\u65f6\u8ba1\u65f6",
-            Dock = DockStyle.Fill,
+            Bounds = new Rectangle(34, 96, 570, 34),
             Font = new Font("Microsoft YaHei UI", 11F, FontStyle.Regular, GraphicsUnit.Point),
             ForeColor = TextSecondary,
-            TextAlign = ContentAlignment.TopLeft,
-            AutoEllipsis = false
-        };
+            BackColor = Color.Transparent,
+            TextAlign = ContentAlignment.MiddleLeft
+        });
 
-        header.Controls.Add(titleLine, 0, 0);
-        header.Controls.Add(subtitle, 0, 1);
-        return header;
-    }
-
-    private static Control BuildTodayBlock(out Label todayValue)
-    {
-        var block = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = PageBackground,
-            ColumnCount = 1,
-            RowCount = 2,
-            Margin = Padding.Empty
-        };
-        block.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-        block.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
-
-        block.Controls.Add(new Label
+        root.Controls.Add(new Label
         {
             Text = "\u4eca\u5929",
-            Dock = DockStyle.Fill,
+            Bounds = new Rectangle(34, 154, 120, 36),
             Font = new Font("Microsoft YaHei UI", 14F, FontStyle.Regular, GraphicsUnit.Point),
             ForeColor = TextSecondary,
-            TextAlign = ContentAlignment.BottomLeft
-        }, 0, 0);
+            BackColor = Color.Transparent,
+            TextAlign = ContentAlignment.MiddleLeft
+        });
 
         todayValue = new Label
         {
             Text = "0\u5206\u949f",
-            Dock = DockStyle.Fill,
+            Bounds = new Rectangle(34, 194, 590, 94),
             Font = new Font("Microsoft YaHei UI", 44F, FontStyle.Bold, GraphicsUnit.Point),
             ForeColor = AccentGreen,
-            TextAlign = ContentAlignment.BottomLeft,
-            AutoEllipsis = false
-        };
-        block.Controls.Add(todayValue, 0, 1);
-        return block;
-    }
-
-    private static Control BuildMetricsGrid(out Label yesterdayValue, out Label weekValue, out Label monthValue)
-    {
-        var grid = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = PageBackground,
-            ColumnCount = 2,
-            RowCount = 2,
-            Margin = Padding.Empty
-        };
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        grid.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-        grid.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-
-        grid.Controls.Add(BuildMetricCard("\u6628\u5929", out yesterdayValue), 0, 0);
-        grid.Controls.Add(BuildMetricCard("\u672c\u5468", out weekValue), 1, 0);
-        grid.Controls.Add(BuildMetricCard("\u672c\u6708", out monthValue), 0, 1);
-        grid.Controls.Add(BuildStaticMetricCard("\u63d0\u9192", "5\u5c0f\u65f630\u5206"), 1, 1);
-        return grid;
-    }
-
-    private static Control BuildMetricCard(string title, out Label value)
-    {
-        var card = CreateMetricShell();
-        var layout = CreateMetricLayout(title);
-        value = new Label
-        {
-            Text = "0\u5206\u949f",
-            Dock = DockStyle.Fill,
-            Font = new Font("Microsoft YaHei UI", 22F, FontStyle.Bold, GraphicsUnit.Point),
-            ForeColor = TextPrimary,
-            TextAlign = ContentAlignment.MiddleLeft,
-            AutoEllipsis = false
-        };
-        layout.Controls.Add(value, 0, 1);
-        card.Controls.Add(layout);
-        return card;
-    }
-
-    private static Control BuildStaticMetricCard(string title, string value)
-    {
-        var card = CreateMetricShell();
-        var layout = CreateMetricLayout(title);
-        layout.Controls.Add(new Label
-        {
-            Text = value,
-            Dock = DockStyle.Fill,
-            Font = new Font("Microsoft YaHei UI", 22F, FontStyle.Bold, GraphicsUnit.Point),
-            ForeColor = TextPrimary,
-            TextAlign = ContentAlignment.MiddleLeft,
-            AutoEllipsis = false
-        }, 0, 1);
-        card.Controls.Add(layout);
-        return card;
-    }
-
-    private static RoundedPanel CreateMetricShell()
-    {
-        return new RoundedPanel
-        {
-            Dock = DockStyle.Fill,
-            FillColor = SoftGreen,
-            BorderColor = Color.FromArgb(226, 245, 238),
-            Radius = 24,
-            Margin = new Padding(0, 0, 18, 18),
-            Padding = new Padding(20, 16, 20, 16)
-        };
-    }
-
-    private static TableLayoutPanel CreateMetricLayout(string title)
-    {
-        var layout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
             BackColor = Color.Transparent,
-            ColumnCount = 1,
-            RowCount = 2
+            TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = false
         };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.Controls.Add(new Label
-        {
-            Text = title,
-            Dock = DockStyle.Fill,
-            Font = new Font("Microsoft YaHei UI", 12F, FontStyle.Regular, GraphicsUnit.Point),
-            ForeColor = TextSecondary,
-            TextAlign = ContentAlignment.MiddleLeft
-        }, 0, 0);
-        return layout;
-    }
+        root.Controls.Add(todayValue);
 
-    private Control BuildActions()
-    {
-        var actions = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = PageBackground,
-            ColumnCount = 3,
-            RowCount = 1,
-            Margin = Padding.Empty,
-            Padding = new Padding(0, 14, 0, 0)
-        };
-        actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
-        actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+        root.Controls.Add(BuildMetricCard("\u6628\u5929", new Rectangle(34, 320, 282, 136), out yesterdayValue));
+        root.Controls.Add(BuildMetricCard("\u672c\u5468", new Rectangle(344, 320, 282, 136), out weekValue));
+        root.Controls.Add(BuildMetricCard("\u672c\u6708", new Rectangle(34, 484, 282, 136), out monthValue));
+        root.Controls.Add(BuildStaticMetricCard("\u63d0\u9192", "5\u5c0f\u65f630\u5206", new Rectangle(344, 484, 282, 136)));
 
         var resetDisplay = new RoundedButton
         {
             Text = "\u91cd\u7f6e\u663e\u793a",
-            Dock = DockStyle.Fill,
+            Bounds = new Rectangle(200, 668, 260, 58),
             ButtonColor = AccentGreen,
             HoverColor = Color.FromArgb(19, 145, 111),
             PressedColor = Color.FromArgb(17, 124, 96),
@@ -347,8 +177,67 @@ public sealed class MainForm : Form
             Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Bold, GraphicsUnit.Point)
         };
         resetDisplay.Click += (_, _) => ResetDisplayedStatistics();
-        actions.Controls.Add(resetDisplay, 1, 0);
-        return actions;
+        root.Controls.Add(resetDisplay);
+    }
+
+    private static Control BuildMetricCard(string title, Rectangle bounds, out Label value)
+    {
+        var card = CreateMetricShell(bounds);
+        AddMetricTitle(card, title);
+        value = new Label
+        {
+            Text = "0\u5206\u949f",
+            Bounds = new Rectangle(24, 62, bounds.Width - 48, 56),
+            Font = new Font("Microsoft YaHei UI", 22F, FontStyle.Bold, GraphicsUnit.Point),
+            ForeColor = TextPrimary,
+            TextAlign = ContentAlignment.MiddleLeft,
+            BackColor = Color.Transparent,
+            AutoEllipsis = false
+        };
+        card.Controls.Add(value);
+        return card;
+    }
+
+    private static Control BuildStaticMetricCard(string title, string value, Rectangle bounds)
+    {
+        var card = CreateMetricShell(bounds);
+        AddMetricTitle(card, title);
+        card.Controls.Add(new Label
+        {
+            Text = value,
+            Bounds = new Rectangle(24, 62, bounds.Width - 48, 56),
+            Font = new Font("Microsoft YaHei UI", 22F, FontStyle.Bold, GraphicsUnit.Point),
+            ForeColor = TextPrimary,
+            TextAlign = ContentAlignment.MiddleLeft,
+            BackColor = Color.Transparent,
+            AutoEllipsis = false
+        });
+        return card;
+    }
+
+    private static RoundedPanel CreateMetricShell(Rectangle bounds)
+    {
+        return new RoundedPanel
+        {
+            Bounds = bounds,
+            FillColor = SoftGreen,
+            BorderColor = Color.FromArgb(226, 245, 238),
+            Radius = 24,
+            Padding = new Padding(20, 16, 20, 16)
+        };
+    }
+
+    private static void AddMetricTitle(Control card, string title)
+    {
+        card.Controls.Add(new Label
+        {
+            Text = title,
+            Bounds = new Rectangle(24, 20, 180, 34),
+            Font = new Font("Microsoft YaHei UI", 12F, FontStyle.Regular, GraphicsUnit.Point),
+            ForeColor = TextSecondary,
+            BackColor = Color.Transparent,
+            TextAlign = ContentAlignment.MiddleLeft
+        });
     }
 
     private void OnTrackingUpdated(object? sender, TrackingUpdatedEventArgs e)
