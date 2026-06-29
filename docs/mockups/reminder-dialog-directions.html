@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>提醒时间弹窗方案</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      background: #f5f7f8;
+      color: #111827;
+      --green: #16a67d;
+      --green-dark: #118866;
+      --soft: #effaf6;
+      --line: #e5edea;
+      --muted: #667085;
+      --panel: #fbfefd;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 28px;
+      background: #f5f7f8;
+    }
+
+    header {
+      max-width: 1180px;
+      margin: 0 auto 22px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      line-height: 1.25;
+      font-weight: 780;
+      letter-spacing: 0;
+    }
+
+    .intro {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.55;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(320px, 1fr));
+      gap: 18px;
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+
+    .option {
+      border: 1px solid rgba(17, 24, 39, 0.08);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 16px 42px rgba(17, 24, 39, 0.08);
+      overflow: hidden;
+    }
+
+    .option-head {
+      padding: 18px 18px 12px;
+      border-bottom: 1px solid rgba(17, 24, 39, 0.06);
+    }
+
+    .option h2 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.35;
+      font-weight: 760;
+      letter-spacing: 0;
+    }
+
+    .option p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .stage {
+      position: relative;
+      height: 560px;
+      padding: 18px;
+      background: linear-gradient(180deg, #fafdfe 0%, #f4f8f7 100%);
+    }
+
+    .app {
+      height: 100%;
+      border: 1px solid #dfe7e4;
+      border-radius: 16px;
+      background: var(--panel);
+      overflow: hidden;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.8);
+    }
+
+    .titlebar {
+      height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      background: #f6f4ef;
+      color: #111827;
+      font-size: 13px;
+    }
+
+    .window-actions {
+      display: flex;
+      gap: 12px;
+      color: #6b7280;
+    }
+
+    .content {
+      padding: 28px 26px;
+    }
+
+    .topline {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 4px;
+    }
+
+    .app-title {
+      margin: 0;
+      font-size: 30px;
+      line-height: 1.2;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: var(--green);
+    }
+
+    .desc {
+      margin: 0 0 18px;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .today-label {
+      color: var(--muted);
+      font-size: 17px;
+      margin-bottom: 2px;
+    }
+
+    .today-time {
+      color: var(--green);
+      font-size: 58px;
+      line-height: 1.08;
+      font-weight: 820;
+      letter-spacing: 0;
+      margin-bottom: 20px;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .metric {
+      min-height: 96px;
+      border: 1px solid #dff2eb;
+      border-radius: 18px;
+      background: var(--soft);
+      padding: 16px;
+    }
+
+    .metric .label {
+      color: var(--muted);
+      font-size: 17px;
+      margin-bottom: 8px;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 28px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    .reset {
+      width: 190px;
+      height: 48px;
+      border-radius: 999px;
+      margin: 30px auto 0;
+      display: grid;
+      place-items: center;
+      background: var(--green);
+      color: #fff;
+      font-weight: 760;
+      font-size: 18px;
+    }
+
+    .scrim {
+      position: absolute;
+      inset: 18px;
+      border-radius: 16px;
+      background: rgba(17, 24, 39, 0.18);
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    .dialog {
+      width: min(360px, 100%);
+      border: 1px solid rgba(17, 24, 39, 0.08);
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: 0 24px 60px rgba(17, 24, 39, 0.22);
+      padding: 22px;
+    }
+
+    .dialog-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .dialog h3 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.28;
+      font-weight: 780;
+      letter-spacing: 0;
+    }
+
+    .dialog .hint {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .close {
+      width: 32px;
+      height: 32px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      color: #475467;
+      background: #f2f4f7;
+      font-size: 18px;
+    }
+
+    .field {
+      border: 1px solid #d7e4df;
+      border-radius: 16px;
+      background: #f9fdfb;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+    }
+
+    .field-label {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+
+    .number-row {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .number {
+      font-size: 44px;
+      line-height: 1;
+      font-weight: 760;
+      letter-spacing: 0;
+    }
+
+    .unit {
+      color: var(--muted);
+      font-size: 16px;
+      padding-bottom: 5px;
+    }
+
+    .presets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+
+    .preset {
+      border-radius: 999px;
+      padding: 8px 12px;
+      color: #344054;
+      background: #f2f4f7;
+      font-size: 13px;
+    }
+
+    .preset.active {
+      color: var(--green-dark);
+      background: #e7f7f1;
+      font-weight: 700;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn {
+      height: 44px;
+      flex: 1;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      font-size: 16px;
+      font-weight: 730;
+    }
+
+    .btn.secondary {
+      color: #344054;
+      background: #f2f4f7;
+    }
+
+    .btn.primary {
+      color: white;
+      background: var(--green);
+    }
+
+    .sheet-dialog {
+      width: min(450px, 100%);
+      border: 1px solid rgba(17, 24, 39, 0.08);
+      border-radius: 22px;
+      background: white;
+      box-shadow: 0 24px 60px rgba(17, 24, 39, 0.22);
+      overflow: hidden;
+    }
+
+    .sheet-dialog .dialog-head {
+      margin: 0;
+      padding: 20px 22px;
+      border-bottom: 1px solid #edf2f0;
+    }
+
+    .sheet-body {
+      padding: 18px 22px 22px;
+    }
+
+    .list-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 14px 0;
+      border-bottom: 1px solid #edf2f0;
+    }
+
+    .list-row:last-of-type {
+      border-bottom: 0;
+    }
+
+    .list-row span {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .compact-input {
+      min-width: 138px;
+      border-radius: 12px;
+      border: 1px solid #d7e4df;
+      background: #f9fdfb;
+      padding: 10px 12px;
+      text-align: right;
+      font-size: 24px;
+      font-weight: 720;
+    }
+
+    .note {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      color: #2f6f59;
+      background: #eefaf5;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .verdict {
+      padding: 13px 18px 16px;
+      color: #344054;
+      font-size: 13px;
+      line-height: 1.55;
+      background: #ffffff;
+    }
+
+    .badge {
+      display: inline-block;
+      margin-bottom: 8px;
+      border-radius: 999px;
+      padding: 5px 9px;
+      color: #0f6b50;
+      background: #e7f7f1;
+      font-size: 12px;
+      font-weight: 760;
+    }
+
+    @media (max-width: 1120px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .stage {
+        height: 620px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>提醒时间弹窗方案</h1>
+    <p class="intro">当前系统默认弹窗确实和主界面不统一。下面三个方案都按 PC 端现有 Apple Health 风格做，正式实现时会用自绘 WinForms 控件，不使用默认数字框和默认按钮。</p>
+  </header>
+
+  <main class="grid">
+    <section class="option">
+      <div class="option-head">
+        <h2>A. 居中轻量卡片</h2>
+        <p>最像主界面的做法。保留弹窗，但去掉系统默认控件，输入区和按钮都用绿色健康风。</p>
+      </div>
+      <div class="stage">
+        <div class="app">
+          <div class="titlebar"><span>用眼时间记录</span><span class="window-actions">－ □ ×</span></div>
+          <div class="content">
+            <div class="topline"><h3 class="app-title">用眼时间</h3><span class="status"><i class="dot"></i>统计中</span></div>
+            <p class="desc">键鼠动作、媒体播放时计入统计</p>
+            <div class="today-label">今天</div>
+            <div class="today-time">2小时 10分</div>
+            <div class="cards">
+              <div class="metric"><div class="label">昨天</div><strong>6小时 49分</strong></div>
+              <div class="metric"><div class="label">本周</div><strong>2小时 10分</strong></div>
+              <div class="metric"><div class="label">本月</div><strong>14小时 18分</strong></div>
+              <div class="metric"><div class="label">提醒 (点击修改)</div><strong>5小时30分</strong></div>
+            </div>
+            <div class="reset">重置显示</div>
+          </div>
+        </div>
+        <div class="scrim">
+          <div class="dialog">
+            <div class="dialog-head">
+              <div>
+                <h3>修改提醒时间</h3>
+                <p class="hint">达到这个用眼时长后提醒休息</p>
+              </div>
+              <div class="close">×</div>
+            </div>
+            <div class="field">
+              <div class="field-label">提醒时间</div>
+              <div class="number-row">
+                <div><span class="number">330</span><span class="unit"> 分钟</span></div>
+              </div>
+            </div>
+            <div class="presets">
+              <span class="preset">90 分钟</span>
+              <span class="preset">180 分钟</span>
+              <span class="preset active">330 分钟</span>
+              <span class="preset">480 分钟</span>
+            </div>
+            <div class="actions">
+              <div class="btn secondary">取消</div>
+              <div class="btn primary">保存</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="verdict">
+        <span class="badge">推荐</span><br>
+        视觉最统一，也最容易理解。适合现在这个小工具，弹出时有明确焦点，用户改完就回到主界面。
+      </div>
+    </section>
+
+    <section class="option">
+      <div class="option-head">
+        <h2>B. 居中小面板</h2>
+        <p>点击提醒卡片后，在窗口中央弹出小面板。保留轻量感，位置更稳定，也更适合 PC 端输入。</p>
+      </div>
+      <div class="stage">
+        <div class="app">
+          <div class="titlebar"><span>用眼时间记录</span><span class="window-actions">－ □ ×</span></div>
+          <div class="content">
+            <div class="topline"><h3 class="app-title">用眼时间</h3><span class="status"><i class="dot"></i>统计中</span></div>
+            <p class="desc">键鼠动作、媒体播放时计入统计</p>
+            <div class="today-label">今天</div>
+            <div class="today-time">2小时 10分</div>
+            <div class="cards">
+              <div class="metric"><div class="label">昨天</div><strong>6小时 49分</strong></div>
+              <div class="metric"><div class="label">本周</div><strong>2小时 10分</strong></div>
+              <div class="metric"><div class="label">本月</div><strong>14小时 18分</strong></div>
+              <div class="metric"><div class="label">提醒 (点击修改)</div><strong>5小时30分</strong></div>
+            </div>
+            <div class="reset">重置显示</div>
+          </div>
+        </div>
+        <div class="scrim">
+          <div class="dialog">
+            <div class="dialog-head">
+              <div>
+                <h3>提醒时间</h3>
+                <p class="hint">单位：分钟（即5小时30分）</p>
+              </div>
+              <div class="close">×</div>
+            </div>
+            <div class="field">
+              <div class="number-row">
+                <div><span class="number">330</span><span class="unit"> 分钟</span></div>
+              </div>
+            </div>
+            <div class="actions">
+              <div class="btn secondary">取消</div>
+              <div class="btn primary">保存</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="verdict">
+        最终采用这个方向：B 的轻量面板样式，居中弹出，分钟数直接键盘输入，不放加减按钮。
+      </div>
+    </section>
+
+    <section class="option">
+      <div class="option-head">
+        <h2>C. 设置表单弹窗</h2>
+        <p>像一个小设置页，信息完整，未来要加入更多设置时可扩展。</p>
+      </div>
+      <div class="stage">
+        <div class="app">
+          <div class="titlebar"><span>用眼时间记录</span><span class="window-actions">－ □ ×</span></div>
+          <div class="content">
+            <div class="topline"><h3 class="app-title">用眼时间</h3><span class="status"><i class="dot"></i>统计中</span></div>
+            <p class="desc">键鼠动作、媒体播放时计入统计</p>
+            <div class="today-label">今天</div>
+            <div class="today-time">2小时 10分</div>
+            <div class="cards">
+              <div class="metric"><div class="label">昨天</div><strong>6小时 49分</strong></div>
+              <div class="metric"><div class="label">本周</div><strong>2小时 10分</strong></div>
+              <div class="metric"><div class="label">本月</div><strong>14小时 18分</strong></div>
+              <div class="metric"><div class="label">提醒 (点击修改)</div><strong>5小时30分</strong></div>
+            </div>
+            <div class="reset">重置显示</div>
+          </div>
+        </div>
+        <div class="scrim">
+          <div class="sheet-dialog">
+            <div class="dialog-head">
+              <div>
+                <h3>提醒设置</h3>
+                <p class="hint">修改今天达到多少分钟后提醒</p>
+              </div>
+              <div class="close">×</div>
+            </div>
+            <div class="sheet-body">
+              <div class="list-row"><span>提醒时间</span><div class="compact-input">330 分钟</div></div>
+              <div class="list-row"><span>显示效果</span><strong>5小时30分</strong></div>
+              <div class="note">保存后立即生效。今天如果已经超过新提醒时间，将在下一次计时检查后触发提醒。</div>
+              <div class="actions" style="margin-top:18px">
+                <div class="btn secondary">取消</div>
+                <div class="btn primary">保存</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="verdict">
+        稳重、可扩展，但对现在只改一个数字来说稍重。等以后做完整设置页时更合适。
+      </div>
+    </section>
+  </main>
+</body>
+</html>

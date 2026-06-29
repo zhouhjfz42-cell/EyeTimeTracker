@@ -35,4 +35,9 @@ public static class ReminderThreshold
             ? string.Format("{0}\u5c0f\u65f6{1:00}\u5206", hours, minutes)
             : string.Format("{0}\u5c0f\u65f6", hours);
     }
+
+    public static string FormatEquivalent(int seconds)
+    {
+        return string.Format("\uff08\u5373{0}\uff09", Format(seconds));
+    }
 }

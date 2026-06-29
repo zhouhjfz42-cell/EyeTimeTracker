@@ -520,12 +520,14 @@ public sealed class MainForm : Form
 
     private sealed class ReminderThresholdDialog : Form
     {
-        private readonly NumericUpDown _minutesInput;
+        private readonly TextBox _minutesInput;
+        private readonly FitTextLabel _hintLabel;
 
-        public int ReminderMinutes => (int)_minutesInput.Value;
+        public int ReminderMinutes { get; private set; }
 
         public ReminderThresholdDialog(int currentMinutes, Icon? icon)
         {
+            ReminderMinutes = Math.Clamp(currentMinutes, ReminderThreshold.MinMinutes, ReminderThreshold.MaxMinutes);
             AutoScaleMode = AutoScaleMode.None;
             Text = "\u4fee\u6539\u63d0\u9192\u65f6\u95f4";
             if (icon is not null)
@@ -534,56 +536,211 @@ public sealed class MainForm : Form
             }
 
             StartPosition = FormStartPosition.CenterParent;
-            FormBorderStyle = FormBorderStyle.FixedDialog;
+            FormBorderStyle = FormBorderStyle.None;
             MaximizeBox = false;
             MinimizeBox = false;
             ShowInTaskbar = false;
-            ClientSize = new Size(360, 184);
-            BackColor = PageBackground;
+            ClientSize = new Size(392, 282);
+            BackColor = Color.White;
             Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
 
             Controls.Add(new FitTextLabel
             {
-                Text = "\u63d0\u9192\u65f6\u95f4\uff08\u5206\u949f\uff09",
-                Bounds = new Rectangle(28, 24, 220, 34),
+                Text = "\u63d0\u9192\u65f6\u95f4",
+                Bounds = new Rectangle(28, 20, 220, 48),
+                MaxFontSize = 20F,
+                MinFontSize = 18F,
+                FontStyle = FontStyle.Bold,
+                ForeColor = TextPrimary,
+                BackColor = Color.Transparent,
+                TextAlign = ContentAlignment.MiddleLeft
+            });
+
+            var closeButton = new RoundedButton
+            {
+                Text = "\u00d7",
+                Bounds = new Rectangle(332, 22, 38, 38),
+                ButtonColor = Color.FromArgb(242, 244, 247),
+                HoverColor = Color.FromArgb(232, 236, 240),
+                PressedColor = Color.FromArgb(220, 226, 232),
+                TextColor = TextSecondary,
+                Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Bold, GraphicsUnit.Point)
+            };
+            closeButton.Click += (_, _) =>
+            {
+                DialogResult = DialogResult.Cancel;
+                Close();
+            };
+            Controls.Add(closeButton);
+
+            _hintLabel = new FitTextLabel
+            {
+                Bounds = new Rectangle(28, 74, 330, 34),
                 MaxFontSize = 12F,
-                MinFontSize = 11F,
+                MinFontSize = 10F,
+                FontStyle = FontStyle.Regular,
+                ForeColor = TextSecondary,
+                BackColor = Color.Transparent,
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+            Controls.Add(_hintLabel);
+
+            var inputShell = new RoundedPanel
+            {
+                Bounds = new Rectangle(28, 116, 336, 72),
+                FillColor = Color.FromArgb(249, 253, 251),
+                BorderColor = Color.FromArgb(206, 226, 218),
+                Radius = 18
+            };
+
+            _minutesInput = new TextBox
+            {
+                Text = ReminderMinutes.ToString(),
+                Bounds = new Rectangle(22, 17, 184, 46),
+                BorderStyle = BorderStyle.None,
+                Font = new Font("Microsoft YaHei UI", 26F, FontStyle.Bold, GraphicsUnit.Point),
+                ForeColor = TextPrimary,
+                BackColor = Color.FromArgb(249, 253, 251),
+                MaxLength = 5
+            };
+            _minutesInput.KeyPress += OnMinutesKeyPress;
+            _minutesInput.TextChanged += (_, _) => UpdateHint();
+            inputShell.Controls.Add(_minutesInput);
+
+            inputShell.Controls.Add(new FitTextLabel
+            {
+                Text = "\u5206\u949f",
+                Bounds = new Rectangle(204, 18, 74, 42),
+                MaxFontSize = 14F,
+                MinFontSize = 13F,
                 FontStyle = FontStyle.Regular,
                 ForeColor = TextSecondary,
                 BackColor = Color.Transparent,
                 TextAlign = ContentAlignment.MiddleLeft
             });
+            Controls.Add(inputShell);
 
-            _minutesInput = new NumericUpDown
-            {
-                Bounds = new Rectangle(28, 68, 304, 34),
-                Minimum = ReminderThreshold.MinMinutes,
-                Maximum = ReminderThreshold.MaxMinutes,
-                Value = Math.Clamp(currentMinutes, ReminderThreshold.MinMinutes, ReminderThreshold.MaxMinutes),
-                DecimalPlaces = 0,
-                ThousandsSeparator = false,
-                Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Regular, GraphicsUnit.Point)
-            };
-            Controls.Add(_minutesInput);
-
-            var cancelButton = new Button
+            var cancelButton = new RoundedButton
             {
                 Text = "\u53d6\u6d88",
-                Bounds = new Rectangle(156, 124, 82, 36),
-                DialogResult = DialogResult.Cancel
+                Bounds = new Rectangle(28, 212, 154, 48),
+                ButtonColor = Color.FromArgb(242, 244, 247),
+                HoverColor = Color.FromArgb(232, 236, 240),
+                PressedColor = Color.FromArgb(220, 226, 232),
+                TextColor = Color.FromArgb(52, 64, 84),
+                Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Bold, GraphicsUnit.Point)
+            };
+            cancelButton.Click += (_, _) =>
+            {
+                DialogResult = DialogResult.Cancel;
+                Close();
             };
             Controls.Add(cancelButton);
 
-            var okButton = new Button
+            var okButton = new RoundedButton
             {
-                Text = "\u786e\u5b9a",
-                Bounds = new Rectangle(250, 124, 82, 36),
-                DialogResult = DialogResult.OK
+                Text = "\u4fdd\u5b58",
+                Bounds = new Rectangle(202, 212, 162, 48),
+                ButtonColor = AccentGreen,
+                HoverColor = Color.FromArgb(19, 145, 111),
+                PressedColor = Color.FromArgb(17, 124, 96),
+                TextColor = Color.White,
+                Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Bold, GraphicsUnit.Point)
             };
+            okButton.Click += (_, _) => SaveAndClose();
             Controls.Add(okButton);
 
-            AcceptButton = okButton;
-            CancelButton = cancelButton;
+            UpdateHint();
+        }
+
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            _minutesInput.Focus();
+            _minutesInput.SelectAll();
+        }
+
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            using var path = CreateRoundRect(new Rectangle(0, 0, Width, Height), 26);
+            Region = new Region(path);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            var bounds = new Rectangle(0, 0, Width - 1, Height - 1);
+            using var path = CreateRoundRect(bounds, 26);
+            using var fill = new SolidBrush(Color.White);
+            using var border = new Pen(BorderColor);
+            e.Graphics.FillPath(fill, path);
+            e.Graphics.DrawPath(border, path);
+            base.OnPaint(e);
+        }
+
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            if (keyData == Keys.Enter)
+            {
+                SaveAndClose();
+                return true;
+            }
+
+            if (keyData == Keys.Escape)
+            {
+                DialogResult = DialogResult.Cancel;
+                Close();
+                return true;
+            }
+
+            return base.ProcessCmdKey(ref msg, keyData);
+        }
+
+        private void OnMinutesKeyPress(object? sender, KeyPressEventArgs e)
+        {
+            if (!char.IsControl(e.KeyChar) && !char.IsDigit(e.KeyChar))
+            {
+                e.Handled = true;
+            }
+        }
+
+        private void SaveAndClose()
+        {
+            if (!TryReadMinutes(out var minutes))
+            {
+                return;
+            }
+
+            ReminderMinutes = minutes;
+            DialogResult = DialogResult.OK;
+            Close();
+        }
+
+        private void UpdateHint()
+        {
+            if (TryReadMinutes(out var minutes))
+            {
+                _hintLabel.ForeColor = TextSecondary;
+                _hintLabel.Text = string.Format(
+                    "\u5355\u4f4d\uff1a\u5206\u949f{0}",
+                    ReminderThreshold.FormatEquivalent(ReminderThreshold.FromMinutes(minutes)));
+                return;
+            }
+
+            _hintLabel.ForeColor = Color.FromArgb(190, 80, 68);
+            _hintLabel.Text = string.Format(
+                "\u8bf7\u8f93\u5165 {0}-{1} \u4e4b\u95f4\u7684\u5206\u949f\u6570",
+                ReminderThreshold.MinMinutes,
+                ReminderThreshold.MaxMinutes);
+        }
+
+        private bool TryReadMinutes(out int minutes)
+        {
+            return int.TryParse(_minutesInput.Text.Trim(), out minutes)
+                && minutes >= ReminderThreshold.MinMinutes
+                && minutes <= ReminderThreshold.MaxMinutes;
         }
     }
 

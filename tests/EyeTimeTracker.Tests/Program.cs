@@ -136,6 +136,7 @@ static void TestReminderThresholdMinutesAndDisplay()
     AssertEqual(330, ReminderThreshold.ToMinutes(19800), nameof(TestReminderThresholdMinutesAndDisplay) + " minutes");
     AssertEqual("5\u5c0f\u65f630\u5206", ReminderThreshold.Format(19800), nameof(TestReminderThresholdMinutesAndDisplay) + " hours");
     AssertEqual("45\u5206\u949f", ReminderThreshold.Format(2700), nameof(TestReminderThresholdMinutesAndDisplay) + " minutes only");
+    AssertEqual("\uff08\u53735\u5c0f\u65f630\u5206\uff09", ReminderThreshold.FormatEquivalent(19800), nameof(TestReminderThresholdMinutesAndDisplay) + " equivalent");
 }
 
 static void TestJsonStateRoundTrip()
