@@ -19,7 +19,7 @@ public sealed class MainForm : Form
     private readonly FitTextLabel _yesterdayValue;
     private readonly FitTextLabel _weekValue;
     private readonly FitTextLabel _monthValue;
-    private readonly Label _statusValue;
+    private readonly FitTextLabel _statusValue;
     private readonly StatusDot _statusDot;
     private DateOnly? _displayResetDate;
     private long _todayDisplayBaseline;
@@ -100,13 +100,15 @@ public sealed class MainForm : Form
         out FitTextLabel weekValue,
         out FitTextLabel monthValue,
         out StatusDot statusDot,
-        out Label statusValue)
+        out FitTextLabel statusValue)
     {
-        root.Controls.Add(new Label
+        root.Controls.Add(new FitTextLabel
         {
             Text = "\u7528\u773c\u65f6\u95f4",
-            Bounds = new Rectangle(34, 38, 250, 58),
-            Font = new Font("Microsoft YaHei UI", 22F, FontStyle.Bold, GraphicsUnit.Point),
+            Bounds = new Rectangle(34, 30, 270, 76),
+            MaxFontSize = 22F,
+            MinFontSize = 20F,
+            FontStyle = FontStyle.Bold,
             ForeColor = TextPrimary,
             BackColor = Color.Transparent,
             TextAlign = ContentAlignment.MiddleLeft
@@ -114,15 +116,17 @@ public sealed class MainForm : Form
 
         statusDot = new StatusDot
         {
-            Bounds = new Rectangle(296, 58, 18, 18)
+            Bounds = new Rectangle(326, 58, 18, 18)
         };
         root.Controls.Add(statusDot);
 
-        statusValue = new Label
+        statusValue = new FitTextLabel
         {
             Text = "\u7edf\u8ba1\u4e2d",
-            Bounds = new Rectangle(318, 50, 130, 34),
-            Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Regular, GraphicsUnit.Point),
+            Bounds = new Rectangle(352, 30, 180, 76),
+            MaxFontSize = 22F,
+            MinFontSize = 20F,
+            FontStyle = FontStyle.Regular,
             ForeColor = TextPrimary,
             BackColor = Color.Transparent,
             TextAlign = ContentAlignment.MiddleLeft
@@ -131,7 +135,7 @@ public sealed class MainForm : Form
 
         root.Controls.Add(new Label
         {
-            Text = "\u4eae\u5c4f + \u52a8\u4f5c\u6216\u5a92\u4f53\u64ad\u653e\u65f6\u8ba1\u65f6",
+            Text = "\u952e\u9f20\u52a8\u4f5c\u3001\u5a92\u4f53\u64ad\u653e\u65f6\u8ba1\u5165\u7edf\u8ba1",
             Bounds = new Rectangle(34, 96, 570, 34),
             Font = new Font("Microsoft YaHei UI", 11F, FontStyle.Regular, GraphicsUnit.Point),
             ForeColor = TextSecondary,
