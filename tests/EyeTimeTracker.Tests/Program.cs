@@ -130,6 +130,14 @@ static void TestReminderOnlyOncePerDay()
     AssertEqual(false, policy.ShouldNotify(dailyRecord, settings), nameof(TestReminderOnlyOncePerDay) + " after shown");
 }
 
+static void TestReminderThresholdMinutesAndDisplay()
+{
+    AssertEqual(19800, ReminderThreshold.FromMinutes(330), nameof(TestReminderThresholdMinutesAndDisplay) + " seconds");
+    AssertEqual(330, ReminderThreshold.ToMinutes(19800), nameof(TestReminderThresholdMinutesAndDisplay) + " minutes");
+    AssertEqual("5\u5c0f\u65f630\u5206", ReminderThreshold.Format(19800), nameof(TestReminderThresholdMinutesAndDisplay) + " hours");
+    AssertEqual("45\u5206\u949f", ReminderThreshold.Format(2700), nameof(TestReminderThresholdMinutesAndDisplay) + " minutes only");
+}
+
 static void TestJsonStateRoundTrip()
 {
     var path = Path.Combine(Path.GetTempPath(), "eye-time-tracker-tests", $"{Guid.NewGuid()}.json");
@@ -210,6 +218,7 @@ TestSparseAudioDoesNotBackfillElapsed();
 TestFractionalTicksAreTruncated();
 TestDateRolloverStartsNewDay();
 TestReminderOnlyOncePerDay();
+TestReminderThresholdMinutesAndDisplay();
 TestJsonStateRoundTrip();
 TestGetOrCreateRecordReusesExistingRecord();
 TestMissingJsonReturnsDefaultState();

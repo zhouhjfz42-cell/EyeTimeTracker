@@ -2,6 +2,7 @@ using System.Drawing.Drawing2D;
 using EyeTimeTracker.App.Platform;
 using EyeTimeTracker.App.Tracking;
 using EyeTimeTracker.Core.Models;
+using EyeTimeTracker.Core.Reminders;
 
 namespace EyeTimeTracker.App.UI;
 
@@ -19,6 +20,7 @@ public sealed class MainForm : Form
     private readonly FitTextLabel _yesterdayValue;
     private readonly FitTextLabel _weekValue;
     private readonly FitTextLabel _monthValue;
+    private readonly FitTextLabel _reminderValue;
     private readonly FitTextLabel _statusValue;
     private readonly StatusDot _statusDot;
     private DateOnly? _displayResetDate;
@@ -50,18 +52,20 @@ public sealed class MainForm : Form
             BackColor = PageBackground
         };
 
-        BuildDashboard(root, out var todayValue, out var yesterdayValue, out var weekValue, out var monthValue, out var statusDot, out var statusValue);
+        BuildDashboard(root, out var todayValue, out var yesterdayValue, out var weekValue, out var monthValue, out var reminderValue, out var statusDot, out var statusValue);
 
         _todayValue = todayValue;
         _yesterdayValue = yesterdayValue;
         _weekValue = weekValue;
         _monthValue = monthValue;
+        _reminderValue = reminderValue;
         _statusDot = statusDot;
         _statusValue = statusValue;
 
         Controls.Add(root);
 
         _controller.Updated += OnTrackingUpdated;
+        UpdateReminderDisplay();
         UpdateSummary(_controller.Current);
     }
 
@@ -99,6 +103,7 @@ public sealed class MainForm : Form
         out FitTextLabel yesterdayValue,
         out FitTextLabel weekValue,
         out FitTextLabel monthValue,
+        out FitTextLabel reminderValue,
         out StatusDot statusDot,
         out FitTextLabel statusValue)
     {
@@ -175,7 +180,7 @@ public sealed class MainForm : Form
         root.Controls.Add(BuildMetricCard("\u6628\u5929", new Rectangle(34, 320, 282, 136), out yesterdayValue));
         root.Controls.Add(BuildMetricCard("\u672c\u5468", new Rectangle(344, 320, 282, 136), out weekValue));
         root.Controls.Add(BuildMetricCard("\u672c\u6708", new Rectangle(34, 484, 282, 136), out monthValue));
-        root.Controls.Add(BuildStaticMetricCard("\u63d0\u9192", "5\u5c0f\u65f630\u5206", new Rectangle(344, 484, 282, 136)));
+        root.Controls.Add(BuildReminderCard(new Rectangle(344, 484, 282, 136), out reminderValue));
 
         var resetDisplay = new RoundedButton
         {
@@ -210,13 +215,13 @@ public sealed class MainForm : Form
         return card;
     }
 
-    private static Control BuildStaticMetricCard(string title, string value, Rectangle bounds)
+    private Control BuildReminderCard(Rectangle bounds, out FitTextLabel value)
     {
         var card = CreateMetricShell(bounds);
-        AddMetricTitle(card, title);
-        card.Controls.Add(new FitTextLabel
+        AddMetricTitle(card, "\u63d0\u9192 (\u70b9\u51fb\u4fee\u6539)");
+        value = new FitTextLabel
         {
-            Text = value,
+            Text = ReminderThreshold.Format(_controller.Settings.ReminderThresholdSeconds),
             Bounds = new Rectangle(24, 58, bounds.Width - 40, 66),
             MaxFontSize = 22F,
             MinFontSize = 14F,
@@ -224,7 +229,9 @@ public sealed class MainForm : Form
             ForeColor = TextPrimary,
             TextAlign = ContentAlignment.MiddleLeft,
             BackColor = Color.Transparent
-        });
+        };
+        card.Controls.Add(value);
+        WireClick(card, (_, _) => ShowReminderDialog());
         return card;
     }
 
@@ -242,11 +249,13 @@ public sealed class MainForm : Form
 
     private static void AddMetricTitle(Control card, string title)
     {
-        card.Controls.Add(new Label
+        card.Controls.Add(new FitTextLabel
         {
             Text = title,
-            Bounds = new Rectangle(24, 20, 180, 34),
-            Font = new Font("Microsoft YaHei UI", 12F, FontStyle.Regular, GraphicsUnit.Point),
+            Bounds = new Rectangle(24, 20, 220, 36),
+            MaxFontSize = 12F,
+            MinFontSize = 11F,
+            FontStyle = FontStyle.Regular,
             ForeColor = TextSecondary,
             BackColor = Color.Transparent,
             TextAlign = ContentAlignment.MiddleLeft
@@ -309,6 +318,30 @@ public sealed class MainForm : Form
         _statusDot.IsActive = current.IsCounting;
     }
 
+    private void ShowReminderDialog()
+    {
+        using var dialog = new ReminderThresholdDialog(
+            ReminderThreshold.ToMinutes(_controller.Settings.ReminderThresholdSeconds),
+            Icon);
+
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        _controller.Settings = _controller.Settings with
+        {
+            ReminderThresholdSeconds = ReminderThreshold.FromMinutes(dialog.ReminderMinutes)
+        };
+        _controller.SaveNow();
+        UpdateReminderDisplay();
+    }
+
+    private void UpdateReminderDisplay()
+    {
+        _reminderValue.Text = ReminderThreshold.Format(_controller.Settings.ReminderThresholdSeconds);
+    }
+
     private void ResetDisplayedStatistics()
     {
         var current = _controller.Current;
@@ -351,6 +384,17 @@ public sealed class MainForm : Form
     private static long RecordSeconds(IEnumerable<DailyRecord> records, DateOnly date)
     {
         return records.FirstOrDefault(record => record.Date == date)?.TotalSeconds ?? 0;
+    }
+
+    private static void WireClick(Control control, EventHandler handler)
+    {
+        control.Cursor = Cursors.Hand;
+        control.Click += handler;
+
+        foreach (Control child in control.Controls)
+        {
+            WireClick(child, handler);
+        }
     }
 
     private static string FormatDuration(long totalSeconds)
@@ -471,6 +515,75 @@ public sealed class MainForm : Form
                 bounds,
                 Enabled ? TextColor : TextSecondary,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        }
+    }
+
+    private sealed class ReminderThresholdDialog : Form
+    {
+        private readonly NumericUpDown _minutesInput;
+
+        public int ReminderMinutes => (int)_minutesInput.Value;
+
+        public ReminderThresholdDialog(int currentMinutes, Icon? icon)
+        {
+            AutoScaleMode = AutoScaleMode.None;
+            Text = "\u4fee\u6539\u63d0\u9192\u65f6\u95f4";
+            if (icon is not null)
+            {
+                Icon = (Icon)icon.Clone();
+            }
+
+            StartPosition = FormStartPosition.CenterParent;
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false;
+            MinimizeBox = false;
+            ShowInTaskbar = false;
+            ClientSize = new Size(360, 184);
+            BackColor = PageBackground;
+            Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
+
+            Controls.Add(new FitTextLabel
+            {
+                Text = "\u63d0\u9192\u65f6\u95f4\uff08\u5206\u949f\uff09",
+                Bounds = new Rectangle(28, 24, 220, 34),
+                MaxFontSize = 12F,
+                MinFontSize = 11F,
+                FontStyle = FontStyle.Regular,
+                ForeColor = TextSecondary,
+                BackColor = Color.Transparent,
+                TextAlign = ContentAlignment.MiddleLeft
+            });
+
+            _minutesInput = new NumericUpDown
+            {
+                Bounds = new Rectangle(28, 68, 304, 34),
+                Minimum = ReminderThreshold.MinMinutes,
+                Maximum = ReminderThreshold.MaxMinutes,
+                Value = Math.Clamp(currentMinutes, ReminderThreshold.MinMinutes, ReminderThreshold.MaxMinutes),
+                DecimalPlaces = 0,
+                ThousandsSeparator = false,
+                Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Regular, GraphicsUnit.Point)
+            };
+            Controls.Add(_minutesInput);
+
+            var cancelButton = new Button
+            {
+                Text = "\u53d6\u6d88",
+                Bounds = new Rectangle(156, 124, 82, 36),
+                DialogResult = DialogResult.Cancel
+            };
+            Controls.Add(cancelButton);
+
+            var okButton = new Button
+            {
+                Text = "\u786e\u5b9a",
+                Bounds = new Rectangle(250, 124, 82, 36),
+                DialogResult = DialogResult.OK
+            };
+            Controls.Add(okButton);
+
+            AcceptButton = okButton;
+            CancelButton = cancelButton;
         }
     }
 
