@@ -33,14 +33,14 @@ public sealed class MainForm : Form
         _controller = controller ?? throw new ArgumentNullException(nameof(controller));
         _ = startupManager ?? throw new ArgumentNullException(nameof(startupManager));
 
-        AutoScaleMode = AutoScaleMode.Dpi;
+        AutoScaleMode = AutoScaleMode.None;
         Text = "\u7528\u773c\u65f6\u95f4\u8bb0\u5f55";
         Icon = (Icon)(appIcon ?? throw new ArgumentNullException(nameof(appIcon))).Clone();
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         MinimizeBox = true;
-        ClientSize = new Size(540, 650);
+        ClientSize = new Size(640, 760);
         BackColor = PageBackground;
         Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
 
@@ -52,10 +52,10 @@ public sealed class MainForm : Form
             ColumnCount = 1,
             RowCount = 5
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 128));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 246));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 86));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 116));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 158));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 318));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         var header = BuildHeader(out var statusDot, out var statusValue);
@@ -114,14 +114,13 @@ public sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             BackColor = PageBackground,
-            ColumnCount = 2,
+            ColumnCount = 1,
             RowCount = 2,
             Margin = Padding.Empty
         };
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 76));
-        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
-        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
 
         var titleLine = new FlowLayoutPanel
         {
@@ -130,7 +129,7 @@ public sealed class MainForm : Form
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
             Margin = Padding.Empty,
-            Padding = new Padding(0, 16, 0, 0)
+            Padding = new Padding(0, 18, 0, 0)
         };
         titleLine.Controls.Add(new Label
         {
@@ -148,8 +147,8 @@ public sealed class MainForm : Form
             FillColor = Color.White,
             BorderColor = BorderColor,
             Radius = 16,
-            Margin = new Padding(0, 11, 0, 0),
-            Padding = new Padding(10, 0, 10, 0)
+            Margin = new Padding(0, 12, 0, 0),
+            Padding = new Padding(10, 0, 8, 0)
         };
         var statusLayout = new TableLayoutPanel
         {
@@ -165,7 +164,7 @@ public sealed class MainForm : Form
         statusDot = new StatusDot
         {
             Dock = DockStyle.Fill,
-            Margin = new Padding(0, 0, 6, 0)
+            Margin = new Padding(0, 1, 6, 0)
         };
         statusValue = new Label
         {
@@ -180,12 +179,6 @@ public sealed class MainForm : Form
         statusPill.Controls.Add(statusLayout);
         titleLine.Controls.Add(statusPill);
 
-        var avatar = new AvatarPlaceholder
-        {
-            Dock = DockStyle.Fill,
-            Margin = new Padding(10, 10, 0, 8)
-        };
-
         var subtitle = new Label
         {
             Text = "\u4eae\u5c4f + \u52a8\u4f5c\u6216\u5a92\u4f53\u64ad\u653e\u65f6\u8ba1\u65f6",
@@ -197,8 +190,6 @@ public sealed class MainForm : Form
         };
 
         header.Controls.Add(titleLine, 0, 0);
-        header.Controls.Add(avatar, 1, 0);
-        header.SetRowSpan(avatar, 2);
         header.Controls.Add(subtitle, 0, 1);
         return header;
     }
@@ -213,8 +204,8 @@ public sealed class MainForm : Form
             RowCount = 2,
             Margin = Padding.Empty
         };
-        block.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
-        block.RowStyles.Add(new RowStyle(SizeType.Absolute, 86));
+        block.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        block.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
 
         block.Controls.Add(new Label
         {
@@ -229,7 +220,7 @@ public sealed class MainForm : Form
         {
             Text = "0\u5206\u949f",
             Dock = DockStyle.Fill,
-            Font = new Font("Microsoft YaHei UI", 40F, FontStyle.Bold, GraphicsUnit.Point),
+            Font = new Font("Microsoft YaHei UI", 44F, FontStyle.Bold, GraphicsUnit.Point),
             ForeColor = AccentGreen,
             TextAlign = ContentAlignment.BottomLeft,
             AutoEllipsis = false
@@ -268,7 +259,7 @@ public sealed class MainForm : Form
         {
             Text = "0\u5206\u949f",
             Dock = DockStyle.Fill,
-            Font = new Font("Microsoft YaHei UI", 20F, FontStyle.Bold, GraphicsUnit.Point),
+            Font = new Font("Microsoft YaHei UI", 22F, FontStyle.Bold, GraphicsUnit.Point),
             ForeColor = TextPrimary,
             TextAlign = ContentAlignment.MiddleLeft,
             AutoEllipsis = false
@@ -286,7 +277,7 @@ public sealed class MainForm : Form
         {
             Text = value,
             Dock = DockStyle.Fill,
-            Font = new Font("Microsoft YaHei UI", 20F, FontStyle.Bold, GraphicsUnit.Point),
+            Font = new Font("Microsoft YaHei UI", 22F, FontStyle.Bold, GraphicsUnit.Point),
             ForeColor = TextPrimary,
             TextAlign = ContentAlignment.MiddleLeft,
             AutoEllipsis = false
@@ -303,8 +294,8 @@ public sealed class MainForm : Form
             FillColor = SoftGreen,
             BorderColor = Color.FromArgb(226, 245, 238),
             Radius = 24,
-            Margin = new Padding(0, 0, 16, 16),
-            Padding = new Padding(18, 14, 18, 12)
+            Margin = new Padding(0, 0, 18, 18),
+            Padding = new Padding(20, 16, 20, 16)
         };
     }
 
@@ -317,13 +308,13 @@ public sealed class MainForm : Form
             ColumnCount = 1,
             RowCount = 2
         };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.Controls.Add(new Label
         {
             Text = title,
             Dock = DockStyle.Fill,
-            Font = new Font("Microsoft YaHei UI", 11F, FontStyle.Regular, GraphicsUnit.Point),
+            Font = new Font("Microsoft YaHei UI", 12F, FontStyle.Regular, GraphicsUnit.Point),
             ForeColor = TextSecondary,
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, 0);
@@ -349,7 +340,6 @@ public sealed class MainForm : Form
         {
             Text = "\u91cd\u7f6e\u663e\u793a",
             Dock = DockStyle.Fill,
-            Height = 52,
             ButtonColor = AccentGreen,
             HoverColor = Color.FromArgb(19, 145, 111),
             PressedColor = Color.FromArgb(17, 124, 96),
@@ -514,7 +504,7 @@ public sealed class MainForm : Form
         }
     }
 
-    private sealed class RoundedButton : Button
+    private sealed class RoundedButton : Control
     {
         private bool _hovered;
         private bool _pressed;
@@ -529,9 +519,6 @@ public sealed class MainForm : Form
 
         public RoundedButton()
         {
-            FlatStyle = FlatStyle.Flat;
-            FlatAppearance.BorderSize = 0;
-            UseVisualStyleBackColor = false;
             Cursor = Cursors.Hand;
             Font = new Font("Microsoft YaHei UI", 11F, FontStyle.Bold, GraphicsUnit.Point);
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
@@ -541,7 +528,6 @@ public sealed class MainForm : Form
         {
             _hovered = true;
             Invalidate();
-            base.OnMouseEnter(e);
         }
 
         protected override void OnMouseLeave(EventArgs e)
@@ -549,21 +535,22 @@ public sealed class MainForm : Form
             _hovered = false;
             _pressed = false;
             Invalidate();
-            base.OnMouseLeave(e);
         }
 
         protected override void OnMouseDown(MouseEventArgs e)
         {
             _pressed = true;
             Invalidate();
-            base.OnMouseDown(e);
         }
 
         protected override void OnMouseUp(MouseEventArgs e)
         {
             _pressed = false;
             Invalidate();
-            base.OnMouseUp(e);
+            if (ClientRectangle.Contains(e.Location))
+            {
+                OnClick(EventArgs.Empty);
+            }
         }
 
         protected override void OnPaint(PaintEventArgs pevent)
@@ -620,23 +607,4 @@ public sealed class MainForm : Form
         }
     }
 
-    private sealed class AvatarPlaceholder : Control
-    {
-        public AvatarPlaceholder()
-        {
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            var size = Math.Min(58, Math.Min(Width, Height));
-            var x = (Width - size) / 2;
-            var y = (Height - size) / 2;
-            using var fill = new SolidBrush(Color.White);
-            using var pen = new Pen(Color.FromArgb(255, 77, 86), 5);
-            e.Graphics.FillEllipse(fill, x, y, size, size);
-            e.Graphics.DrawEllipse(pen, x + 2, y + 2, size - 4, size - 4);
-        }
-    }
 }
