@@ -10,7 +10,7 @@ public final class DurationFormatter {
         long hours = totalMinutes / 60L;
         long minutes = totalMinutes % 60L;
         if (hours > 0L) {
-            return String.format("%d小时 %02d分钟", hours, minutes);
+            return String.format("%d小时%02d分", hours, minutes);
         }
         return String.format("%d分钟", minutes);
     }

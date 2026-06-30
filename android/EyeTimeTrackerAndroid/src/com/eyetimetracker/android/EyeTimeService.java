@@ -30,7 +30,6 @@ public final class EyeTimeService extends Service implements SensorEventListener
     private static final long TICK_MS = 10_000L;
     private static final long MOTION_THRESHOLD_MS = 180_000L;
     private static final long MAX_COUNTABLE_TICK_MS = 30_000L;
-    private static final long REMINDER_SECONDS = 5L * 3600L + 30L * 60L;
     private static final float MOTION_DELTA_THRESHOLD = 0.7f;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -123,10 +122,19 @@ public final class EyeTimeService extends Service implements SensorEventListener
         if (counting && elapsed > 0L && elapsed <= MAX_COUNTABLE_TICK_MS) {
             store.addSeconds(LocalDate.now(), elapsed / 1000L);
         }
-        DailySummary today = store.getDay(LocalDate.now());
-        if (!today.reminderShown && today.totalSeconds >= REMINDER_SECONDS) {
-            store.markReminderShown(LocalDate.now());
-            showReminder();
+        LocalDate todayDate = LocalDate.now();
+        DailySummary today = store.getDay(todayDate);
+        int reminderMinutes = store.getReminderMinutes();
+        boolean repeatReminder = store.isRepeatReminderEnabled();
+        if (ReminderPolicy.shouldNotify(
+                today.totalSeconds,
+                reminderMinutes,
+                repeatReminder,
+                today.reminderShown,
+                today.lastReminderStep)) {
+            int reminderStep = ReminderPolicy.reachedStep(today.totalSeconds, reminderMinutes);
+            store.markReminderShown(todayDate, reminderStep);
+            showReminder(reminderMinutes);
         }
         updateForegroundNotification(today.totalSeconds);
         sendBroadcast(new Intent(ACTION_STATE_CHANGED));
@@ -178,8 +186,8 @@ public final class EyeTimeService extends Service implements SensorEventListener
         }
     }
 
-    private void showReminder() {
-        Notification notification = buildStatusNotification("今天用眼时间已达到 5小时30分钟，建议休息。");
+    private void showReminder(int reminderMinutes) {
+        Notification notification = buildStatusNotification("今天用眼时间已达到 " + ReminderThreshold.format(reminderMinutes) + "，建议休息。");
         NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager != null) {
             manager.notify(REMINDER_ID, notification);

@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>安卓版统一界面方案</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      background: #f5f7f8;
+      color: #111827;
+      --green: #16a67d;
+      --green-dark: #118866;
+      --yellow: #d99a13;
+      --red: #e05252;
+      --soft: #edf8f4;
+      --line: #dff0e9;
+      --muted: #667085;
+      --panel: #fbfefd;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 30px;
+      background: #f5f7f8;
+    }
+
+    header {
+      max-width: 1180px;
+      margin: 0 auto 24px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      line-height: 1.25;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+
+    .intro {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.55;
+    }
+
+    .color-preview {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .color-sample {
+      min-width: 190px;
+      border: 1px solid rgba(17, 24, 39, 0.08);
+      border-radius: 18px;
+      background: #ffffff;
+      padding: 14px 18px;
+      box-shadow: 0 10px 28px rgba(17, 24, 39, 0.06);
+    }
+
+    .sample-label {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.2;
+      margin-bottom: 6px;
+    }
+
+    .sample-value {
+      display: block;
+      font-size: 34px;
+      line-height: 1.1;
+      font-weight: 840;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .sample-value.warn { color: var(--yellow); }
+    .sample-value.danger { color: var(--red); }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(300px, 1fr));
+      gap: 22px;
+      max-width: 1260px;
+      margin: 0 auto;
+      align-items: start;
+    }
+
+    .option {
+      border: 1px solid rgba(17, 24, 39, 0.08);
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 16px 42px rgba(17, 24, 39, 0.08);
+      padding: 18px;
+    }
+
+    .option h2 {
+      margin: 0 0 8px;
+      font-size: 17px;
+      font-weight: 780;
+      letter-spacing: 0;
+    }
+
+    .note {
+      margin: 14px 2px 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .phone {
+      width: 100%;
+      max-width: 390px;
+      height: 760px;
+      margin: 0 auto;
+      border: 1px solid rgba(17, 24, 39, 0.08);
+      border-radius: 34px;
+      background: var(--panel);
+      box-shadow: 0 22px 60px rgba(17, 24, 39, 0.12);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .statusbar {
+      height: 42px;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #475467;
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .screen {
+      padding: 18px 22px 22px;
+      height: calc(100% - 42px);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-start;
+      gap: 14px;
+      margin-bottom: 6px;
+    }
+
+    .title {
+      margin: 0;
+      font-size: 30px;
+      line-height: 1.15;
+      font-weight: 820;
+      letter-spacing: 0;
+    }
+
+    .caption {
+      margin: 0 0 22px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .day-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 2px;
+    }
+
+    .day-label {
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 15px;
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: var(--green);
+      box-shadow: 0 0 0 6px rgba(22, 166, 125, 0.12);
+    }
+
+    .dot.off {
+      background: #98a2b3;
+      box-shadow: 0 0 0 6px rgba(152, 162, 179, 0.12);
+    }
+
+    .hero {
+      font-size: 58px;
+      line-height: 1.08;
+      font-weight: 840;
+      letter-spacing: 0;
+      margin-bottom: 22px;
+      white-space: nowrap;
+    }
+
+    .hero.safe { color: var(--green); }
+    .hero.warn { color: var(--yellow); }
+    .hero.danger { color: var(--red); }
+
+    .cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .card {
+      min-height: 88px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: var(--soft);
+      padding: 14px 12px 13px;
+      min-width: 0;
+    }
+
+    .card-label {
+      color: var(--muted);
+      font-size: 16px;
+      margin-bottom: 9px;
+    }
+
+    .card-value {
+      display: block;
+      color: #111827;
+      font-size: 24px;
+      line-height: 1.1;
+      font-weight: 820;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      margin-top: auto;
+    }
+
+    .button {
+      height: 54px;
+      flex: 1;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      font-size: 17px;
+      font-weight: 780;
+    }
+
+    .button.primary {
+      color: white;
+      background: var(--green);
+    }
+
+    .button.secondary {
+      color: #344054;
+      background: #f1f4f3;
+    }
+
+    .device {
+      margin-top: 16px;
+      color: #98a2b3;
+      font-size: 11px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .dialog-scrim {
+      position: absolute;
+      inset: 42px 0 0;
+      background: rgba(17, 24, 39, 0.18);
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    .dialog {
+      width: 100%;
+      min-height: 324px;
+      border: 1px solid rgba(17, 24, 39, 0.08);
+      border-radius: 26px;
+      background: white;
+      box-shadow: 0 24px 60px rgba(17, 24, 39, 0.22);
+      padding: 24px 22px 26px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .dialog-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+
+    .dialog-title {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.25;
+      font-weight: 820;
+      letter-spacing: 0;
+    }
+
+    .dialog-hint {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .close {
+      width: 42px;
+      height: 42px;
+      border-radius: 999px;
+      background: #f2f4f7;
+      position: relative;
+    }
+
+    .close::before,
+    .close::after {
+      content: "";
+      position: absolute;
+      width: 16px;
+      height: 2px;
+      left: 13px;
+      top: 20px;
+      border-radius: 999px;
+      background: var(--muted);
+    }
+
+    .close::before { transform: rotate(45deg); }
+    .close::after { transform: rotate(-45deg); }
+
+    .field {
+      border: 1px solid #cfe4dc;
+      border-radius: 18px;
+      background: #f9fdfb;
+      padding: 14px 16px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+
+    .repeat-row {
+      min-height: 34px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .switch {
+      width: 42px;
+      height: 26px;
+      border-radius: 999px;
+      background: var(--green);
+      padding: 3px;
+      flex: 0 0 auto;
+      box-shadow: inset 0 0 0 1px rgba(17, 24, 39, 0.04);
+    }
+
+    .switch::after {
+      content: "";
+      display: block;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: white;
+      transform: translateX(16px);
+      box-shadow: 0 2px 6px rgba(17, 24, 39, 0.16);
+    }
+
+    .repeat-text {
+      white-space: nowrap;
+    }
+
+    .repeat-text strong {
+      color: #111827;
+      font-weight: 760;
+    }
+
+    .dialog .actions {
+      margin-top: 20px;
+    }
+
+    .number {
+      font-size: 42px;
+      line-height: 1;
+      font-weight: 820;
+      letter-spacing: 0;
+      color: #111827;
+    }
+
+    .unit {
+      color: var(--muted);
+      font-size: 19px;
+    }
+
+    .stopped .hero {
+      color: #667085;
+    }
+
+    .stopped .button.primary {
+      background: var(--green);
+    }
+
+    .permission {
+      border: 1px solid #dff0e9;
+      border-radius: 20px;
+      background: #f7fcfa;
+      padding: 16px;
+      margin-top: 14px;
+    }
+
+    .permission strong {
+      display: block;
+      font-size: 17px;
+      margin-bottom: 7px;
+    }
+
+    .permission span {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 1320px) {
+      body { padding: 18px; }
+      .grid { grid-template-columns: 1fr; }
+      .phone { max-width: 390px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>安卓版统一界面方案</h1>
+    <p class="intro">沿用 PC 端的清新健康风：白底、健康绿、柔和卡片、大号今日时间。Android 保留“后台统计服务”的现实需求，但不再像旧版那样是系统默认控件堆叠。</p>
+    <div class="color-preview" aria-label="今日时间颜色示例">
+      <div class="color-sample">
+        <div class="sample-label">6-8小时</div>
+        <strong class="sample-value warn">7小时20分</strong>
+      </div>
+      <div class="color-sample">
+        <div class="sample-label">大于8小时</div>
+        <strong class="sample-value danger">8小时30分</strong>
+      </div>
+    </div>
+  </header>
+
+  <main class="grid">
+    <section class="option">
+      <h2>主界面：后台统计运行中</h2>
+      <div class="phone">
+        <div class="statusbar"><span>15:30</span><span>5G 41%</span></div>
+        <div class="screen">
+          <div class="top">
+            <h3 class="title">用眼时间</h3>
+          </div>
+          <p class="caption">亮屏 + 机身动作，或亮屏 + 媒体播放时计入统计（息屏播放不计时）</p>
+          <div class="day-row">
+            <span class="day-label">今天</span>
+            <span class="status-pill"><i class="dot"></i>后台统计中</span>
+          </div>
+          <div class="hero safe">2小时 18分</div>
+          <div class="cards">
+            <div class="card"><div class="card-label">昨天</div><strong class="card-value">1小时42分</strong></div>
+            <div class="card"><div class="card-label">本周</div><strong class="card-value">8小时05分</strong></div>
+            <div class="card"><div class="card-label">本月</div><strong class="card-value">31小时</strong></div>
+            <div class="card"><div class="card-label">提醒</div><strong class="card-value">5小时30分</strong></div>
+          </div>
+          <div class="actions">
+            <div class="button secondary">重置显示</div>
+            <div class="button primary">后台运行</div>
+          </div>
+          <div class="device">设备 ID：85ca9ce6-81e6-4f8d-90cb-564ec9c6f4a5</div>
+        </div>
+      </div>
+      <p class="note">推荐主界面：状态放在“今天”旁边。今日数字按使用时长变色：6小时以内绿色，6-8小时黄色，大于8小时红色。未来登录后可在右上角加入用户信息区，目前版本不展示头像占位。</p>
+    </section>
+
+    <section class="option">
+      <h2>提醒时间弹窗</h2>
+      <div class="phone">
+        <div class="statusbar"><span>15:30</span><span>5G 41%</span></div>
+        <div class="screen">
+          <div class="top">
+            <h3 class="title">用眼时间</h3>
+          </div>
+          <p class="caption">亮屏 + 机身动作，或亮屏 + 媒体播放时计入统计（息屏播放不计时）</p>
+          <div class="day-row">
+            <span class="day-label">今天</span>
+            <span class="status-pill"><i class="dot"></i>后台统计中</span>
+          </div>
+          <div class="hero safe">2小时 18分</div>
+          <div class="cards">
+            <div class="card"><div class="card-label">昨天</div><strong class="card-value">1小时42分</strong></div>
+            <div class="card"><div class="card-label">本周</div><strong class="card-value">8小时05分</strong></div>
+            <div class="card"><div class="card-label">本月</div><strong class="card-value">31小时</strong></div>
+            <div class="card"><div class="card-label">提醒</div><strong class="card-value">5小时30分</strong></div>
+          </div>
+          <div class="actions">
+            <div class="button secondary">重置显示</div>
+            <div class="button primary">后台运行</div>
+          </div>
+        </div>
+        <div class="dialog-scrim">
+          <div class="dialog">
+            <div class="dialog-head">
+              <div>
+                <h3 class="dialog-title">提醒时间</h3>
+                <p class="dialog-hint">单位：分钟（即5小时30分）</p>
+              </div>
+              <div class="close"></div>
+            </div>
+            <div class="field"><span class="number">330</span><span class="unit">分钟</span></div>
+            <div class="repeat-row">
+              <span class="switch"></span>
+              <span class="repeat-text"><strong>反复提醒</strong>（当天内每330分钟提醒一次）</span>
+            </div>
+            <div class="actions">
+              <div class="button secondary">取消</div>
+              <div class="button primary">保存</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="note">提醒弹窗保持和 PC 版一致：居中、直接输入分钟数、显示“即多少小时多少分”，并在输入框下方提供反复提醒开关。开启后按当天累计时间的阈值倍数提醒，例如 330、660、990 分钟；新一天重新从当天时间开始计算。</p>
+    </section>
+
+    <section class="option">
+      <h2>后台未运行或需授权</h2>
+      <div class="phone stopped">
+        <div class="statusbar"><span>15:30</span><span>5G 41%</span></div>
+        <div class="screen">
+          <div class="top">
+            <h3 class="title">用眼时间</h3>
+          </div>
+          <p class="caption">亮屏 + 机身动作，或亮屏 + 媒体播放时计入统计（息屏播放不计时）</p>
+          <div class="day-row">
+            <span class="day-label">今天</span>
+            <span class="status-pill"><i class="dot off"></i>后台未运行</span>
+          </div>
+          <div class="hero">0分钟</div>
+          <div class="cards">
+            <div class="card"><div class="card-label">昨天</div><strong class="card-value">1小时42分</strong></div>
+            <div class="card"><div class="card-label">本周</div><strong class="card-value">8小时05分</strong></div>
+            <div class="card"><div class="card-label">本月</div><strong class="card-value">31小时</strong></div>
+            <div class="card"><div class="card-label">提醒</div><strong class="card-value">5小时30分</strong></div>
+          </div>
+          <div class="permission">
+            <strong>需要保持后台统计</strong>
+            <span>首次使用时会请求通知权限，并启动前台服务。服务运行后，统计才会持续更新。</span>
+          </div>
+          <div class="actions">
+            <div class="button secondary">重置显示</div>
+            <div class="button primary">启动后台</div>
+          </div>
+          <div class="device">设备 ID：85ca9ce6-81e6-4f8d-90cb-564ec9c6f4a5</div>
+        </div>
+      </div>
+      <p class="note">这是异常/首次启动状态：不做大段说明，只保留必要提示和明确的“启动后台”动作。</p>
+    </section>
+  </main>
+</body>
+</html>
