@@ -106,4 +106,4 @@ Android 端使用本机应用私有存储保存统计数据和提醒设置。
 
 ## 许可证
 
-当前尚未选择开源许可证。如需公开复用代码，请先补充 LICENSE 文件。
+本项目使用 MIT License。详见 [LICENSE](LICENSE)。
