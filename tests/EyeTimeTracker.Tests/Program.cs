@@ -125,9 +125,40 @@ static void TestReminderOnlyOncePerDay()
 
     AssertEqual(true, policy.ShouldNotify(dailyRecord, settings), nameof(TestReminderOnlyOncePerDay) + " first");
 
-    policy.MarkShown(dailyRecord);
+    policy.MarkShown(dailyRecord, settings);
 
     AssertEqual(false, policy.ShouldNotify(dailyRecord, settings), nameof(TestReminderOnlyOncePerDay) + " after shown");
+}
+
+static void TestReminderRepeatsAtThresholdMultiples()
+{
+    var settings = TrackerSettings.Default with
+    {
+        ReminderThresholdSeconds = 19800,
+        RepeatReminder = true
+    };
+    var dailyRecord = new DailyRecord(new DateOnly(2026, 6, 26))
+    {
+        TotalSeconds = 19800
+    };
+    var policy = new DailyReminderPolicy();
+
+    AssertEqual(true, policy.ShouldNotify(dailyRecord, settings), nameof(TestReminderRepeatsAtThresholdMultiples) + " first");
+
+    policy.MarkShown(dailyRecord, settings);
+
+    AssertEqual(true, dailyRecord.ReminderShown, nameof(TestReminderRepeatsAtThresholdMultiples) + " shown");
+    AssertEqual(1, dailyRecord.LastReminderStep, nameof(TestReminderRepeatsAtThresholdMultiples) + " first step");
+
+    dailyRecord.TotalSeconds = 30000;
+    AssertEqual(false, policy.ShouldNotify(dailyRecord, settings), nameof(TestReminderRepeatsAtThresholdMultiples) + " before second");
+
+    dailyRecord.TotalSeconds = 39600;
+    AssertEqual(true, policy.ShouldNotify(dailyRecord, settings), nameof(TestReminderRepeatsAtThresholdMultiples) + " second");
+
+    policy.MarkShown(dailyRecord, settings);
+
+    AssertEqual(2, dailyRecord.LastReminderStep, nameof(TestReminderRepeatsAtThresholdMultiples) + " second step");
 }
 
 static void TestReminderThresholdMinutesAndDisplay()
@@ -137,6 +168,15 @@ static void TestReminderThresholdMinutesAndDisplay()
     AssertEqual("5\u5c0f\u65f630\u5206", ReminderThreshold.Format(19800), nameof(TestReminderThresholdMinutesAndDisplay) + " hours");
     AssertEqual("45\u5206\u949f", ReminderThreshold.Format(2700), nameof(TestReminderThresholdMinutesAndDisplay) + " minutes only");
     AssertEqual("\uff08\u53735\u5c0f\u65f630\u5206\uff09", ReminderThreshold.FormatEquivalent(19800), nameof(TestReminderThresholdMinutesAndDisplay) + " equivalent");
+    AssertEqual("\u53cd\u590d\u63d0\u9192\uff08\u5f53\u5929\u5185\u6bcf330\u5206\u949f\u63d0\u9192\u4e00\u6b21\uff09", ReminderThreshold.FormatRepeatLabel(330), nameof(TestReminderThresholdMinutesAndDisplay) + " repeat label");
+}
+
+static void TestTodayToneThresholds()
+{
+    AssertEqual(TodayTone.Safe, TodayTonePolicy.FromSeconds(6L * 3600L), nameof(TestTodayToneThresholds) + " six hours");
+    AssertEqual(TodayTone.Warn, TodayTonePolicy.FromSeconds(6L * 3600L + 1L), nameof(TestTodayToneThresholds) + " over six hours");
+    AssertEqual(TodayTone.Warn, TodayTonePolicy.FromSeconds(8L * 3600L), nameof(TestTodayToneThresholds) + " eight hours");
+    AssertEqual(TodayTone.Danger, TodayTonePolicy.FromSeconds(8L * 3600L + 1L), nameof(TestTodayToneThresholds) + " over eight hours");
 }
 
 static void TestJsonStateRoundTrip()
@@ -146,7 +186,8 @@ static void TestJsonStateRoundTrip()
     var savedRecord = new DailyRecord(new DateOnly(2026, 6, 26))
     {
         TotalSeconds = 12345,
-        ReminderShown = true
+        ReminderShown = true,
+        LastReminderStep = 1
     };
     var state = new AppState
     {
@@ -155,7 +196,8 @@ static void TestJsonStateRoundTrip()
             IdleThresholdSeconds = 240,
             CountAudio = false,
             ReminderThresholdSeconds = 19800,
-            StartWithWindows = false
+            StartWithWindows = false,
+            RepeatReminder = true
         },
         Records = [savedRecord]
     };
@@ -169,6 +211,7 @@ static void TestJsonStateRoundTrip()
     AssertEqual(savedRecord.Date, loadedRecord.Date, nameof(TestJsonStateRoundTrip) + " date");
     AssertEqual(savedRecord.TotalSeconds, loadedRecord.TotalSeconds, nameof(TestJsonStateRoundTrip) + " seconds");
     AssertEqual(savedRecord.ReminderShown, loadedRecord.ReminderShown, nameof(TestJsonStateRoundTrip) + " reminder shown");
+    AssertEqual(savedRecord.LastReminderStep, loadedRecord.LastReminderStep, nameof(TestJsonStateRoundTrip) + " reminder step");
 }
 
 static void TestGetOrCreateRecordReusesExistingRecord()
@@ -211,6 +254,38 @@ static void TestInvalidJsonReturnsDefaultState()
     AssertEqual(0, loaded.Records.Count, nameof(TestInvalidJsonReturnsDefaultState) + " records count");
 }
 
+static void TestOldJsonWithoutRepeatReminderFieldsLoadsSafely()
+{
+    var path = Path.Combine(Path.GetTempPath(), "eye-time-tracker-tests", $"{Guid.NewGuid()}.json");
+    Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+    File.WriteAllText(path, """
+        {
+          "Settings": {
+            "IdleThresholdSeconds": 180,
+            "CountAudio": true,
+            "ReminderThresholdSeconds": 19800,
+            "StartWithWindows": true
+          },
+          "Records": [
+            {
+              "Date": "2026-06-26",
+              "TotalSeconds": 19800,
+              "ReminderShown": true
+            }
+          ]
+        }
+        """);
+    var store = new JsonStateStore(path);
+
+    var loaded = store.Load();
+    var record = loaded.Records[0];
+
+    AssertEqual(false, loaded.Settings.RepeatReminder, nameof(TestOldJsonWithoutRepeatReminderFieldsLoadsSafely) + " repeat default");
+    AssertEqual(0, record.LastReminderStep, nameof(TestOldJsonWithoutRepeatReminderFieldsLoadsSafely) + " step default");
+    AssertEqual(19800L, record.TotalSeconds, nameof(TestOldJsonWithoutRepeatReminderFieldsLoadsSafely) + " seconds");
+    AssertEqual(true, record.ReminderShown, nameof(TestOldJsonWithoutRepeatReminderFieldsLoadsSafely) + " shown");
+}
+
 TestDoesNotBackfillLongIdleGap();
 TestIdleThresholdStopsCounting();
 TestContinuousRecentInputCountsEachNormalTick();
@@ -219,9 +294,12 @@ TestSparseAudioDoesNotBackfillElapsed();
 TestFractionalTicksAreTruncated();
 TestDateRolloverStartsNewDay();
 TestReminderOnlyOncePerDay();
+TestReminderRepeatsAtThresholdMultiples();
 TestReminderThresholdMinutesAndDisplay();
+TestTodayToneThresholds();
 TestJsonStateRoundTrip();
 TestGetOrCreateRecordReusesExistingRecord();
 TestMissingJsonReturnsDefaultState();
 TestInvalidJsonReturnsDefaultState();
+TestOldJsonWithoutRepeatReminderFieldsLoadsSafely();
 Console.WriteLine("All tests passed.");

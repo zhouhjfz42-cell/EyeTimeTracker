@@ -57,7 +57,7 @@ public sealed class TrackingController : IDisposable
         _state = _stateStore.Load();
         var today = DateOnly.FromDateTime(DateTime.Now);
         var record = _state.GetOrCreateRecord(today);
-        _accumulator = new EyeTimeAccumulator(today, record.TotalSeconds, record.ReminderShown);
+        _accumulator = new EyeTimeAccumulator(today, record.TotalSeconds, record.ReminderShown, record.LastReminderStep);
         _lastSaveAt = DateTimeOffset.Now;
 
         _timer = new System.Threading.Timer(OnTimerTick, null, TimeSpan.Zero, TickInterval);
@@ -103,7 +103,8 @@ public sealed class TrackingController : IDisposable
                 .Select(record => new DailyRecord(record.Date)
                 {
                     TotalSeconds = record.TotalSeconds,
-                    ReminderShown = record.ReminderShown
+                    ReminderShown = record.ReminderShown,
+                    LastReminderStep = record.LastReminderStep
                 })
                 .ToList();
         }
@@ -178,8 +179,9 @@ public sealed class TrackingController : IDisposable
 
                 if (_reminderPolicy.ShouldNotify(record, _state.Settings))
                 {
-                    _reminderPolicy.MarkShown(record);
+                    _reminderPolicy.MarkShown(record, _state.Settings);
                     _accumulator.Today.ReminderShown = true;
+                    _accumulator.Today.LastReminderStep = record.LastReminderStep;
                     _hasPendingImmediateSave = true;
                     _pendingReminderNotification = true;
                 }
@@ -238,6 +240,7 @@ public sealed class TrackingController : IDisposable
         var record = _state.GetOrCreateRecord(_accumulator.Today.Date);
         record.TotalSeconds = _accumulator.Today.TotalSeconds;
         record.ReminderShown = _accumulator.Today.ReminderShown;
+        record.LastReminderStep = _accumulator.Today.LastReminderStep;
         return record;
     }
 
@@ -255,7 +258,8 @@ public sealed class TrackingController : IDisposable
                 .Select(record => new DailyRecord(record.Date)
                 {
                     TotalSeconds = record.TotalSeconds,
-                    ReminderShown = record.ReminderShown
+                    ReminderShown = record.ReminderShown,
+                    LastReminderStep = record.LastReminderStep
                 })
                 .ToList()
         };

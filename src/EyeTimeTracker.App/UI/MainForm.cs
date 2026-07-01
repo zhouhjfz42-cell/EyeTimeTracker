@@ -11,6 +11,8 @@ public sealed class MainForm : Form
     private static readonly Color PageBackground = Color.FromArgb(248, 251, 250);
     private static readonly Color SoftGreen = Color.FromArgb(238, 249, 245);
     private static readonly Color AccentGreen = Color.FromArgb(22, 166, 125);
+    private static readonly Color AccentYellow = Color.FromArgb(224, 162, 42);
+    private static readonly Color AccentRed = Color.FromArgb(222, 82, 72);
     private static readonly Color TextPrimary = Color.FromArgb(17, 24, 39);
     private static readonly Color TextSecondary = Color.FromArgb(102, 112, 133);
     private static readonly Color BorderColor = Color.FromArgb(225, 232, 229);
@@ -311,6 +313,7 @@ public sealed class MainForm : Form
         }
 
         _todayValue.Text = FormatDuration(todayTotal);
+        _todayValue.ForeColor = TodayColor(todayTotal);
         _yesterdayValue.Text = FormatDuration(yesterdayTotal);
         _weekValue.Text = FormatDuration(weekTotal);
         _monthValue.Text = FormatDuration(monthTotal);
@@ -322,6 +325,7 @@ public sealed class MainForm : Form
     {
         using var dialog = new ReminderThresholdDialog(
             ReminderThreshold.ToMinutes(_controller.Settings.ReminderThresholdSeconds),
+            _controller.Settings.RepeatReminder,
             Icon);
 
         if (dialog.ShowDialog(this) != DialogResult.OK)
@@ -331,7 +335,8 @@ public sealed class MainForm : Form
 
         _controller.Settings = _controller.Settings with
         {
-            ReminderThresholdSeconds = ReminderThreshold.FromMinutes(dialog.ReminderMinutes)
+            ReminderThresholdSeconds = ReminderThreshold.FromMinutes(dialog.ReminderMinutes),
+            RepeatReminder = dialog.RepeatReminder
         };
         _controller.SaveNow();
         UpdateReminderDisplay();
@@ -404,6 +409,16 @@ public sealed class MainForm : Form
         return totalHours > 0
             ? string.Format("{0}\u5c0f\u65f6 {1:00}\u5206", totalHours, duration.Minutes)
             : string.Format("{0}\u5206\u949f", duration.Minutes);
+    }
+
+    private static Color TodayColor(long totalSeconds)
+    {
+        return TodayTonePolicy.FromSeconds(totalSeconds) switch
+        {
+            TodayTone.Warn => AccentYellow,
+            TodayTone.Danger => AccentRed,
+            _ => AccentGreen
+        };
     }
 
     private static GraphicsPath CreateRoundRect(Rectangle bounds, int radius)
@@ -586,16 +601,100 @@ public sealed class MainForm : Form
         }
     }
 
+    private sealed class ToggleSwitch : Control
+    {
+        private bool _checked;
+        private bool _hovered;
+        private bool _pressed;
+
+        public bool Checked
+        {
+            get => _checked;
+            set
+            {
+                if (_checked == value)
+                {
+                    return;
+                }
+
+                _checked = value;
+                Invalidate();
+            }
+        }
+
+        public ToggleSwitch()
+        {
+            Cursor = Cursors.Hand;
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+        }
+
+        protected override void OnMouseEnter(EventArgs e)
+        {
+            _hovered = true;
+            Invalidate();
+        }
+
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            _hovered = false;
+            _pressed = false;
+            Invalidate();
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            _pressed = true;
+            Invalidate();
+        }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            _pressed = false;
+            if (ClientRectangle.Contains(e.Location))
+            {
+                Checked = !Checked;
+                OnClick(EventArgs.Empty);
+            }
+
+            Invalidate();
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            var track = new Rectangle(0, 0, Width - 1, Height - 1);
+            var offColor = _hovered || _pressed
+                ? Color.FromArgb(226, 231, 235)
+                : Color.FromArgb(236, 240, 244);
+            var trackColor = Checked ? AccentGreen : offColor;
+            using (var path = CreateRoundRect(track, Height / 2))
+            using (var brush = new SolidBrush(trackColor))
+            {
+                e.Graphics.FillPath(brush, path);
+            }
+
+            var knobSize = Math.Max(4, Height - 8);
+            var knobX = Checked ? Width - knobSize - 4 : 4;
+            var knob = new Rectangle(knobX, 4, knobSize, knobSize);
+            using var knobBrush = new SolidBrush(Color.White);
+            e.Graphics.FillEllipse(knobBrush, knob);
+        }
+    }
+
     private sealed class ReminderThresholdDialog : Form
     {
         private readonly TextBox _minutesInput;
         private readonly FitTextLabel _hintLabel;
+        private readonly ToggleSwitch _repeatSwitch;
+        private readonly FitTextLabel _repeatLabel;
 
         public int ReminderMinutes { get; private set; }
+        public bool RepeatReminder { get; private set; }
 
-        public ReminderThresholdDialog(int currentMinutes, Icon? icon)
+        public ReminderThresholdDialog(int currentMinutes, bool repeatReminder, Icon? icon)
         {
             ReminderMinutes = Math.Clamp(currentMinutes, ReminderThreshold.MinMinutes, ReminderThreshold.MaxMinutes);
+            RepeatReminder = repeatReminder;
             AutoScaleMode = AutoScaleMode.None;
             Text = "\u4fee\u6539\u63d0\u9192\u65f6\u95f4";
             if (icon is not null)
@@ -608,7 +707,7 @@ public sealed class MainForm : Form
             MaximizeBox = false;
             MinimizeBox = false;
             ShowInTaskbar = false;
-            ClientSize = new Size(392, 282);
+            ClientSize = new Size(470, 340);
             BackColor = Color.White;
             Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
@@ -627,7 +726,7 @@ public sealed class MainForm : Form
 
             var closeButton = new CloseIconButton
             {
-                Bounds = new Rectangle(332, 22, 38, 38)
+                Bounds = new Rectangle(404, 22, 38, 38)
             };
             closeButton.Click += (_, _) =>
             {
@@ -638,7 +737,7 @@ public sealed class MainForm : Form
 
             _hintLabel = new FitTextLabel
             {
-                Bounds = new Rectangle(28, 74, 330, 34),
+                Bounds = new Rectangle(28, 74, 390, 34),
                 MaxFontSize = 12F,
                 MinFontSize = 10F,
                 FontStyle = FontStyle.Regular,
@@ -650,7 +749,7 @@ public sealed class MainForm : Form
 
             var inputShell = new RoundedPanel
             {
-                Bounds = new Rectangle(28, 114, 336, 80),
+                Bounds = new Rectangle(28, 114, 414, 80),
                 FillColor = Color.FromArgb(249, 253, 251),
                 BorderColor = Color.FromArgb(206, 226, 218),
                 Radius = 18
@@ -686,10 +785,35 @@ public sealed class MainForm : Form
             });
             Controls.Add(inputShell);
 
+            _repeatSwitch = new ToggleSwitch
+            {
+                Bounds = new Rectangle(30, 212, 48, 28),
+                Checked = RepeatReminder
+            };
+            _repeatSwitch.Click += (_, _) => RepeatReminder = _repeatSwitch.Checked;
+            Controls.Add(_repeatSwitch);
+
+            _repeatLabel = new FitTextLabel
+            {
+                Bounds = new Rectangle(88, 204, 348, 44),
+                MaxFontSize = 10.5F,
+                MinFontSize = 9.5F,
+                FontStyle = FontStyle.Regular,
+                ForeColor = TextSecondary,
+                BackColor = Color.Transparent,
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+            _repeatLabel.Click += (_, _) =>
+            {
+                _repeatSwitch.Checked = !_repeatSwitch.Checked;
+                RepeatReminder = _repeatSwitch.Checked;
+            };
+            Controls.Add(_repeatLabel);
+
             var cancelButton = new RoundedButton
             {
                 Text = "\u53d6\u6d88",
-                Bounds = new Rectangle(28, 212, 154, 48),
+                Bounds = new Rectangle(28, 270, 190, 48),
                 ButtonColor = Color.FromArgb(242, 244, 247),
                 HoverColor = Color.FromArgb(232, 236, 240),
                 PressedColor = Color.FromArgb(220, 226, 232),
@@ -706,7 +830,7 @@ public sealed class MainForm : Form
             var okButton = new RoundedButton
             {
                 Text = "\u4fdd\u5b58",
-                Bounds = new Rectangle(202, 212, 162, 48),
+                Bounds = new Rectangle(238, 270, 204, 48),
                 ButtonColor = AccentGreen,
                 HoverColor = Color.FromArgb(19, 145, 111),
                 PressedColor = Color.FromArgb(17, 124, 96),
@@ -779,6 +903,7 @@ public sealed class MainForm : Form
             }
 
             ReminderMinutes = minutes;
+            RepeatReminder = _repeatSwitch.Checked;
             DialogResult = DialogResult.OK;
             Close();
         }
@@ -791,6 +916,7 @@ public sealed class MainForm : Form
                 _hintLabel.Text = string.Format(
                     "\u5355\u4f4d\uff1a\u5206\u949f{0}",
                     ReminderThreshold.FormatEquivalent(ReminderThreshold.FromMinutes(minutes)));
+                _repeatLabel.Text = ReminderThreshold.FormatRepeatLabel(minutes);
                 return;
             }
 
@@ -799,6 +925,7 @@ public sealed class MainForm : Form
                 "\u8bf7\u8f93\u5165 {0}-{1} \u4e4b\u95f4\u7684\u5206\u949f\u6570",
                 ReminderThreshold.MinMinutes,
                 ReminderThreshold.MaxMinutes);
+            _repeatLabel.Text = "\u53cd\u590d\u63d0\u9192";
         }
 
         private bool TryReadMinutes(out int minutes)

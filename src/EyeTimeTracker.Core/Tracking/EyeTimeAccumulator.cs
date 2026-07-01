@@ -8,12 +8,13 @@ public sealed class EyeTimeAccumulator
     private static readonly TimeSpan MaxNormalTickElapsed = TimeSpan.FromSeconds(30);
     private DateTimeOffset? _lastTick;
 
-    public EyeTimeAccumulator(DateOnly today, long initialSeconds = 0, bool reminderShown = false)
+    public EyeTimeAccumulator(DateOnly today, long initialSeconds = 0, bool reminderShown = false, int lastReminderStep = 0)
     {
         Today = new DailyRecord(today)
         {
             TotalSeconds = initialSeconds,
-            ReminderShown = reminderShown
+            ReminderShown = reminderShown,
+            LastReminderStep = lastReminderStep
         };
     }
 
