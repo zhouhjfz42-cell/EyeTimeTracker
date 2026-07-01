@@ -55,8 +55,12 @@ public final class MainActivity extends Activity {
     private View statusDot;
     private boolean receiverRegistered;
 
-    private final BroadcastReceiver receiver = new BroadcastReceiver() {
+        private final BroadcastReceiver receiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
+            if (intent != null && EyeTimeService.ACTION_REMINDER.equals(intent.getAction())) {
+                int reminderMinutes = intent.getIntExtra(EyeTimeService.EXTRA_REMINDER_MINUTES, store.getReminderMinutes());
+                showReminderAlert(reminderMinutes);
+            }
             refresh();
         }
     };
@@ -80,6 +84,7 @@ public final class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         IntentFilter filter = new IntentFilter(EyeTimeService.ACTION_STATE_CHANGED);
+        filter.addAction(EyeTimeService.ACTION_REMINDER);
         if (Build.VERSION.SDK_INT >= 33) {
             registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED);
         } else {
@@ -396,6 +401,51 @@ public final class MainActivity extends Activity {
         dialog.show();
         if (window != null) {
             window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        }
+    }
+
+    private void showReminderAlert(int reminderMinutes) {
+        Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(26), dp(24), dp(26), dp(24));
+        content.setBackground(rounded(Color.WHITE, dp(28), COLOR_LINE, 1));
+
+        TextView title = new TextView(this);
+        title.setText(ReminderAlert.title());
+        title.setTextSize(26);
+        title.setTextColor(COLOR_TEXT);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setIncludeFontPadding(false);
+        content.addView(title, matchWrap());
+
+        TextView message = new TextView(this);
+        message.setText(ReminderAlert.message(reminderMinutes));
+        message.setTextSize(18);
+        message.setTextColor(COLOR_MUTED);
+        message.setLineSpacing(0f, 1.15f);
+        LinearLayout.LayoutParams messageParams = matchWrapTop(20);
+        content.addView(message, messageParams);
+
+        TextView okButton = actionButton("\u6211\u77e5\u9053\u4e86", true);
+        okButton.setOnClickListener(v -> dialog.dismiss());
+        LinearLayout.LayoutParams buttonParams = matchWrapTop(26);
+        content.addView(okButton, buttonParams);
+
+        dialog.setContentView(content);
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            window.setDimAmount(0.28f);
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
+        dialog.show();
+        Window shownWindow = dialog.getWindow();
+        if (shownWindow != null) {
+            shownWindow.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            shownWindow.setLayout(dp(326), ViewGroup.LayoutParams.WRAP_CONTENT);
         }
     }
 

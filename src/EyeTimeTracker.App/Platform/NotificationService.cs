@@ -1,4 +1,6 @@
 using System.Windows.Forms;
+using EyeTimeTracker.Core.Models;
+using EyeTimeTracker.Core.Reminders;
 
 namespace EyeTimeTracker.App.Platform;
 
@@ -13,7 +15,7 @@ public sealed class NotificationService
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
     }
 
-    public void ShowDailyReminder()
+    public void ShowDailyReminder(TrackerSettings settings)
     {
         if (_dispatcher.IsDisposed || !_dispatcher.IsHandleCreated)
         {
@@ -24,7 +26,7 @@ public sealed class NotificationService
         {
             try
             {
-                _dispatcher.BeginInvoke(ShowDailyReminderCore);
+                _dispatcher.BeginInvoke(() => ShowDailyReminderCore(settings));
             }
             catch (InvalidOperationException)
             {
@@ -33,14 +35,38 @@ public sealed class NotificationService
             return;
         }
 
-        ShowDailyReminderCore();
+        ShowDailyReminderCore(settings);
     }
 
-    private void ShowDailyReminderCore()
+    private void ShowDailyReminderCore(TrackerSettings settings)
     {
-        _notifyIcon.BalloonTipTitle = "用眼提醒";
-        _notifyIcon.BalloonTipText = "今天的屏幕使用时间已经达到提醒线，建议休息一下眼睛。";
+        var title = ReminderMessage.Title;
+        var body = ReminderMessage.Body(settings.ReminderThresholdSeconds);
+        ShowTopMostReminder(title, body);
+        _notifyIcon.BalloonTipTitle = title;
+        _notifyIcon.BalloonTipText = body;
         _notifyIcon.BalloonTipIcon = ToolTipIcon.Info;
         _notifyIcon.ShowBalloonTip(5000);
+    }
+
+    private static void ShowTopMostReminder(string title, string body)
+    {
+        using var owner = new Form
+        {
+            StartPosition = FormStartPosition.Manual,
+            Size = new System.Drawing.Size(1, 1),
+            Location = new System.Drawing.Point(-2000, -2000),
+            ShowInTaskbar = false,
+            TopMost = true
+        };
+
+        owner.Show();
+        owner.Hide();
+        MessageBox.Show(
+            owner,
+            body,
+            title,
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Information);
     }
 }

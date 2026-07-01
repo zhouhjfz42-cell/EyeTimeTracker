@@ -9,6 +9,7 @@ public final class CoreLogicTest {
         shouldFormatDurations();
         shouldClassifyTodayToneByFixedHealthyThresholds();
         shouldFormatReminderThresholds();
+        shouldFormatReminderAlertText();
         shouldNotifyOnceOrAtRepeatMultiples();
         System.out.println("All Android core tests passed.");
     }
@@ -52,6 +53,11 @@ public final class CoreLogicTest {
         assertEquals("5小时30分", ReminderThreshold.format(330), "formats reminder value");
         assertEquals("即5小时30分", ReminderThreshold.formatEquivalent(330), "formats equivalent hint");
         assertEquals("反复提醒（当天内每330分钟提醒一次）", ReminderThreshold.formatRepeatLabel(330), "formats repeat label");
+    }
+
+    private static void shouldFormatReminderAlertText() {
+        assertEquals("用眼提醒", ReminderAlert.title(), "formats reminder title");
+        assertEquals("今天用眼时间已达到 5小时30分，建议休息一下眼睛。", ReminderAlert.message(330), "formats reminder message");
     }
 
     private static void shouldNotifyOnceOrAtRepeatMultiples() {

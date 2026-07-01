@@ -303,7 +303,7 @@ public sealed class TrackingController : IDisposable
     {
         try
         {
-            _notificationService.ShowDailyReminder();
+            _notificationService.ShowDailyReminder(Settings);
         }
         catch (Exception)
         {

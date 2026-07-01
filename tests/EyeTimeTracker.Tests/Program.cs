@@ -179,6 +179,12 @@ static void TestTodayToneThresholds()
     AssertEqual(TodayTone.Danger, TodayTonePolicy.FromSeconds(8L * 3600L + 1L), nameof(TestTodayToneThresholds) + " over eight hours");
 }
 
+static void TestReminderMessageText()
+{
+    AssertEqual("\u7528\u773c\u63d0\u9192", ReminderMessage.Title, nameof(TestReminderMessageText) + " title");
+    AssertEqual("\u4eca\u5929\u7684\u5c4f\u5e55\u4f7f\u7528\u65f6\u95f4\u5df2\u8fbe\u52305\u5c0f\u65f630\u5206\uff0c\u5efa\u8bae\u4f11\u606f\u4e00\u4e0b\u773c\u775b\u3002", ReminderMessage.Body(19800), nameof(TestReminderMessageText) + " body");
+}
+
 static void TestJsonStateRoundTrip()
 {
     var path = Path.Combine(Path.GetTempPath(), "eye-time-tracker-tests", $"{Guid.NewGuid()}.json");
@@ -297,6 +303,7 @@ TestReminderOnlyOncePerDay();
 TestReminderRepeatsAtThresholdMultiples();
 TestReminderThresholdMinutesAndDisplay();
 TestTodayToneThresholds();
+TestReminderMessageText();
 TestJsonStateRoundTrip();
 TestGetOrCreateRecordReusesExistingRecord();
 TestMissingJsonReturnsDefaultState();

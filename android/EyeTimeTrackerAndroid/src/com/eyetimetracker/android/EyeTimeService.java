@@ -21,10 +21,13 @@ import java.time.LocalDate;
 
 public final class EyeTimeService extends Service implements SensorEventListener {
     public static final String ACTION_STATE_CHANGED = "com.eyetimetracker.android.STATE_CHANGED";
+    public static final String ACTION_REMINDER = "com.eyetimetracker.android.REMINDER";
     public static final String ACTION_START = "com.eyetimetracker.android.START";
     public static final String ACTION_STOP = "com.eyetimetracker.android.STOP";
+    public static final String EXTRA_REMINDER_MINUTES = "reminder_minutes";
 
     private static final String CHANNEL_ID = "eye_time_tracker";
+    private static final String REMINDER_CHANNEL_ID = "eye_time_tracker_reminders";
     private static final int FOREGROUND_ID = 1001;
     private static final int REMINDER_ID = 1002;
     private static final long TICK_MS = 10_000L;
@@ -154,11 +157,17 @@ public final class EyeTimeService extends Service implements SensorEventListener
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             return;
         }
-        NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "用眼时间记录", NotificationManager.IMPORTANCE_LOW);
-        channel.setDescription("统计亮屏、机身动作和媒体播放推定的用眼时间");
+        NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "\u7528\u773c\u65f6\u95f4\u8bb0\u5f55", NotificationManager.IMPORTANCE_LOW);
+        channel.setDescription("\u540e\u53f0\u7edf\u8ba1\u670d\u52a1\u72b6\u6001");
         NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager != null) {
             manager.createNotificationChannel(channel);
+            NotificationChannel reminderChannel = new NotificationChannel(
+                    REMINDER_CHANNEL_ID,
+                    "\u7528\u773c\u63d0\u9192",
+                    NotificationManager.IMPORTANCE_HIGH);
+            reminderChannel.setDescription("\u5230\u8fbe\u8bbe\u5b9a\u7528\u773c\u65f6\u957f\u65f6\u63d0\u9192\u4f11\u606f");
+            manager.createNotificationChannel(reminderChannel);
         }
     }
 
@@ -169,7 +178,7 @@ public final class EyeTimeService extends Service implements SensorEventListener
                 ? new Notification.Builder(this, CHANNEL_ID)
                 : new Notification.Builder(this);
         return builder
-                .setContentTitle("用眼时间记录")
+                .setContentTitle("\u7528\u773c\u65f6\u95f4\u8bb0\u5f55")
                 .setContentText(text)
                 .setSmallIcon(R.drawable.ic_launcher)
                 .setContentIntent(pendingIntent)
@@ -178,8 +187,8 @@ public final class EyeTimeService extends Service implements SensorEventListener
     }
 
     private void updateForegroundNotification(long todaySeconds) {
-        String status = counting ? "计时中" : "暂停";
-        Notification notification = buildStatusNotification(status + " · 今天 " + DurationFormatter.format(todaySeconds));
+        String status = counting ? "\u8ba1\u65f6\u4e2d" : "\u6682\u505c";
+        Notification notification = buildStatusNotification(status + " \u00b7 \u4eca\u5929 " + DurationFormatter.format(todaySeconds));
         NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager != null) {
             manager.notify(FOREGROUND_ID, notification);
@@ -187,7 +196,29 @@ public final class EyeTimeService extends Service implements SensorEventListener
     }
 
     private void showReminder(int reminderMinutes) {
-        Notification notification = buildStatusNotification("今天用眼时间已达到 " + ReminderThreshold.format(reminderMinutes) + "，建议休息。");
+        sendBroadcast(new Intent(ACTION_REMINDER).putExtra(EXTRA_REMINDER_MINUTES, reminderMinutes));
+        Intent alertIntent = new Intent(this, ReminderActivity.class)
+                .putExtra(ReminderActivity.EXTRA_REMINDER_MINUTES, reminderMinutes)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent alertPendingIntent = PendingIntent.getActivity(
+                this,
+                REMINDER_ID,
+                alertIntent,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                ? new Notification.Builder(this, REMINDER_CHANNEL_ID)
+                : new Notification.Builder(this);
+        Notification notification = builder
+                .setContentTitle(ReminderAlert.title())
+                .setContentText(ReminderAlert.message(reminderMinutes))
+                .setSmallIcon(R.drawable.ic_launcher)
+                .setContentIntent(alertPendingIntent)
+                .setFullScreenIntent(alertPendingIntent, true)
+                .setAutoCancel(true)
+                .setPriority(Notification.PRIORITY_HIGH)
+                .setCategory(Notification.CATEGORY_ALARM)
+                .setDefaults(Notification.DEFAULT_ALL)
+                .build();
         NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager != null) {
             manager.notify(REMINDER_ID, notification);
