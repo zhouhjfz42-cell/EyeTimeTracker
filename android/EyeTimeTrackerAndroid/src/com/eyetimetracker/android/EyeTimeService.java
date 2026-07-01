@@ -221,10 +221,9 @@ public final class EyeTimeService extends Service implements SensorEventListener
                 .setContentText(message)
                 .setSmallIcon(R.drawable.ic_launcher)
                 .setContentIntent(alertPendingIntent)
-                .setFullScreenIntent(alertPendingIntent, true)
                 .setAutoCancel(true)
                 .setPriority(Notification.PRIORITY_HIGH)
-                .setCategory(Notification.CATEGORY_ALARM)
+                .setCategory(Notification.CATEGORY_REMINDER)
                 .setDefaults(Notification.DEFAULT_ALL)
                 .build();
         NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
