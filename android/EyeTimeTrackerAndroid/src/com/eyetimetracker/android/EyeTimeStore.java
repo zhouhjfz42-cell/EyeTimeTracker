@@ -7,6 +7,8 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 public final class EyeTimeStore {
@@ -41,6 +43,9 @@ public final class EyeTimeStore {
             return new DailySummary(
                     date.toString(),
                     record.optLong("totalSeconds", 0L),
+                    readHourlySeconds(record),
+                    readSessionSeconds(record),
+                    record.optLong("currentSessionSeconds", 0L),
                     record.optBoolean("reminderShown", false),
                     record.optInt("lastReminderStep", record.optBoolean("reminderShown", false) ? 1 : 0));
         } catch (JSONException ex) {
@@ -56,10 +61,40 @@ public final class EyeTimeStore {
             JSONObject state = loadState();
             JSONObject record = getOrCreateRecord(state, date.toString());
             record.put("totalSeconds", record.optLong("totalSeconds", 0L) + secondsToAdd);
+            JSONArray hourlySeconds = ensureHourlySeconds(record);
+            int hour = java.time.LocalTime.now().getHour();
+            hourlySeconds.put(hour, hourlySeconds.optLong(hour, 0L) + secondsToAdd);
+            record.put("currentSessionSeconds", record.optLong("currentSessionSeconds", 0L) + secondsToAdd);
             record.put("updatedAt", System.currentTimeMillis());
             saveState(state);
         } catch (JSONException ignored) {
         }
+    }
+
+    public synchronized void finishCurrentSession(LocalDate date) {
+        try {
+            JSONObject state = loadState();
+            JSONObject record = getOrCreateRecord(state, date.toString());
+            long currentSessionSeconds = record.optLong("currentSessionSeconds", 0L);
+            if (currentSessionSeconds > 0L) {
+                JSONArray sessions = ensureSessionSeconds(record);
+                sessions.put(currentSessionSeconds);
+                record.put("currentSessionSeconds", 0L);
+                record.put("updatedAt", System.currentTimeMillis());
+                saveState(state);
+            }
+        } catch (JSONException ignored) {
+        }
+    }
+
+    public synchronized List<DailySummary> getDays(LocalDate start, LocalDate end) {
+        List<DailySummary> summaries = new ArrayList<>();
+        LocalDate cursor = start;
+        while (!cursor.isAfter(end)) {
+            summaries.add(getDay(cursor));
+            cursor = cursor.plusDays(1);
+        }
+        return summaries;
     }
 
     public synchronized boolean isReminderShown(LocalDate date) {
@@ -208,11 +243,53 @@ public final class EyeTimeStore {
         record.put("platform", PLATFORM);
         record.put("date", date);
         record.put("totalSeconds", 0L);
+        record.put("hourlySeconds", new JSONArray());
+        record.put("sessionSeconds", new JSONArray());
+        record.put("currentSessionSeconds", 0L);
         record.put("reminderShown", false);
         record.put("lastReminderStep", 0);
         record.put("updatedAt", System.currentTimeMillis());
         records.put(record);
         return record;
+    }
+
+    private static JSONArray ensureHourlySeconds(JSONObject record) throws JSONException {
+        JSONArray hourlySeconds = record.optJSONArray("hourlySeconds");
+        if (hourlySeconds == null) {
+            hourlySeconds = new JSONArray();
+            record.put("hourlySeconds", hourlySeconds);
+        }
+        while (hourlySeconds.length() < 24) {
+            hourlySeconds.put(0L);
+        }
+        return hourlySeconds;
+    }
+
+    private static JSONArray ensureSessionSeconds(JSONObject record) throws JSONException {
+        JSONArray sessions = record.optJSONArray("sessionSeconds");
+        if (sessions == null) {
+            sessions = new JSONArray();
+            record.put("sessionSeconds", sessions);
+        }
+        return sessions;
+    }
+
+    private static long[] readHourlySeconds(JSONObject record) throws JSONException {
+        JSONArray hourly = ensureHourlySeconds(record);
+        long[] values = new long[24];
+        for (int i = 0; i < values.length; i++) {
+            values[i] = hourly.optLong(i, 0L);
+        }
+        return values;
+    }
+
+    private static long[] readSessionSeconds(JSONObject record) throws JSONException {
+        JSONArray sessions = ensureSessionSeconds(record);
+        long[] values = new long[sessions.length()];
+        for (int i = 0; i < values.length; i++) {
+            values[i] = sessions.optLong(i, 0L);
+        }
+        return values;
     }
 
     private static LocalDate weekStart(LocalDate date) {

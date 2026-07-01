@@ -11,3 +11,4 @@ inst_user_settings.tmp
 android/**/build/
 android/**/debug.keystore
 .codex-remote-attachments/
+.codex/

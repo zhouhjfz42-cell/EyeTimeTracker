@@ -20,6 +20,9 @@
             android:name=".ReminderActivity"
             android:excludeFromRecents="true"
             android:exported="false" />
+        <activity
+            android:name=".StatsActivity"
+            android:exported="false" />
         <service
             android:name=".EyeTimeService"
             android:exported="false"

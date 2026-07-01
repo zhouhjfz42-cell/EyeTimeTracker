@@ -9,12 +9,26 @@ public sealed class EyeTimeAccumulator
     private DateTimeOffset? _lastTick;
 
     public EyeTimeAccumulator(DateOnly today, long initialSeconds = 0, bool reminderShown = false, int lastReminderStep = 0)
-    {
-        Today = new DailyRecord(today)
+        : this(new DailyRecord(today)
         {
             TotalSeconds = initialSeconds,
             ReminderShown = reminderShown,
             LastReminderStep = lastReminderStep
+        })
+    {
+    }
+
+    public EyeTimeAccumulator(DailyRecord initialRecord)
+    {
+        AppState.NormalizeRecord(initialRecord);
+        Today = new DailyRecord(initialRecord.Date)
+        {
+            TotalSeconds = initialRecord.TotalSeconds,
+            HourlySeconds = (long[])initialRecord.HourlySeconds.Clone(),
+            SessionSeconds = initialRecord.SessionSeconds.ToList(),
+            CurrentSessionSeconds = initialRecord.CurrentSessionSeconds,
+            ReminderShown = initialRecord.ReminderShown,
+            LastReminderStep = initialRecord.LastReminderStep
         };
     }
 
@@ -23,9 +37,10 @@ public sealed class EyeTimeAccumulator
 
     public void Tick(ActivitySnapshot snapshot, TrackerSettings settings)
     {
-        var snapshotDate = DateOnly.FromDateTime(snapshot.Timestamp.Date);
+        var snapshotDate = DateOnly.FromDateTime(snapshot.Timestamp.DateTime);
         if (snapshotDate != Today.Date)
         {
+            FinishCurrentSession();
             Today = new DailyRecord(snapshotDate);
             _lastTick = snapshot.Timestamp;
             IsCounting = ShouldCount(snapshot, settings);
@@ -50,7 +65,35 @@ public sealed class EyeTimeAccumulator
 
         var countedSeconds = CountableSeconds(snapshot, settings, elapsed);
         Today.TotalSeconds += countedSeconds;
+        AddCountedSeconds(snapshot.Timestamp, countedSeconds);
         IsCounting = countedSeconds > 0 || ShouldCount(snapshot, settings);
+        if (!IsCounting)
+        {
+            FinishCurrentSession();
+        }
+    }
+
+    private void AddCountedSeconds(DateTimeOffset timestamp, long countedSeconds)
+    {
+        if (countedSeconds <= 0)
+        {
+            return;
+        }
+
+        var hour = Math.Clamp(timestamp.DateTime.Hour, 0, 23);
+        Today.HourlySeconds[hour] += countedSeconds;
+        Today.CurrentSessionSeconds += countedSeconds;
+    }
+
+    private void FinishCurrentSession()
+    {
+        if (Today.CurrentSessionSeconds <= 0)
+        {
+            return;
+        }
+
+        Today.SessionSeconds.Add(Today.CurrentSessionSeconds);
+        Today.CurrentSessionSeconds = 0;
     }
 
     private static bool ShouldCount(ActivitySnapshot snapshot, TrackerSettings settings)

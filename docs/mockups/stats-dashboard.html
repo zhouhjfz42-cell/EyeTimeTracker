@@ -1,0 +1,819 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>用眼时间统计页草图</title>
+  <style>
+    :root {
+      --bg: #f5f8f7;
+      --panel: #fbfdfc;
+      --ink: #111827;
+      --muted: #657289;
+      --green: #18aa80;
+      --pc: #16a37f;
+      --phone: #4f8df7;
+      --yellow: #f0b83a;
+      --red: #e96868;
+      --line: #d9eee7;
+      --soft: #effaf6;
+      --soft-2: #f8fcfa;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 32px;
+      display: grid;
+      place-items: start center;
+      background:
+        radial-gradient(circle at 8% 8%, rgba(24, 170, 128, 0.10), transparent 30%),
+        radial-gradient(circle at 88% 15%, rgba(69, 199, 208, 0.14), transparent 32%),
+        var(--bg);
+      color: var(--ink);
+      font-family: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+    }
+
+    .board {
+      width: min(1520px, 100%);
+      display: grid;
+      grid-template-columns: minmax(920px, 1fr) 390px;
+      gap: 28px;
+      align-items: start;
+    }
+
+    .window,
+    .phone {
+      background: var(--panel);
+      border: 1px solid rgba(17, 24, 39, 0.10);
+      box-shadow: 0 20px 70px rgba(44, 69, 81, 0.16);
+      overflow: hidden;
+    }
+
+    .window { border-radius: 18px; }
+
+    .titlebar {
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      background: rgba(247, 248, 246, 0.92);
+      border-bottom: 1px solid rgba(17, 24, 39, 0.06);
+      font-size: 18px;
+    }
+
+    .traffic {
+      letter-spacing: 18px;
+      color: #1f2937;
+      font-weight: 500;
+    }
+
+    .content { padding: 34px 38px 42px; }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 24px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 48px;
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+
+    .sub {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 20px;
+      line-height: 1.45;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 28px;
+    }
+
+    .metric,
+    .panel {
+      background: rgba(255, 255, 255, 0.76);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+    }
+
+    .metric {
+      min-height: 112px;
+      padding: 18px 20px;
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.25;
+    }
+
+    .value {
+      margin-top: 10px;
+      font-size: 30px;
+      line-height: 1.08;
+      font-weight: 800;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .value.green { color: var(--green); }
+    .value.yellow { color: var(--yellow); }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1.05fr 1fr;
+      gap: 18px;
+      margin-top: 18px;
+    }
+
+    .panel {
+      padding: 22px;
+      min-height: 260px;
+    }
+
+    .panel h2 {
+      margin: 0;
+      font-size: 25px;
+      line-height: 1.2;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .panel-tools {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .select-pill {
+      border: 1px solid var(--line);
+      background: #effaf6;
+      color: var(--ink);
+      border-radius: 999px;
+      padding: 8px 13px;
+      font-size: 14px;
+      font-weight: 800;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .date-range {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .date-range .select-pill {
+      font-size: 13px;
+      padding: 7px 11px;
+    }
+
+    .day-panel {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: minmax(280px, 1fr) 250px minmax(230px, 0.85fr);
+      grid-template-areas:
+        "head head head"
+        "metrics heat insights";
+      align-items: center;
+      column-gap: 22px;
+    }
+
+    .day-panel .panel-head { grid-area: head; }
+
+    .day-panel .day-ring-layout { display: contents; }
+
+    .day-panel .ring-wrap { grid-area: heat; }
+
+    .day-summary {
+      grid-area: metrics;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 0;
+    }
+
+    .legend {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .pc { background: var(--pc); }
+    .phone-c { background: var(--phone); }
+
+    .day-ring-layout {
+      grid-area: heat;
+      display: grid;
+      grid-template-columns: 250px 1fr;
+      gap: 18px;
+      align-items: center;
+    }
+
+    .ring-wrap {
+      position: relative;
+      width: 250px;
+      height: 250px;
+      display: grid;
+      place-items: center;
+    }
+
+    .ring-wrap svg { width: 250px; height: 250px; }
+
+    .insights {
+      grid-area: insights;
+      display: grid;
+      gap: 12px;
+    }
+
+    .insight {
+      padding: 13px 14px;
+      border-radius: 16px;
+      background: var(--soft);
+      border: 1px solid var(--line);
+    }
+
+    .insight b {
+      display: block;
+      font-size: 20px;
+      line-height: 1.2;
+    }
+
+    .insight span {
+      display: block;
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .bar-chart {
+      height: 220px;
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 13px;
+      align-items: end;
+      padding: 8px 8px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .bar-group {
+      display: grid;
+      gap: 8px;
+      justify-items: center;
+    }
+
+    .bar {
+      width: 34px;
+      height: 150px;
+      display: flex;
+      flex-direction: column-reverse;
+      overflow: hidden;
+      border-radius: 7px 7px 3px 3px;
+      background: #e8f3ef;
+    }
+
+    .pc-part { background: var(--pc); }
+    .phone-part { background: var(--phone); }
+
+    .day {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .trend-svg {
+      width: 100%;
+      height: 180px;
+      display: block;
+      margin-top: 8px;
+    }
+
+    .usage-bands {
+      display: grid;
+      gap: 14px;
+      margin-top: 18px;
+    }
+
+    .band-row {
+      display: grid;
+      grid-template-columns: 90px 1fr 36px;
+      align-items: center;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .track {
+      height: 14px;
+      border-radius: 999px;
+      background: #e8f3ef;
+      overflow: hidden;
+    }
+
+    .fill {
+      height: 100%;
+      border-radius: 999px;
+      background: var(--green);
+    }
+
+    .fill.warn { background: var(--yellow); }
+    .fill.bad { background: var(--red); }
+
+    .note {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    .phone {
+      width: 430px;
+      max-height: 940px;
+      overflow: auto;
+      border-radius: 44px;
+      padding: 30px 26px;
+    }
+
+    .phone-top {
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      font-weight: 700;
+      font-size: 20px;
+      margin-bottom: 36px;
+    }
+
+    .phone h1 { font-size: 38px; }
+    .phone .sub { font-size: 18px; }
+    .phone .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .phone .day-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .phone .metric { min-height: 104px; padding: 16px; }
+    .phone .label { font-size: 16px; }
+    .phone .value { font-size: 25px; }
+    .phone .main-grid { grid-template-columns: 1fr; }
+    .phone .panel { padding: 18px; border-radius: 22px; }
+    .phone .panel h2 { font-size: 22px; }
+    .phone .day-panel { display: block; }
+    .phone .day-panel .panel-head,
+    .phone .day-summary,
+    .phone .day-panel .ring-wrap,
+    .phone .insights {
+      grid-area: auto;
+    }
+    .phone .day-summary { margin-bottom: 22px; }
+    .phone .day-ring-layout { display: grid; grid-template-columns: 1fr; justify-items: center; }
+    .phone .ring-wrap,
+    .phone .ring-wrap svg { width: 230px; height: 230px; }
+    .phone .insights { width: 100%; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .phone .insight { padding: 10px; }
+    .phone .insight b { font-size: 16px; }
+    .phone .insight span { font-size: 12px; }
+    .phone .bar-chart { height: 190px; gap: 8px; }
+    .phone .bar { width: 26px; }
+    .phone .legend { font-size: 12px; gap: 8px; }
+    .phone .trend-svg { height: 150px; }
+
+    @media (max-width: 1120px) {
+      .board { grid-template-columns: 1fr; }
+      .phone { width: min(430px, 100%); margin: 0 auto; }
+    }
+
+    @media (max-width: 860px) {
+      body { padding: 18px; }
+      .content { padding: 28px 24px 34px; }
+      .header { display: block; }
+      .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .day-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .main-grid { grid-template-columns: 1fr; }
+      .day-panel { display: block; }
+      .day-panel .panel-head,
+      .day-summary,
+      .day-panel .ring-wrap,
+      .insights {
+        grid-area: auto;
+      }
+      .day-summary { margin-bottom: 22px; }
+      .day-ring-layout { display: grid; grid-template-columns: 1fr; justify-items: center; }
+      .insights { width: 100%; grid-template-columns: repeat(3, 1fr); }
+      .bar-chart { height: 210px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="board">
+    <section class="window">
+      <div class="titlebar">
+        <div>用眼时间记录</div>
+        <div class="traffic">－ □ ×</div>
+      </div>
+      <div class="content">
+        <div class="header">
+          <div>
+            <h1>统计</h1>
+            <div class="sub">看趋势、分布和连续使用情况</div>
+          </div>
+        </div>
+
+        <div class="main-grid">
+          <section class="panel day-panel">
+            <div class="panel-head">
+              <h2>单日情况</h2>
+              <div class="panel-tools">
+                <button class="select-pill">今天 ▾</button>
+                <div class="legend">
+                  <span><i class="swatch pc"></i>电脑</span>
+                  <span><i class="swatch phone-c"></i>手机</span>
+                </div>
+              </div>
+            </div>
+            <div class="day-summary">
+              <div class="metric">
+                <div class="label">今日用眼</div>
+                <div class="value green">2小时18分</div>
+              </div>
+              <div class="metric">
+                <div class="label">最长连续</div>
+                <div class="value yellow">52分</div>
+              </div>
+              <div class="metric">
+                <div class="label">电脑 / 手机</div>
+                <div class="value">68% / 32%</div>
+              </div>
+              <div class="metric">
+                <div class="label">提醒触发</div>
+                <div class="value">2次</div>
+              </div>
+            </div>
+            <div class="day-ring-layout">
+              <div class="ring-wrap">
+                <svg viewBox="0 0 240 240" aria-label="24小时热力统计">
+                  <defs>
+                    <clipPath id="dayHeatDesktop">
+                      <circle cx="120" cy="120" r="92"/>
+                    </clipPath>
+                  </defs>
+                  <circle cx="120" cy="120" r="92" fill="#fffdfb" stroke="#dbeee8" stroke-width="2"/>
+                  <g clip-path="url(#dayHeatDesktop)" stroke-width="12" stroke-linecap="butt">
+                    <line x1="120" y1="82" x2="120" y2="65" stroke="#16a37f" transform="rotate(0 120 120)"/>
+                    <line x1="120" y1="65" x2="120" y2="52" stroke="#4f8df7" transform="rotate(0 120 120)"/>
+                    <line x1="120" y1="82" x2="120" y2="58" stroke="#16a37f" transform="rotate(15 120 120)"/>
+                    <line x1="120" y1="58" x2="120" y2="43" stroke="#4f8df7" transform="rotate(15 120 120)"/>
+                    <line x1="120" y1="82" x2="120" y2="60" stroke="#16a37f" transform="rotate(30 120 120)"/>
+                    <line x1="120" y1="60" x2="120" y2="48" stroke="#4f8df7" transform="rotate(30 120 120)"/>
+                    <line x1="120" y1="82" x2="120" y2="54" stroke="#16a37f" transform="rotate(45 120 120)"/>
+                    <line x1="120" y1="54" x2="120" y2="38" stroke="#4f8df7" transform="rotate(45 120 120)"/>
+                    <line x1="120" y1="82" x2="120" y2="66" stroke="#16a37f" transform="rotate(60 120 120)"/>
+                    <line x1="120" y1="66" x2="120" y2="56" stroke="#4f8df7" transform="rotate(60 120 120)"/>
+                    <line x1="120" y1="82" x2="120" y2="63" stroke="#16a37f" transform="rotate(90 120 120)"/>
+                    <line x1="120" y1="63" x2="120" y2="50" stroke="#4f8df7" transform="rotate(90 120 120)"/>
+                    <line x1="120" y1="82" x2="120" y2="58" stroke="#16a37f" transform="rotate(105 120 120)"/>
+                    <line x1="120" y1="58" x2="120" y2="48" stroke="#4f8df7" transform="rotate(105 120 120)"/>
+                    <line x1="120" y1="82" x2="120" y2="68" stroke="#16a37f" transform="rotate(120 120 120)"/>
+                    <line x1="120" y1="68" x2="120" y2="54" stroke="#4f8df7" transform="rotate(120 120 120)"/>
+                    <line x1="120" y1="82" x2="120" y2="59" stroke="#16a37f" transform="rotate(135 120 120)"/>
+                    <line x1="120" y1="59" x2="120" y2="44" stroke="#4f8df7" transform="rotate(135 120 120)"/>
+                    <line x1="120" y1="82" x2="120" y2="70" stroke="#16a37f" transform="rotate(150 120 120)"/>
+                    <line x1="120" y1="82" x2="120" y2="52" stroke="#16a37f" transform="rotate(165 120 120)"/>
+                    <line x1="120" y1="52" x2="120" y2="36" stroke="#4f8df7" transform="rotate(165 120 120)"/>
+                    <line x1="120" y1="82" x2="120" y2="61" stroke="#16a37f" transform="rotate(180 120 120)"/>
+                    <line x1="120" y1="61" x2="120" y2="45" stroke="#4f8df7" transform="rotate(180 120 120)"/>
+                    <line x1="120" y1="82" x2="120" y2="64" stroke="#16a37f" transform="rotate(195 120 120)"/>
+                    <line x1="120" y1="82" x2="120" y2="52" stroke="#16a37f" transform="rotate(210 120 120)"/>
+                    <line x1="120" y1="52" x2="120" y2="35" stroke="#4f8df7" transform="rotate(210 120 120)"/>
+                    <line x1="120" y1="82" x2="120" y2="68" stroke="#16a37f" transform="rotate(225 120 120)"/>
+                    <line x1="120" y1="68" x2="120" y2="55" stroke="#4f8df7" transform="rotate(225 120 120)"/>
+                    <line x1="120" y1="82" x2="120" y2="58" stroke="#16a37f" transform="rotate(240 120 120)"/>
+                    <line x1="120" y1="58" x2="120" y2="45" stroke="#4f8df7" transform="rotate(240 120 120)"/>
+                    <line x1="120" y1="82" x2="120" y2="62" stroke="#16a37f" transform="rotate(255 120 120)"/>
+                    <line x1="120" y1="62" x2="120" y2="50" stroke="#4f8df7" transform="rotate(255 120 120)"/>
+                    <line x1="120" y1="82" x2="120" y2="55" stroke="#16a37f" transform="rotate(285 120 120)"/>
+                    <line x1="120" y1="55" x2="120" y2="41" stroke="#4f8df7" transform="rotate(285 120 120)"/>
+                    <line x1="120" y1="82" x2="120" y2="63" stroke="#16a37f" transform="rotate(300 120 120)"/>
+                    <line x1="120" y1="82" x2="120" y2="60" stroke="#16a37f" transform="rotate(315 120 120)"/>
+                    <line x1="120" y1="60" x2="120" y2="48" stroke="#4f8df7" transform="rotate(315 120 120)"/>
+                    <line x1="120" y1="82" x2="120" y2="72" stroke="#16a37f" transform="rotate(330 120 120)"/>
+                  </g>
+                  <circle cx="120" cy="120" r="42" fill="#fffdfb" stroke="#dbeee8" stroke-width="2"/>
+                  <text x="120" y="113" text-anchor="middle" font-size="16" font-weight="800" fill="#111827">24小时</text>
+                  <text x="120" y="135" text-anchor="middle" font-size="14" font-weight="700" fill="#657289">使用统计</text>
+                  <text x="120" y="18" text-anchor="middle" font-size="12" fill="#657289">0</text>
+                  <text x="224" y="124" text-anchor="middle" font-size="12" fill="#657289">6</text>
+                  <text x="120" y="230" text-anchor="middle" font-size="12" fill="#657289">12</text>
+                  <text x="16" y="124" text-anchor="middle" font-size="12" fill="#657289">18</text>
+                </svg>
+              </div>
+              <div class="insights">
+                <div class="insight">
+                  <b>20:00-22:00</b>
+                  <span>最集中时段</span>
+                </div>
+                <div class="insight">
+                  <b>35分</b>
+                  <span>夜间用眼</span>
+                </div>
+                <div class="insight">
+                  <b>52分</b>
+                  <span>最长连续</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>本周用眼</h2>
+              <div class="panel-tools">
+                <button class="select-pill">本周 ▾</button>
+                <div class="legend">
+                  <span><i class="swatch pc"></i>电脑</span>
+                  <span><i class="swatch phone-c"></i>手机</span>
+                </div>
+              </div>
+            </div>
+            <div class="bar-chart">
+              <div class="bar-group">
+                <div class="bar" style="height:112px"><div class="pc-part" style="height:72%"></div><div class="phone-part" style="height:28%"></div></div>
+                <div class="day">一</div>
+              </div>
+              <div class="bar-group">
+                <div class="bar" style="height:138px"><div class="pc-part" style="height:64%"></div><div class="phone-part" style="height:36%"></div></div>
+                <div class="day">二</div>
+              </div>
+              <div class="bar-group">
+                <div class="bar" style="height:96px"><div class="pc-part" style="height:78%"></div><div class="phone-part" style="height:22%"></div></div>
+                <div class="day">三</div>
+              </div>
+              <div class="bar-group">
+                <div class="bar" style="height:162px"><div class="pc-part" style="height:56%"></div><div class="phone-part" style="height:44%"></div></div>
+                <div class="day">四</div>
+              </div>
+              <div class="bar-group">
+                <div class="bar" style="height:146px"><div class="pc-part" style="height:70%"></div><div class="phone-part" style="height:30%"></div></div>
+                <div class="day">五</div>
+              </div>
+              <div class="bar-group">
+                <div class="bar" style="height:88px"><div class="pc-part" style="height:38%"></div><div class="phone-part" style="height:62%"></div></div>
+                <div class="day">六</div>
+              </div>
+              <div class="bar-group">
+                <div class="bar" style="height:66px"><div class="pc-part" style="height:42%"></div><div class="phone-part" style="height:58%"></div></div>
+                <div class="day">日</div>
+              </div>
+            </div>
+            <div class="note">本周合计 28小时12分，手机占比较上周增加 6%。</div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>月度趋势</h2>
+              <div class="panel-tools">
+                <button class="select-pill">本月 ▾</button>
+                <div class="legend">
+                  <span><i class="swatch pc"></i>总计</span>
+                  <span><i class="swatch" style="background:#f0b83a"></i>6小时线</span>
+                </div>
+              </div>
+            </div>
+            <svg class="trend-svg" viewBox="0 0 420 180" aria-hidden="true">
+              <line x1="20" y1="54" x2="400" y2="54" stroke="#f0b83a" stroke-width="2" stroke-dasharray="6 8"/>
+              <line x1="20" y1="112" x2="400" y2="112" stroke="#e8f3ef" stroke-width="2"/>
+              <path d="M20 128 C48 118, 58 92, 86 96 S126 138, 154 112 S196 58, 226 70 S266 132, 298 108 S344 52, 400 72" fill="none" stroke="#16a37f" stroke-width="6" stroke-linecap="round"/>
+              <g fill="#16a37f">
+                <circle cx="20" cy="128" r="5"/><circle cx="86" cy="96" r="5"/><circle cx="154" cy="112" r="5"/><circle cx="226" cy="70" r="5"/><circle cx="298" cy="108" r="5"/><circle cx="400" cy="72" r="5"/>
+              </g>
+            </svg>
+            <div class="note">本月已记录 12 天，整体略有上升，晚间使用占比增加。</div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>连续使用分析</h2>
+              <div class="date-range">
+                <button class="select-pill">6月1日 ▾</button>
+                <span>至</span>
+                <button class="select-pill">7月1日 ▾</button>
+              </div>
+            </div>
+            <div class="usage-bands">
+              <div class="band-row">
+                <span>0-30分</span>
+                <div class="track"><div class="fill" style="width:72%"></div></div>
+                <span>9次</span>
+              </div>
+              <div class="band-row">
+                <span>30-45分</span>
+                <div class="track"><div class="fill warn" style="width:48%"></div></div>
+                <span>6次</span>
+              </div>
+              <div class="band-row">
+                <span>45分以上</span>
+                <div class="track"><div class="fill bad" style="width:24%"></div></div>
+                <span>3次</span>
+              </div>
+            </div>
+            <div class="note">本周最长连续 1小时12分，建议减少 45 分钟以上的连续使用。</div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section class="phone">
+      <div class="phone-top">
+        <span>15:30</span>
+        <span>5G 41%</span>
+      </div>
+      <div class="header">
+        <div>
+          <h1>统计</h1>
+          <div class="sub">看趋势、分布和连续使用情况</div>
+        </div>
+      </div>
+
+      <div class="main-grid">
+        <section class="panel day-panel">
+          <div class="panel-head">
+            <h2>单日情况</h2>
+            <div class="panel-tools">
+              <button class="select-pill">今天 ▾</button>
+              <div class="legend">
+                <span><i class="swatch pc"></i>电脑</span>
+                <span><i class="swatch phone-c"></i>手机</span>
+              </div>
+            </div>
+          </div>
+          <div class="day-summary">
+            <div class="metric">
+              <div class="label">今日用眼</div>
+              <div class="value green">2小时18分</div>
+            </div>
+            <div class="metric">
+              <div class="label">最长连续</div>
+              <div class="value yellow">52分</div>
+            </div>
+            <div class="metric">
+              <div class="label">电脑 / 手机</div>
+              <div class="value">68% / 32%</div>
+            </div>
+            <div class="metric">
+              <div class="label">提醒触发</div>
+              <div class="value">2次</div>
+            </div>
+          </div>
+          <div class="day-ring-layout">
+            <div class="ring-wrap">
+              <svg viewBox="0 0 240 240" aria-label="24小时热力统计">
+                <defs>
+                  <clipPath id="dayHeatPhone">
+                    <circle cx="120" cy="120" r="92"/>
+                  </clipPath>
+                </defs>
+                <circle cx="120" cy="120" r="92" fill="#fffdfb" stroke="#dbeee8" stroke-width="2"/>
+                <g clip-path="url(#dayHeatPhone)" stroke-width="12" stroke-linecap="butt">
+                  <line x1="120" y1="82" x2="120" y2="65" stroke="#16a37f" transform="rotate(0 120 120)"/>
+                  <line x1="120" y1="65" x2="120" y2="52" stroke="#4f8df7" transform="rotate(0 120 120)"/>
+                  <line x1="120" y1="82" x2="120" y2="58" stroke="#16a37f" transform="rotate(15 120 120)"/>
+                  <line x1="120" y1="58" x2="120" y2="43" stroke="#4f8df7" transform="rotate(15 120 120)"/>
+                  <line x1="120" y1="82" x2="120" y2="60" stroke="#16a37f" transform="rotate(30 120 120)"/>
+                  <line x1="120" y1="60" x2="120" y2="48" stroke="#4f8df7" transform="rotate(30 120 120)"/>
+                  <line x1="120" y1="82" x2="120" y2="54" stroke="#16a37f" transform="rotate(45 120 120)"/>
+                  <line x1="120" y1="54" x2="120" y2="38" stroke="#4f8df7" transform="rotate(45 120 120)"/>
+                  <line x1="120" y1="82" x2="120" y2="66" stroke="#16a37f" transform="rotate(60 120 120)"/>
+                  <line x1="120" y1="66" x2="120" y2="56" stroke="#4f8df7" transform="rotate(60 120 120)"/>
+                  <line x1="120" y1="82" x2="120" y2="63" stroke="#16a37f" transform="rotate(90 120 120)"/>
+                  <line x1="120" y1="63" x2="120" y2="50" stroke="#4f8df7" transform="rotate(90 120 120)"/>
+                  <line x1="120" y1="82" x2="120" y2="58" stroke="#16a37f" transform="rotate(105 120 120)"/>
+                  <line x1="120" y1="58" x2="120" y2="48" stroke="#4f8df7" transform="rotate(105 120 120)"/>
+                  <line x1="120" y1="82" x2="120" y2="68" stroke="#16a37f" transform="rotate(120 120 120)"/>
+                  <line x1="120" y1="68" x2="120" y2="54" stroke="#4f8df7" transform="rotate(120 120 120)"/>
+                  <line x1="120" y1="82" x2="120" y2="59" stroke="#16a37f" transform="rotate(135 120 120)"/>
+                  <line x1="120" y1="59" x2="120" y2="44" stroke="#4f8df7" transform="rotate(135 120 120)"/>
+                  <line x1="120" y1="82" x2="120" y2="70" stroke="#16a37f" transform="rotate(150 120 120)"/>
+                  <line x1="120" y1="82" x2="120" y2="52" stroke="#16a37f" transform="rotate(165 120 120)"/>
+                  <line x1="120" y1="52" x2="120" y2="36" stroke="#4f8df7" transform="rotate(165 120 120)"/>
+                  <line x1="120" y1="82" x2="120" y2="61" stroke="#16a37f" transform="rotate(180 120 120)"/>
+                  <line x1="120" y1="61" x2="120" y2="45" stroke="#4f8df7" transform="rotate(180 120 120)"/>
+                  <line x1="120" y1="82" x2="120" y2="64" stroke="#16a37f" transform="rotate(195 120 120)"/>
+                  <line x1="120" y1="82" x2="120" y2="52" stroke="#16a37f" transform="rotate(210 120 120)"/>
+                  <line x1="120" y1="52" x2="120" y2="35" stroke="#4f8df7" transform="rotate(210 120 120)"/>
+                  <line x1="120" y1="82" x2="120" y2="68" stroke="#16a37f" transform="rotate(225 120 120)"/>
+                  <line x1="120" y1="68" x2="120" y2="55" stroke="#4f8df7" transform="rotate(225 120 120)"/>
+                  <line x1="120" y1="82" x2="120" y2="58" stroke="#16a37f" transform="rotate(240 120 120)"/>
+                  <line x1="120" y1="58" x2="120" y2="45" stroke="#4f8df7" transform="rotate(240 120 120)"/>
+                  <line x1="120" y1="82" x2="120" y2="62" stroke="#16a37f" transform="rotate(255 120 120)"/>
+                  <line x1="120" y1="62" x2="120" y2="50" stroke="#4f8df7" transform="rotate(255 120 120)"/>
+                  <line x1="120" y1="82" x2="120" y2="55" stroke="#16a37f" transform="rotate(285 120 120)"/>
+                  <line x1="120" y1="55" x2="120" y2="41" stroke="#4f8df7" transform="rotate(285 120 120)"/>
+                  <line x1="120" y1="82" x2="120" y2="63" stroke="#16a37f" transform="rotate(300 120 120)"/>
+                  <line x1="120" y1="82" x2="120" y2="60" stroke="#16a37f" transform="rotate(315 120 120)"/>
+                  <line x1="120" y1="60" x2="120" y2="48" stroke="#4f8df7" transform="rotate(315 120 120)"/>
+                  <line x1="120" y1="82" x2="120" y2="72" stroke="#16a37f" transform="rotate(330 120 120)"/>
+                </g>
+                <circle cx="120" cy="120" r="42" fill="#fffdfb" stroke="#dbeee8" stroke-width="2"/>
+                <text x="120" y="113" text-anchor="middle" font-size="16" font-weight="800" fill="#111827">24小时</text>
+                <text x="120" y="135" text-anchor="middle" font-size="14" font-weight="700" fill="#657289">使用统计</text>
+                <text x="120" y="18" text-anchor="middle" font-size="12" fill="#657289">0</text>
+                <text x="224" y="124" text-anchor="middle" font-size="12" fill="#657289">6</text>
+                <text x="120" y="230" text-anchor="middle" font-size="12" fill="#657289">12</text>
+                <text x="16" y="124" text-anchor="middle" font-size="12" fill="#657289">18</text>
+              </svg>
+            </div>
+            <div class="insights">
+              <div class="insight"><b>20-22点</b><span>最集中</span></div>
+              <div class="insight"><b>35分</b><span>夜间</span></div>
+              <div class="insight"><b>52分</b><span>最长连续</span></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>本周用眼</h2>
+            <div class="panel-tools">
+              <button class="select-pill">本周 ▾</button>
+              <div class="legend">
+                <span><i class="swatch pc"></i>电脑</span>
+                <span><i class="swatch phone-c"></i>手机</span>
+              </div>
+            </div>
+          </div>
+          <div class="bar-chart">
+            <div class="bar-group"><div class="bar" style="height:112px"><div class="pc-part" style="height:72%"></div><div class="phone-part" style="height:28%"></div></div><div class="day">一</div></div>
+            <div class="bar-group"><div class="bar" style="height:138px"><div class="pc-part" style="height:64%"></div><div class="phone-part" style="height:36%"></div></div><div class="day">二</div></div>
+            <div class="bar-group"><div class="bar" style="height:96px"><div class="pc-part" style="height:78%"></div><div class="phone-part" style="height:22%"></div></div><div class="day">三</div></div>
+            <div class="bar-group"><div class="bar" style="height:162px"><div class="pc-part" style="height:56%"></div><div class="phone-part" style="height:44%"></div></div><div class="day">四</div></div>
+            <div class="bar-group"><div class="bar" style="height:146px"><div class="pc-part" style="height:70%"></div><div class="phone-part" style="height:30%"></div></div><div class="day">五</div></div>
+            <div class="bar-group"><div class="bar" style="height:88px"><div class="pc-part" style="height:38%"></div><div class="phone-part" style="height:62%"></div></div><div class="day">六</div></div>
+            <div class="bar-group"><div class="bar" style="height:66px"><div class="pc-part" style="height:42%"></div><div class="phone-part" style="height:58%"></div></div><div class="day">日</div></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>月度趋势</h2>
+            <button class="select-pill">本月 ▾</button>
+          </div>
+          <svg class="trend-svg" viewBox="0 0 420 180" aria-hidden="true">
+            <line x1="20" y1="54" x2="400" y2="54" stroke="#f0b83a" stroke-width="2" stroke-dasharray="6 8"/>
+            <path d="M20 128 C48 118, 58 92, 86 96 S126 138, 154 112 S196 58, 226 70 S266 132, 298 108 S344 52, 400 72" fill="none" stroke="#16a37f" stroke-width="6" stroke-linecap="round"/>
+          </svg>
+          <div class="note">本月已记录 12 天，整体略有上升。</div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>连续使用分析</h2>
+            <div class="date-range">
+              <button class="select-pill">6月1日 ▾</button>
+              <span>至</span>
+              <button class="select-pill">7月1日 ▾</button>
+            </div>
+          </div>
+          <div class="usage-bands">
+            <div class="band-row"><span>0-30分</span><div class="track"><div class="fill" style="width:72%"></div></div><span>9次</span></div>
+            <div class="band-row"><span>30-45分</span><div class="track"><div class="fill warn" style="width:48%"></div></div><span>6次</span></div>
+            <div class="band-row"><span>45分以上</span><div class="track"><div class="fill bad" style="width:24%"></div></div><span>3次</span></div>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

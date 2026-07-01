@@ -126,6 +126,8 @@ public final class EyeTimeService extends Service implements SensorEventListener
         counting = decision.isCounting();
         if (counting && elapsed > 0L && elapsed <= MAX_COUNTABLE_TICK_MS) {
             store.addSeconds(LocalDate.now(), elapsed / 1000L);
+        } else if (!counting) {
+            store.finishCurrentSession(LocalDate.now());
         }
         LocalDate todayDate = LocalDate.now();
         DailySummary today = store.getDay(todayDate);

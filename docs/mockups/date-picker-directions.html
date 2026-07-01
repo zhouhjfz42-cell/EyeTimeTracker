@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>日期选择器方案</title>
+  <style>
+    :root {
+      --bg: #f5f8f7;
+      --panel: #fbfdfc;
+      --ink: #111827;
+      --muted: #657289;
+      --green: #18aa80;
+      --blue: #4f8df7;
+      --line: #d9eee7;
+      --soft: #effaf6;
+      --shadow: 0 22px 70px rgba(44, 69, 81, .18);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 32px;
+      background:
+        radial-gradient(circle at 12% 8%, rgba(24, 170, 128, .12), transparent 30%),
+        radial-gradient(circle at 88% 18%, rgba(79, 141, 247, .10), transparent 32%),
+        var(--bg);
+      color: var(--ink);
+      font-family: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+    }
+
+    .page {
+      max-width: 1280px;
+      margin: 0 auto;
+      display: grid;
+      gap: 22px;
+    }
+
+    .headline {
+      display: flex;
+      align-items: baseline;
+      gap: 18px;
+      padding: 8px 2px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 42px;
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(760px, 1fr) 390px;
+      gap: 26px;
+      align-items: start;
+    }
+
+    .surface {
+      position: relative;
+      min-height: 650px;
+      background: var(--panel);
+      border: 1px solid rgba(17, 24, 39, .10);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      padding: 28px;
+      overflow: hidden;
+    }
+
+    .stats-head {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      margin-bottom: 24px;
+    }
+
+    .stats-title {
+      font-size: 34px;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .sub {
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: rgba(255,255,255,.78);
+      padding: 22px;
+    }
+
+    .card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 25px;
+      line-height: 1.2;
+    }
+
+    .select-pill,
+    .date-field {
+      border: 1px solid var(--line);
+      background: var(--soft);
+      color: var(--ink);
+      border-radius: 999px;
+      min-height: 34px;
+      padding: 0 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-weight: 800;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .date-field {
+      border-radius: 14px;
+      min-width: 144px;
+      background: #fff;
+      justify-content: space-between;
+      font-size: 16px;
+    }
+
+    .range-control {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      background: rgba(239, 250, 246, .72);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      width: fit-content;
+      margin-left: auto;
+    }
+
+    .muted { color: var(--muted); }
+
+    .mock-bars {
+      height: 170px;
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 14px;
+      align-items: end;
+      padding: 20px 10px 0;
+    }
+
+    .bar {
+      width: 34px;
+      margin: 0 auto;
+      background: var(--green);
+      border-radius: 5px 5px 2px 2px;
+    }
+
+    .popover {
+      position: absolute;
+      left: 72px;
+      right: 72px;
+      top: 158px;
+      background: rgba(255,255,255,.98);
+      border: 1px solid rgba(17, 24, 39, .10);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      padding: 18px;
+      z-index: 3;
+    }
+
+    .calendar-shell {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: #fff;
+    }
+
+    .month {
+      padding: 18px;
+    }
+
+    .month + .month {
+      border-left: 1px solid var(--line);
+    }
+
+    .month-head {
+      display: grid;
+      grid-template-columns: 34px 34px 1fr 34px 34px;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 16px;
+      color: var(--ink);
+    }
+
+    .month-title {
+      text-align: center;
+      font-size: 22px;
+      font-weight: 900;
+    }
+
+    .nav {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      font-size: 23px;
+      font-weight: 900;
+    }
+
+    .weekday,
+    .days {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      text-align: center;
+    }
+
+    .weekday {
+      color: var(--muted);
+      font-size: 15px;
+      margin-bottom: 8px;
+    }
+
+    .day {
+      height: 44px;
+      display: grid;
+      place-items: center;
+      color: #8b98aa;
+      font-size: 17px;
+      border-radius: 12px;
+      position: relative;
+    }
+
+    .day.out { color: #c7cdd5; }
+    .day.disabled {
+      color: #cbd2da;
+      background: #f4f6f6;
+    }
+    .day.in-range {
+      background: #eef8f4;
+      border-radius: 0;
+      color: #4f6175;
+    }
+    .day.start,
+    .day.end,
+    .day.selected {
+      background: var(--green);
+      color: white;
+      font-weight: 900;
+      border-radius: 12px;
+    }
+    .day.today::after {
+      content: "";
+      position: absolute;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--blue);
+      bottom: 5px;
+    }
+
+    .actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 16px;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn {
+      min-width: 94px;
+      height: 40px;
+      border-radius: 999px;
+      border: 0;
+      font-size: 15px;
+      font-weight: 900;
+      background: #eef1f4;
+      color: #344155;
+    }
+
+    .btn.primary {
+      background: var(--green);
+      color: #fff;
+    }
+
+    .phone {
+      min-height: 720px;
+      border-radius: 44px;
+      padding: 28px 24px;
+    }
+
+    .phone .stats-head {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+    }
+
+    .phone .stats-title { font-size: 34px; }
+
+    .phone-card {
+      margin-top: 24px;
+      min-height: 420px;
+    }
+
+    .sheet {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 18px 22px 24px;
+      background: rgba(255,255,255,.98);
+      border-top-left-radius: 32px;
+      border-top-right-radius: 32px;
+      box-shadow: 0 -18px 60px rgba(44, 69, 81, .16);
+      border: 1px solid rgba(17, 24, 39, .08);
+    }
+
+    .sheet .month {
+      padding: 0;
+    }
+
+    .sheet .calendar-shell {
+      display: block;
+      border: 0;
+    }
+
+    .sheet .actions {
+      margin-top: 18px;
+    }
+
+    .mode-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+      background: var(--soft);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px;
+    }
+
+    .mode-tabs span {
+      flex: 1;
+      text-align: center;
+      border-radius: 999px;
+      padding: 8px 0;
+      font-weight: 800;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .mode-tabs .active {
+      background: var(--green);
+      color: white;
+    }
+
+    @media (max-width: 1080px) {
+      .grid { grid-template-columns: 1fr; }
+      .popover { left: 24px; right: 24px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="headline">
+      <h1>日期选择器方案</h1>
+      <div class="hint">统一 PC 和安卓的下拉形式，不再使用系统默认菜单</div>
+    </div>
+
+    <section class="grid">
+      <div class="surface">
+        <div class="stats-head">
+          <div class="stats-title">统计</div>
+          <div class="sub">看趋势、分布和连续使用情况</div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>连续使用分析</h2>
+            <div class="range-control">
+              <div class="date-field">2026-07-01 <span>▾</span></div>
+              <span class="muted">至</span>
+              <div class="date-field">2026-07-01 <span>▾</span></div>
+            </div>
+          </div>
+          <div class="mock-bars">
+            <div class="bar" style="height:90px"></div>
+            <div class="bar" style="height:150px"></div>
+            <div class="bar" style="height:118px"></div>
+            <div class="bar" style="height:42px"></div>
+            <div class="bar" style="height:35px"></div>
+            <div class="bar" style="height:30px"></div>
+            <div class="bar" style="height:34px"></div>
+          </div>
+        </div>
+
+        <div class="popover">
+          <div class="calendar-shell">
+            <section class="month">
+              <div class="month-head">
+                <button class="nav">«</button>
+                <button class="nav">‹</button>
+                <div class="month-title">2026年 7月</div>
+                <button class="nav">›</button>
+                <button class="nav">»</button>
+              </div>
+              <div class="weekday"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+              <div class="days">
+                <div class="day out">29</div><div class="day out">30</div><div class="day start">1</div><div class="day in-range">2</div><div class="day in-range">3</div><div class="day in-range">4</div><div class="day in-range">5</div>
+                <div class="day in-range">6</div><div class="day in-range">7</div><div class="day in-range">8</div><div class="day in-range">9</div><div class="day in-range">10</div><div class="day in-range">11</div><div class="day in-range">12</div>
+                <div class="day in-range">13</div><div class="day in-range">14</div><div class="day in-range">15</div><div class="day in-range">16</div><div class="day today in-range">17</div><div class="day in-range">18</div><div class="day in-range">19</div>
+                <div class="day in-range">20</div><div class="day in-range">21</div><div class="day in-range">22</div><div class="day in-range">23</div><div class="day in-range">24</div><div class="day in-range">25</div><div class="day in-range">26</div>
+                <div class="day in-range">27</div><div class="day in-range">28</div><div class="day in-range">29</div><div class="day in-range">30</div><div class="day end">31</div><div class="day out">1</div><div class="day out">2</div>
+              </div>
+            </section>
+            <section class="month">
+              <div class="month-head">
+                <button class="nav">«</button>
+                <button class="nav">‹</button>
+                <div class="month-title">2026年 8月</div>
+                <button class="nav">›</button>
+                <button class="nav">»</button>
+              </div>
+              <div class="weekday"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+              <div class="days">
+                <div class="day out">27</div><div class="day out">28</div><div class="day out">29</div><div class="day out">30</div><div class="day out">31</div><div class="day disabled">1</div><div class="day disabled">2</div>
+                <div class="day disabled">3</div><div class="day disabled">4</div><div class="day disabled">5</div><div class="day disabled">6</div><div class="day disabled">7</div><div class="day disabled">8</div><div class="day disabled">9</div>
+                <div class="day disabled">10</div><div class="day disabled">11</div><div class="day disabled">12</div><div class="day disabled">13</div><div class="day disabled">14</div><div class="day disabled">15</div><div class="day disabled">16</div>
+                <div class="day disabled">17</div><div class="day disabled">18</div><div class="day disabled">19</div><div class="day disabled">20</div><div class="day disabled">21</div><div class="day disabled">22</div><div class="day disabled">23</div>
+                <div class="day disabled">24</div><div class="day disabled">25</div><div class="day disabled">26</div><div class="day disabled">27</div><div class="day disabled">28</div><div class="day disabled">29</div><div class="day disabled">30</div>
+              </div>
+            </section>
+          </div>
+          <div class="actions">
+            <span>PC：弹层固定宽度，双月显示，避免 30 天纵向列表</span>
+            <div class="buttons">
+              <button class="btn">取消</button>
+              <button class="btn primary">应用</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="surface phone">
+        <div class="stats-head">
+          <div>
+            <div class="stats-title">用眼时间</div>
+            <div class="sub">亮屏时计入统计</div>
+          </div>
+          <button class="select-pill">启动</button>
+        </div>
+
+        <div class="card phone-card">
+          <div class="card-head">
+            <h2>单日情况</h2>
+            <button class="select-pill">今天 ▾</button>
+          </div>
+          <div class="mock-bars">
+            <div class="bar" style="height:95px"></div>
+            <div class="bar" style="height:140px"></div>
+            <div class="bar" style="height:118px"></div>
+          </div>
+        </div>
+
+        <div class="sheet">
+          <div class="mode-tabs">
+            <span class="active">单日</span>
+            <span>月份</span>
+            <span>起止日</span>
+          </div>
+          <div class="calendar-shell">
+            <section class="month">
+              <div class="month-head">
+                <button class="nav">‹</button>
+                <button class="nav">«</button>
+                <div class="month-title">2026年 7月</div>
+                <button class="nav">›</button>
+                <button class="nav">»</button>
+              </div>
+              <div class="weekday"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+              <div class="days">
+                <div class="day out">29</div><div class="day out">30</div><div class="day selected">1</div><div class="day">2</div><div class="day">3</div><div class="day">4</div><div class="day">5</div>
+                <div class="day">6</div><div class="day">7</div><div class="day">8</div><div class="day">9</div><div class="day">10</div><div class="day">11</div><div class="day">12</div>
+                <div class="day">13</div><div class="day">14</div><div class="day">15</div><div class="day">16</div><div class="day today">17</div><div class="day">18</div><div class="day">19</div>
+                <div class="day">20</div><div class="day">21</div><div class="day">22</div><div class="day">23</div><div class="day">24</div><div class="day">25</div><div class="day">26</div>
+                <div class="day">27</div><div class="day">28</div><div class="day">29</div><div class="day">30</div><div class="day">31</div><div class="day out">1</div><div class="day out">2</div>
+              </div>
+            </section>
+          </div>
+          <div class="actions">
+            <span>安卓：底部弹层，单月显示</span>
+            <div class="buttons">
+              <button class="btn">取消</button>
+              <button class="btn primary">确定</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

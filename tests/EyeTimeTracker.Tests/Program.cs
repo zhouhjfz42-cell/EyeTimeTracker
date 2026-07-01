@@ -64,6 +64,24 @@ static void TestContinuousRecentInputCountsEachNormalTick()
     AssertEqual(300L, acc.Today.TotalSeconds, nameof(TestContinuousRecentInputCountsEachNormalTick));
 }
 
+static void TestHourlyAndSessionStatsAreRecorded()
+{
+    var settings = TrackerSettings.Default with { IdleThresholdSeconds = 180, CountAudio = false };
+    var acc = new EyeTimeAccumulator(new DateOnly(2026, 6, 26));
+    var t0 = new DateTimeOffset(2026, 6, 26, 10, 0, 0, TimeSpan.Zero);
+
+    acc.Tick(Snapshot(t0, idleSeconds: 0), settings);
+    acc.Tick(Snapshot(t0.AddSeconds(10), idleSeconds: 0), settings);
+    acc.Tick(Snapshot(t0.AddSeconds(20), idleSeconds: 0), settings);
+    acc.Tick(Snapshot(t0.AddMinutes(4), idleSeconds: 240), settings);
+    acc.Tick(Snapshot(t0.AddMinutes(4).AddSeconds(10), idleSeconds: 250), settings);
+
+    AssertEqual(180L, acc.Today.HourlySeconds[10], nameof(TestHourlyAndSessionStatsAreRecorded) + " hourly");
+    AssertEqual(1, acc.Today.SessionSeconds.Count, nameof(TestHourlyAndSessionStatsAreRecorded) + " session count");
+    AssertEqual(180L, acc.Today.SessionSeconds[0], nameof(TestHourlyAndSessionStatsAreRecorded) + " session seconds");
+    AssertEqual(0L, acc.Today.CurrentSessionSeconds, nameof(TestHourlyAndSessionStatsAreRecorded) + " current session");
+}
+
 static void TestAudioCountsWithoutInput()
 {
     var settings = TrackerSettings.Default with { CountAudio = true };
@@ -194,6 +212,9 @@ static void TestJsonStateRoundTrip()
     var savedRecord = new DailyRecord(new DateOnly(2026, 6, 26))
     {
         TotalSeconds = 12345,
+        HourlySeconds = Enumerable.Range(0, 24).Select(index => (long)index).ToArray(),
+        SessionSeconds = new List<long> { 120, 240 },
+        CurrentSessionSeconds = 60,
         ReminderShown = true,
         LastReminderStep = 1
     };
@@ -218,6 +239,9 @@ static void TestJsonStateRoundTrip()
     AssertEqual(1, loaded.Records.Count, nameof(TestJsonStateRoundTrip) + " records count");
     AssertEqual(savedRecord.Date, loadedRecord.Date, nameof(TestJsonStateRoundTrip) + " date");
     AssertEqual(savedRecord.TotalSeconds, loadedRecord.TotalSeconds, nameof(TestJsonStateRoundTrip) + " seconds");
+    AssertEqual(23L, loadedRecord.HourlySeconds[23], nameof(TestJsonStateRoundTrip) + " hourly");
+    AssertEqual(2, loadedRecord.SessionSeconds.Count, nameof(TestJsonStateRoundTrip) + " session count");
+    AssertEqual(60L, loadedRecord.CurrentSessionSeconds, nameof(TestJsonStateRoundTrip) + " current session");
     AssertEqual(savedRecord.ReminderShown, loadedRecord.ReminderShown, nameof(TestJsonStateRoundTrip) + " reminder shown");
     AssertEqual(savedRecord.LastReminderStep, loadedRecord.LastReminderStep, nameof(TestJsonStateRoundTrip) + " reminder step");
 }
@@ -297,6 +321,7 @@ static void TestOldJsonWithoutRepeatReminderFieldsLoadsSafely()
 TestDoesNotBackfillLongIdleGap();
 TestIdleThresholdStopsCounting();
 TestContinuousRecentInputCountsEachNormalTick();
+TestHourlyAndSessionStatsAreRecorded();
 TestAudioCountsWithoutInput();
 TestSparseAudioDoesNotBackfillElapsed();
 TestFractionalTicksAreTruncated();

@@ -25,6 +25,7 @@ public sealed class MainForm : Form
     private readonly FitTextLabel _reminderValue;
     private readonly FitTextLabel _statusValue;
     private readonly StatusDot _statusDot;
+    private readonly Icon _appIcon;
     private DateOnly? _displayResetDate;
     private long _todayDisplayBaseline;
     private long _yesterdayDisplayBaseline;
@@ -39,7 +40,8 @@ public sealed class MainForm : Form
 
         AutoScaleMode = AutoScaleMode.None;
         Text = "\u7528\u773c\u65f6\u95f4\u8bb0\u5f55";
-        Icon = (Icon)(appIcon ?? throw new ArgumentNullException(nameof(appIcon))).Clone();
+        _appIcon = (Icon)(appIcon ?? throw new ArgumentNullException(nameof(appIcon))).Clone();
+        Icon = (Icon)_appIcon.Clone();
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
@@ -184,9 +186,9 @@ public sealed class MainForm : Form
         root.Controls.Add(BuildMetricCard("\u672c\u6708", new Rectangle(34, 484, 282, 136), out monthValue));
         root.Controls.Add(BuildReminderCard(new Rectangle(344, 484, 282, 136), out reminderValue));
 
-        var resetDisplay = new RoundedButton
+        var statsButton = new RoundedButton
         {
-            Text = "\u91cd\u7f6e\u663e\u793a",
+            Text = "\u7edf\u8ba1",
             Bounds = new Rectangle(200, 668, 260, 58),
             ButtonColor = AccentGreen,
             HoverColor = Color.FromArgb(19, 145, 111),
@@ -194,8 +196,14 @@ public sealed class MainForm : Form
             TextColor = Color.White,
             Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Bold, GraphicsUnit.Point)
         };
-        resetDisplay.Click += (_, _) => ResetDisplayedStatistics();
-        root.Controls.Add(resetDisplay);
+        statsButton.Click += (_, _) => ShowStats();
+        root.Controls.Add(statsButton);
+    }
+
+    private void ShowStats()
+    {
+        using var statsForm = new StatsForm(_controller, _appIcon);
+        statsForm.ShowDialog(this);
     }
 
     private static Control BuildMetricCard(string title, Rectangle bounds, out FitTextLabel value)
@@ -508,10 +516,7 @@ public sealed class MainForm : Form
         {
             _pressed = false;
             Invalidate();
-            if (ClientRectangle.Contains(e.Location))
-            {
-                OnClick(EventArgs.Empty);
-            }
+            base.OnMouseUp(e);
         }
 
         protected override void OnPaint(PaintEventArgs pevent)

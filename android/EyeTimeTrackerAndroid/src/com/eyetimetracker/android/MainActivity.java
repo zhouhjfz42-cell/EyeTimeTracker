@@ -118,16 +118,25 @@ public final class MainActivity extends Activity {
                 ScrollView.LayoutParams.MATCH_PARENT,
                 ScrollView.LayoutParams.WRAP_CONTENT));
 
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        root.addView(header, matchWrap());
+
         TextView title = new TextView(this);
         title.setText("用眼时间");
         title.setTextSize(30);
         title.setTextColor(COLOR_TEXT);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setIncludeFontPadding(false);
-        root.addView(title, matchWrap());
+        header.addView(title, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView startButton = lightTopButton("启动");
+        startButton.setOnClickListener(v -> startTrackerService());
+        header.addView(startButton, new LinearLayout.LayoutParams(dp(76), dp(38)));
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("亮屏 + 机身动作，或亮屏 + 媒体播放时计入统计（息屏播放不计时）");
+        subtitle.setText("亮屏时计入统计");
         subtitle.setTextSize(14);
         subtitle.setTextColor(COLOR_MUTED);
         subtitle.setLineSpacing(0f, 1.1f);
@@ -160,16 +169,9 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams actionsParams = matchWrapTop(24);
         root.addView(actions, actionsParams);
 
-        TextView resetButton = actionButton("重置显示", false);
-        resetButton.setOnClickListener(v -> {
-            store.resetDisplay(LocalDate.now());
-            refresh();
-        });
-        actions.addView(resetButton, weightedButtonParams(0, dp(6)));
-
-        TextView startButton = actionButton("后台运行", true);
-        startButton.setOnClickListener(v -> startTrackerService());
-        actions.addView(startButton, weightedButtonParams(dp(6), 0));
+        TextView statsButton = actionButton("统计", false);
+        statsButton.setOnClickListener(v -> startActivity(new Intent(this, StatsActivity.class)));
+        actions.addView(statsButton, weightedButtonParams(0, dp(6)));
 
         TextView device = new TextView(this);
         device.setText("设备 ID：" + store.getDeviceId());
@@ -249,6 +251,19 @@ public final class MainActivity extends Activity {
         button.setMinHeight(dp(54));
         button.setTextColor(primary ? Color.WHITE : Color.rgb(52, 64, 84));
         button.setBackground(rounded(primary ? COLOR_GREEN : COLOR_BUTTON_SOFT, dp(999), Color.TRANSPARENT, 0));
+        button.setClickable(true);
+        button.setFocusable(true);
+        return button;
+    }
+
+    private TextView lightTopButton(String label) {
+        TextView button = new TextView(this);
+        button.setText(label);
+        button.setTextSize(15);
+        button.setTypeface(Typeface.DEFAULT_BOLD);
+        button.setGravity(Gravity.CENTER);
+        button.setTextColor(COLOR_GREEN);
+        button.setBackground(rounded(COLOR_SOFT, dp(999), COLOR_LINE, 1));
         button.setClickable(true);
         button.setFocusable(true);
         return button;

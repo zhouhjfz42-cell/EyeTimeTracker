@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>用眼时间提醒设置草图</title>
+  <style>
+    :root {
+      --bg: #f5f8f7;
+      --panel: #fbfdfc;
+      --ink: #111827;
+      --muted: #657289;
+      --green: #18aa80;
+      --green-2: #dff5ee;
+      --line: #d9eee7;
+      --soft: #eef8f4;
+      --warn: #f3b737;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 32px;
+      background:
+        radial-gradient(circle at 10% 10%, rgba(25, 170, 128, 0.10), transparent 32%),
+        radial-gradient(circle at 85% 20%, rgba(55, 190, 210, 0.14), transparent 30%),
+        var(--bg);
+      color: var(--ink);
+      font-family: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+    }
+
+    .board {
+      width: min(1240px, 100%);
+      display: grid;
+      grid-template-columns: 1fr 430px;
+      gap: 28px;
+      align-items: start;
+    }
+
+    .window,
+    .phone {
+      background: var(--panel);
+      border: 1px solid rgba(17, 24, 39, 0.10);
+      box-shadow: 0 20px 70px rgba(44, 69, 81, 0.16);
+      overflow: hidden;
+    }
+
+    .window {
+      border-radius: 18px;
+      min-height: 690px;
+    }
+
+    .titlebar {
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      background: rgba(247, 248, 246, 0.92);
+      border-bottom: 1px solid rgba(17, 24, 39, 0.06);
+      font-size: 18px;
+    }
+
+    .traffic {
+      letter-spacing: 18px;
+      color: #1f2937;
+      font-weight: 500;
+    }
+
+    .content { padding: 36px 40px 40px; }
+
+    .hero-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 28px;
+    }
+
+    .title-line {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 48px;
+      line-height: 1.16;
+      letter-spacing: 0;
+    }
+
+    .sub {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 22px;
+      line-height: 1.45;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 18px;
+      border-radius: 999px;
+      background: var(--soft);
+      color: var(--muted);
+      font-size: 22px;
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+
+    .today-line {
+      display: flex;
+      align-items: baseline;
+      gap: 18px;
+      margin-top: 34px;
+      color: var(--muted);
+      font-size: 30px;
+    }
+
+    .time {
+      margin-top: 4px;
+      color: var(--green);
+      font-size: 86px;
+      line-height: 1;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+      margin-top: 32px;
+    }
+
+    .card {
+      min-height: 134px;
+      padding: 24px 28px;
+      border-radius: 24px;
+      background: #effaf6;
+      border: 1px solid var(--line);
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 25px;
+      line-height: 1.25;
+    }
+
+    .value {
+      margin-top: 14px;
+      font-size: 40px;
+      line-height: 1.08;
+      font-weight: 800;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .settings {
+      margin-top: 30px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .setting-card {
+      padding: 20px 22px;
+      border-radius: 22px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .setting-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      color: var(--muted);
+      font-size: 21px;
+    }
+
+    .switch {
+      width: 48px;
+      height: 28px;
+      border-radius: 999px;
+      padding: 4px;
+      background: var(--green);
+      flex: none;
+    }
+
+    .switch::after {
+      content: "";
+      display: block;
+      width: 20px;
+      height: 20px;
+      margin-left: 20px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    }
+
+    .small-value {
+      margin-top: 10px;
+      font-size: 30px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .hint {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.45;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 28px;
+      min-width: 230px;
+      height: 66px;
+      border-radius: 999px;
+      background: var(--green);
+      color: white;
+      font-size: 28px;
+      font-weight: 800;
+      box-shadow: 0 10px 26px rgba(24, 170, 128, 0.22);
+    }
+
+    .actions {
+      display: flex;
+      justify-content: center;
+      margin-top: 28px;
+    }
+
+    .light-start {
+      height: 42px;
+      min-width: 76px;
+      padding: 0 22px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.78);
+      color: var(--green);
+      font: inherit;
+      font-size: 20px;
+      font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap;
+      writing-mode: horizontal-tb;
+      box-shadow: 0 8px 18px rgba(24, 170, 128, 0.10);
+    }
+
+    .phone {
+      width: 430px;
+      min-height: 900px;
+      border-radius: 44px;
+      padding: 32px 28px;
+    }
+
+    .phone-top {
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      font-weight: 700;
+      font-size: 20px;
+      margin-bottom: 52px;
+    }
+
+    .phone .hero-row { position: relative; display: block; }
+    .phone .title-line { padding-right: 82px; gap: 10px; flex-wrap: nowrap; }
+    .phone h1 { font-size: 36px; white-space: nowrap; }
+    .phone .status-pill { padding: 9px 12px; font-size: 17px; }
+    .phone .sub { font-size: 20px; }
+    .phone .today-line { font-size: 26px; margin-top: 30px; }
+    .phone .time { font-size: 66px; }
+    .phone .grid { gap: 14px; }
+    .phone .card { min-height: 118px; padding: 20px; border-radius: 22px; }
+    .phone .label { font-size: 22px; }
+    .phone .value { font-size: 28px; }
+    .phone .settings { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .phone .small-value { font-size: 28px; }
+    .phone .button { width: 100%; min-width: 0; height: 62px; font-size: 26px; }
+    .phone .today-line { gap: 12px; flex-wrap: wrap; }
+    .phone .light-start { position: absolute; top: 6px; right: 0; margin-top: 0; min-width: 66px; font-size: 17px; height: 36px; padding: 0 14px; }
+    .phone .setting-card { min-height: 148px; padding: 18px 12px; }
+    .phone .setting-head { align-items: flex-start; gap: 6px; font-size: 16px; }
+    .phone .switch { width: 36px; height: 24px; padding: 4px; }
+    .phone .switch::after { width: 16px; height: 16px; margin-left: 12px; }
+    .phone .hint { font-size: 13px; }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+    }
+
+    .modal {
+      width: 560px;
+      padding: 30px;
+      border-radius: 34px;
+      background: rgba(253, 255, 254, 0.94);
+      border: 1px solid rgba(17, 24, 39, 0.10);
+      box-shadow: 0 26px 100px rgba(17, 24, 39, 0.24);
+      transform: translate(140px, 70px);
+      backdrop-filter: blur(20px);
+    }
+
+    .modal-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 20px;
+      margin-bottom: 22px;
+    }
+
+    .modal-title {
+      font-size: 38px;
+      font-weight: 800;
+    }
+
+    .close {
+      width: 56px;
+      height: 56px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: #f0f3f4;
+      color: var(--muted);
+      font-size: 36px;
+      line-height: 1;
+    }
+
+    .modal-section {
+      padding: 22px;
+      border-radius: 24px;
+      border: 1px solid var(--line);
+      background: #f7fcfa;
+    }
+
+    .modal-section + .modal-section { margin-top: 16px; }
+
+    .section-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .section-title {
+      font-size: 26px;
+      font-weight: 800;
+    }
+
+    .input-row {
+      display: flex;
+      align-items: center;
+      margin-top: 18px;
+      border: 1px solid #cde9df;
+      border-radius: 18px;
+      overflow: hidden;
+      background: white;
+    }
+
+    .number {
+      flex: 1;
+      padding: 16px 18px;
+      font-size: 40px;
+      font-weight: 800;
+    }
+
+    .unit {
+      padding: 0 20px;
+      color: var(--muted);
+      font-size: 24px;
+    }
+
+    .modal-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 20px;
+    }
+
+    .ghost,
+    .save {
+      height: 62px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      font-size: 25px;
+      font-weight: 800;
+    }
+
+    .ghost { background: #f0f2f3; color: #243047; }
+    .save { background: var(--green); color: white; }
+
+    @media (max-width: 1040px) {
+      .board { grid-template-columns: 1fr; }
+      .phone { width: 100%; max-width: 430px; margin: 0 auto; }
+      .modal-backdrop { position: static; margin-top: 28px; }
+      .modal { transform: none; width: min(560px, 100%); }
+    }
+  </style>
+</head>
+<body>
+  <main class="board">
+    <section class="window">
+      <div class="titlebar">
+        <div>用眼时间记录</div>
+        <div class="traffic">－ □ ×</div>
+      </div>
+      <div class="content">
+        <div class="hero-row">
+          <div>
+            <div class="title-line">
+              <h1>用眼时间</h1>
+              <span class="status-pill"><span class="dot"></span>统计中</span>
+            </div>
+            <div class="sub">键鼠动作、媒体播放时计入统计</div>
+          </div>
+        </div>
+
+        <div class="today-line">
+          <span>今天</span>
+          <span class="status-pill"><span class="dot"></span>连续 28分</span>
+        </div>
+        <div class="time">2小时 18分</div>
+
+        <div class="grid">
+          <div class="card">
+            <div class="label">昨天</div>
+            <div class="value">1小时42分</div>
+          </div>
+          <div class="card">
+            <div class="label">本周</div>
+            <div class="value">8小时05分</div>
+          </div>
+        </div>
+
+        <div class="settings">
+          <div class="setting-card">
+            <div class="setting-head">
+              <span>连续使用</span>
+              <span class="switch"></span>
+            </div>
+            <div class="small-value">45分钟</div>
+            <div class="hint">多端连续使用达到时间提醒</div>
+          </div>
+          <div class="setting-card">
+            <div class="setting-head">
+              <span>每日累计使用</span>
+              <span class="switch"></span>
+            </div>
+            <div class="small-value">5小时30分</div>
+            <div class="hint">多端今日总计达到时间提醒</div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <div class="button">统计</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="phone">
+      <div class="phone-top">
+        <span>15:30</span>
+        <span>5G 41%</span>
+      </div>
+      <div class="hero-row">
+        <div>
+          <div class="title-line">
+            <h1>用眼时间</h1>
+            <span class="status-pill"><span class="dot"></span>统计中</span>
+          </div>
+          <div class="sub">亮屏时计入统计</div>
+        </div>
+        <button class="light-start">启动</button>
+      </div>
+      <div class="today-line">
+        <span>今天</span>
+        <span class="status-pill"><span class="dot"></span>连续 28分</span>
+      </div>
+      <div class="time">2小时18分</div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="label">昨天</div>
+          <div class="value">1小时42分</div>
+        </div>
+        <div class="card">
+          <div class="label">本周</div>
+          <div class="value">8小时05分</div>
+        </div>
+      </div>
+
+      <div class="settings">
+        <div class="setting-card">
+          <div class="setting-head">
+            <span>连续使用</span>
+            <span class="switch"></span>
+          </div>
+          <div class="small-value">45分钟</div>
+          <div class="hint">多端连续使用达到时间提醒</div>
+        </div>
+        <div class="setting-card">
+          <div class="setting-head">
+            <span>每日累计使用</span>
+            <span class="switch"></span>
+          </div>
+          <div class="small-value">5小时30分</div>
+          <div class="hint">多端今日总计达到时间提醒</div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <div class="button">统计</div>
+      </div>
+    </section>
+  </main>
+
+  <aside class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head">
+        <div class="modal-title">提醒设置</div>
+        <div class="close">×</div>
+      </div>
+
+      <div class="modal-section">
+        <div class="section-row">
+          <div>
+            <div class="section-title">连续使用提醒</div>
+            <div class="hint">一天内，每次达到即提醒，电脑和手机合并计算。但任意设备中断使用3分钟后，重新开始计算。</div>
+          </div>
+          <span class="switch"></span>
+        </div>
+        <div class="input-row">
+          <div class="number">45</div>
+          <div class="unit">分钟</div>
+        </div>
+      </div>
+
+      <div class="modal-section">
+        <div class="section-row">
+          <div>
+            <div class="section-title">每日累计提醒</div>
+            <div class="hint">一天内，达到则只提醒一次。电脑和手机合并计算。</div>
+          </div>
+          <span class="switch"></span>
+        </div>
+        <div class="input-row">
+          <div class="number">330</div>
+          <div class="unit">分钟（5小时30分）</div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <div class="ghost">取消</div>
+        <div class="save">保存</div>
+      </div>
+    </div>
+  </aside>
+</body>
+</html>
