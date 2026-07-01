@@ -29,6 +29,7 @@ public sealed class TrackingController : IDisposable
     private int _tickInProgress;
     private bool _hasPendingImmediateSave;
     private bool _pendingReminderNotification;
+    private int _pendingReminderStep;
     private bool _disposed;
 
     public TrackingController(NotificationService notificationService)
@@ -155,6 +156,7 @@ public sealed class TrackingController : IDisposable
         TrackingUpdatedEventArgs? update = null;
         StateSaveSnapshot? snapshotToSave = null;
         var shouldShowReminder = false;
+        var shouldShowReminderStep = 0;
         var saveIsImmediate = false;
 
         try
@@ -184,6 +186,7 @@ public sealed class TrackingController : IDisposable
                     _accumulator.Today.LastReminderStep = record.LastReminderStep;
                     _hasPendingImmediateSave = true;
                     _pendingReminderNotification = true;
+                    _pendingReminderStep = record.LastReminderStep;
                 }
 
                 if (_hasPendingImmediateSave)
@@ -207,9 +210,11 @@ public sealed class TrackingController : IDisposable
                 lock (_gate)
                 {
                     _pendingReminderNotification = false;
+                    shouldShowReminderStep = _pendingReminderStep;
+                    _pendingReminderStep = 0;
                 }
 
-                TryShowDailyReminder();
+                TryShowDailyReminder(shouldShowReminderStep);
             }
 
             if (saveIsImmediate && saveSucceeded)
@@ -299,11 +304,11 @@ public sealed class TrackingController : IDisposable
         }
     }
 
-    private void TryShowDailyReminder()
+    private void TryShowDailyReminder(int reminderStep)
     {
         try
         {
-            _notificationService.ShowDailyReminder(Settings);
+            _notificationService.ShowDailyReminder(Settings, reminderStep);
         }
         catch (Exception)
         {

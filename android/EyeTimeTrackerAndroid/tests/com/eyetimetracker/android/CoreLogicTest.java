@@ -58,6 +58,8 @@ public final class CoreLogicTest {
     private static void shouldFormatReminderAlertText() {
         assertEquals("用眼提醒", ReminderAlert.title(), "formats reminder title");
         assertEquals("今天用眼时间已达到 5小时30分，建议休息一下眼睛。", ReminderAlert.message(330), "formats reminder message");
+        assertEquals("今天用眼时间已经第2次达到330分钟了，建议休息一下眼睛。", ReminderAlert.message(330, true, 2), "formats repeat reminder message");
+        assertEquals("今天用眼时间已达到 5小时30分，建议休息一下眼睛。", ReminderAlert.message(330, false, 2), "formats once reminder message");
     }
 
     private static void shouldNotifyOnceOrAtRepeatMultiples() {

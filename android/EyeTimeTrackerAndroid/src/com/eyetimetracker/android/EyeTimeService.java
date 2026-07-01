@@ -25,6 +25,8 @@ public final class EyeTimeService extends Service implements SensorEventListener
     public static final String ACTION_START = "com.eyetimetracker.android.START";
     public static final String ACTION_STOP = "com.eyetimetracker.android.STOP";
     public static final String EXTRA_REMINDER_MINUTES = "reminder_minutes";
+    public static final String EXTRA_REMINDER_REPEAT = "reminder_repeat";
+    public static final String EXTRA_REMINDER_STEP = "reminder_step";
 
     private static final String CHANNEL_ID = "eye_time_tracker";
     private static final String REMINDER_CHANNEL_ID = "eye_time_tracker_reminders";
@@ -137,7 +139,7 @@ public final class EyeTimeService extends Service implements SensorEventListener
                 today.lastReminderStep)) {
             int reminderStep = ReminderPolicy.reachedStep(today.totalSeconds, reminderMinutes);
             store.markReminderShown(todayDate, reminderStep);
-            showReminder(reminderMinutes);
+            showReminder(reminderMinutes, repeatReminder, reminderStep);
         }
         updateForegroundNotification(today.totalSeconds);
         sendBroadcast(new Intent(ACTION_STATE_CHANGED));
@@ -195,10 +197,15 @@ public final class EyeTimeService extends Service implements SensorEventListener
         }
     }
 
-    private void showReminder(int reminderMinutes) {
-        sendBroadcast(new Intent(ACTION_REMINDER).putExtra(EXTRA_REMINDER_MINUTES, reminderMinutes));
+    private void showReminder(int reminderMinutes, boolean repeatReminder, int reminderStep) {
+        sendBroadcast(new Intent(ACTION_REMINDER)
+                .putExtra(EXTRA_REMINDER_MINUTES, reminderMinutes)
+                .putExtra(EXTRA_REMINDER_REPEAT, repeatReminder)
+                .putExtra(EXTRA_REMINDER_STEP, reminderStep));
         Intent alertIntent = new Intent(this, ReminderActivity.class)
                 .putExtra(ReminderActivity.EXTRA_REMINDER_MINUTES, reminderMinutes)
+                .putExtra(ReminderActivity.EXTRA_REMINDER_REPEAT, repeatReminder)
+                .putExtra(ReminderActivity.EXTRA_REMINDER_STEP, reminderStep)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent alertPendingIntent = PendingIntent.getActivity(
                 this,
@@ -208,9 +215,10 @@ public final class EyeTimeService extends Service implements SensorEventListener
         Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                 ? new Notification.Builder(this, REMINDER_CHANNEL_ID)
                 : new Notification.Builder(this);
+        String message = ReminderAlert.message(reminderMinutes, repeatReminder, reminderStep);
         Notification notification = builder
                 .setContentTitle(ReminderAlert.title())
-                .setContentText(ReminderAlert.message(reminderMinutes))
+                .setContentText(message)
                 .setSmallIcon(R.drawable.ic_launcher)
                 .setContentIntent(alertPendingIntent)
                 .setFullScreenIntent(alertPendingIntent, true)

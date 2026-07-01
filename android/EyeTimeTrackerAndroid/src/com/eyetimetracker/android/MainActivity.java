@@ -59,7 +59,9 @@ public final class MainActivity extends Activity {
         @Override public void onReceive(Context context, Intent intent) {
             if (intent != null && EyeTimeService.ACTION_REMINDER.equals(intent.getAction())) {
                 int reminderMinutes = intent.getIntExtra(EyeTimeService.EXTRA_REMINDER_MINUTES, store.getReminderMinutes());
-                showReminderAlert(reminderMinutes);
+                boolean repeatReminder = intent.getBooleanExtra(EyeTimeService.EXTRA_REMINDER_REPEAT, store.isRepeatReminderEnabled());
+                int reminderStep = Math.max(0, intent.getIntExtra(EyeTimeService.EXTRA_REMINDER_STEP, 0));
+                showReminderAlert(reminderMinutes, repeatReminder, reminderStep);
             }
             refresh();
         }
@@ -404,7 +406,7 @@ public final class MainActivity extends Activity {
         }
     }
 
-    private void showReminderAlert(int reminderMinutes) {
+    private void showReminderAlert(int reminderMinutes, boolean repeatReminder, int reminderStep) {
         Dialog dialog = new Dialog(this);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         LinearLayout content = new LinearLayout(this);
@@ -421,7 +423,7 @@ public final class MainActivity extends Activity {
         content.addView(title, matchWrap());
 
         TextView message = new TextView(this);
-        message.setText(ReminderAlert.message(reminderMinutes));
+        message.setText(ReminderAlert.message(reminderMinutes, repeatReminder, reminderStep));
         message.setTextSize(18);
         message.setTextColor(COLOR_MUTED);
         message.setLineSpacing(0f, 1.15f);

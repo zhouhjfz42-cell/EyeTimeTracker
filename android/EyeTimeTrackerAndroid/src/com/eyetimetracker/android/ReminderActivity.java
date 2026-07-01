@@ -12,6 +12,8 @@ import android.widget.TextView;
 
 public final class ReminderActivity extends Activity {
     public static final String EXTRA_REMINDER_MINUTES = "reminder_minutes";
+    public static final String EXTRA_REMINDER_REPEAT = "reminder_repeat";
+    public static final String EXTRA_REMINDER_STEP = "reminder_step";
 
     private static final int COLOR_BG = Color.rgb(248, 252, 250);
     private static final int COLOR_TEXT = Color.rgb(17, 24, 39);
@@ -23,10 +25,12 @@ public final class ReminderActivity extends Activity {
         super.onCreate(bundle);
         int reminderMinutes = ReminderThreshold.clampMinutes(
                 getIntent().getIntExtra(EXTRA_REMINDER_MINUTES, ReminderThreshold.DEFAULT_MINUTES));
-        setContentView(buildUi(reminderMinutes));
+        boolean repeatReminder = getIntent().getBooleanExtra(EXTRA_REMINDER_REPEAT, false);
+        int reminderStep = Math.max(0, getIntent().getIntExtra(EXTRA_REMINDER_STEP, 0));
+        setContentView(buildUi(reminderMinutes, repeatReminder, reminderStep));
     }
 
-    private LinearLayout buildUi(int reminderMinutes) {
+    private LinearLayout buildUi(int reminderMinutes, boolean repeatReminder, int reminderStep) {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER);
@@ -50,7 +54,7 @@ public final class ReminderActivity extends Activity {
         card.addView(title, matchWrap());
 
         TextView message = new TextView(this);
-        message.setText(ReminderAlert.message(reminderMinutes));
+        message.setText(ReminderAlert.message(reminderMinutes, repeatReminder, reminderStep));
         message.setTextSize(18);
         message.setTextColor(COLOR_MUTED);
         message.setLineSpacing(0f, 1.15f);

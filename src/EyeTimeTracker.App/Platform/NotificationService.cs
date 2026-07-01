@@ -15,7 +15,7 @@ public sealed class NotificationService
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
     }
 
-    public void ShowDailyReminder(TrackerSettings settings)
+    public void ShowDailyReminder(TrackerSettings settings, int reminderStep)
     {
         if (_dispatcher.IsDisposed || !_dispatcher.IsHandleCreated)
         {
@@ -26,7 +26,7 @@ public sealed class NotificationService
         {
             try
             {
-                _dispatcher.BeginInvoke(() => ShowDailyReminderCore(settings));
+                _dispatcher.BeginInvoke(() => ShowDailyReminderCore(settings, reminderStep));
             }
             catch (InvalidOperationException)
             {
@@ -35,13 +35,13 @@ public sealed class NotificationService
             return;
         }
 
-        ShowDailyReminderCore(settings);
+        ShowDailyReminderCore(settings, reminderStep);
     }
 
-    private void ShowDailyReminderCore(TrackerSettings settings)
+    private void ShowDailyReminderCore(TrackerSettings settings, int reminderStep)
     {
         var title = ReminderMessage.Title;
-        var body = ReminderMessage.Body(settings.ReminderThresholdSeconds);
+        var body = ReminderMessage.Body(settings.ReminderThresholdSeconds, settings.RepeatReminder, reminderStep);
         ShowTopMostReminder(title, body);
         _notifyIcon.BalloonTipTitle = title;
         _notifyIcon.BalloonTipText = body;
