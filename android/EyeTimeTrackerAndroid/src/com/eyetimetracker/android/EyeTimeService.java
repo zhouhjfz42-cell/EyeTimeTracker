@@ -46,6 +46,8 @@ public final class EyeTimeService extends Service implements SensorEventListener
     };
 
     private EyeTimeStore store;
+    private AndroidSyncRunner syncRunner;
+    private AndroidSyncTriggerPolicy syncPolicy;
     private SensorManager sensorManager;
     private AudioManager audioManager;
     private PowerManager powerManager;
@@ -56,10 +58,13 @@ public final class EyeTimeService extends Service implements SensorEventListener
     private float lastY;
     private float lastZ;
     private boolean counting;
+    private boolean syncInFlight;
 
     @Override public void onCreate() {
         super.onCreate();
         store = new EyeTimeStore(this);
+        syncRunner = new AndroidSyncRunner(store);
+        syncPolicy = new AndroidSyncTriggerPolicy();
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
@@ -124,8 +129,11 @@ public final class EyeTimeService extends Service implements SensorEventListener
         boolean mediaActive = audioManager != null && audioManager.isMusicActive();
         ActivityDecision decision = ActivityDecision.evaluate(screenOn, now - lastMotionAt, mediaActive, elapsed, MOTION_THRESHOLD_MS);
         counting = decision.isCounting();
+        boolean countedThisTick = false;
         if (counting && elapsed > 0L && elapsed <= MAX_COUNTABLE_TICK_MS) {
-            store.addSeconds(LocalDate.now(), elapsed / 1000L);
+            store.addSeconds(LocalDate.now(), elapsed / 1000L, now / 1000L, "android-screen");
+            syncPolicy.markLocalChange(now);
+            countedThisTick = true;
         } else if (!counting) {
             store.finishCurrentSession(LocalDate.now());
         }
@@ -145,6 +153,28 @@ public final class EyeTimeService extends Service implements SensorEventListener
         }
         updateForegroundNotification(today.totalSeconds);
         sendBroadcast(new Intent(ACTION_STATE_CHANGED));
+        maybeRunSync(now, countedThisTick);
+    }
+
+    private void maybeRunSync(long now, boolean allowLocalChangeSync) {
+        SyncSettings settings = store.getSyncSettings();
+        if (!settings.isPaired || syncInFlight) {
+            return;
+        }
+        if (!syncPolicy.shouldSyncForServiceTick(now)
+                && (!allowLocalChangeSync || !syncPolicy.shouldSyncForLocalChange(now))) {
+            return;
+        }
+
+        syncPolicy.markSyncAttempt(now);
+        syncInFlight = true;
+        new Thread(() -> {
+            try {
+                syncRunner.syncOnce();
+            } finally {
+                syncInFlight = false;
+            }
+        }, "EyeTimeSync").start();
     }
 
     private void registerSensor() {

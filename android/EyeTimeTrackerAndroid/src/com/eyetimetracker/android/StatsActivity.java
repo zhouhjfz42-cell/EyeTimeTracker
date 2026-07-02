@@ -54,6 +54,20 @@ public final class StatsActivity extends Activity {
         rangeStart = selectedMonthStart;
         rangeEnd = today;
         setContentView(buildUi());
+        runSyncOnOpen();
+    }
+
+    private void runSyncOnOpen() {
+        SyncSettings settings = store.getSyncSettings();
+        AndroidSyncTriggerPolicy policy = new AndroidSyncTriggerPolicy();
+        if (!settings.isPaired || !policy.shouldSyncForStatsOpen()) {
+            return;
+        }
+
+        new Thread(() -> {
+            new AndroidSyncRunner(store).syncOnce();
+            runOnUiThread(() -> setContentView(buildUi()));
+        }, "EyeTimeStatsSync").start();
     }
 
     private View buildUi() {
@@ -94,6 +108,8 @@ public final class StatsActivity extends Activity {
         addCard(metrics, metricCard("最长连续", DurationFormatter.format(longestSession(todaySummary)), COLOR_YELLOW), 0, 1);
         addCard(metrics, metricCard("电脑 / 手机", todaySummary.totalSeconds > 0 ? "0% / 100%" : "0% / 0%", COLOR_TEXT), 1, 0);
         addCard(metrics, metricCard("提醒触发", Math.max(0, todaySummary.lastReminderStep) + "次", COLOR_TEXT), 1, 1);
+
+        dayPanel.addView(deviceLegend(), matchWrapTop(12));
 
         HourlyHeatView heatView = new HourlyHeatView(this);
         heatView.setHourlySeconds(todaySummary.hourlySeconds);
@@ -435,6 +451,31 @@ public final class StatsActivity extends Activity {
         valueText.setAutoSizeTextTypeUniformWithConfiguration(15, 19, 1, TypedValue.COMPLEX_UNIT_SP);
         card.addView(valueText, matchWrapTop(12));
         return card;
+    }
+
+    private LinearLayout deviceLegend() {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.addView(legendItem("\u7535\u8111", COLOR_GREEN), wrapWrap());
+        LinearLayout.LayoutParams phoneParams = wrapWrap();
+        phoneParams.leftMargin = dp(22);
+        row.addView(legendItem("\u624b\u673a", COLOR_BLUE), phoneParams);
+        return row;
+    }
+
+    private LinearLayout legendItem(String label, int color) {
+        LinearLayout item = new LinearLayout(this);
+        item.setOrientation(LinearLayout.HORIZONTAL);
+        item.setGravity(Gravity.CENTER_VERTICAL);
+        View dot = new View(this);
+        dot.setBackground(rounded(color, dp(999), Color.TRANSPARENT, 0));
+        item.addView(dot, new LinearLayout.LayoutParams(dp(10), dp(10)));
+        TextView labelView = text(label, 13, COLOR_MUTED, false);
+        LinearLayout.LayoutParams labelParams = wrapWrap();
+        labelParams.leftMargin = dp(6);
+        item.addView(labelView, labelParams);
+        return item;
     }
 
     private void addInsightCard(LinearLayout row, View card, int column) {

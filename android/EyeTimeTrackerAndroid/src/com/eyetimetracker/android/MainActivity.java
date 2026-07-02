@@ -32,6 +32,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class MainActivity extends Activity {
     private static final int COLOR_BG = Color.rgb(248, 252, 250);
@@ -52,7 +53,10 @@ public final class MainActivity extends Activity {
     private TextView monthValue;
     private TextView reminderValue;
     private TextView statusValue;
+    private TextView pairingButton;
     private View statusDot;
+    private boolean syncStatusCheckInFlight;
+    private long nextSyncStatusCheckMillis;
     private boolean receiverRegistered;
 
         private final BroadcastReceiver receiver = new BroadcastReceiver() {
@@ -94,6 +98,7 @@ public final class MainActivity extends Activity {
         }
         receiverRegistered = true;
         handler.post(refreshRunnable);
+        nextSyncStatusCheckMillis = 0L;
         refresh();
     }
 
@@ -169,17 +174,23 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams actionsParams = matchWrapTop(24);
         root.addView(actions, actionsParams);
 
-        TextView statsButton = actionButton("统计", false);
-        statsButton.setOnClickListener(v -> startActivity(new Intent(this, StatsActivity.class)));
-        actions.addView(statsButton, weightedButtonParams(0, dp(6)));
+        pairingButton = actionButton("\u624b\u673a\u914d\u5bf9", false);
+        pairingButton.setOnClickListener(v -> {
+            if (store.getSyncSettings().isPaired) {
+                showDisconnectDialog();
+                return;
+            }
 
-        TextView device = new TextView(this);
-        device.setText("设备 ID：" + store.getDeviceId());
-        device.setTextSize(11);
-        device.setTextColor(Color.rgb(152, 162, 179));
-        device.setSingleLine(true);
-        LinearLayout.LayoutParams deviceParams = matchWrapTop(16);
-        root.addView(device, deviceParams);
+            showPairingDialog();
+        });
+        actions.addView(pairingButton, weightedButtonParams(0, dp(6)));
+
+        TextView statsButton = actionButton("统计", true);
+        statsButton.setOnClickListener(v -> startActivity(new Intent(this, StatsActivity.class)));
+        actions.addView(statsButton, weightedButtonParams(dp(6), 0));
+
+        root.addView(helpText("1. 将手机和电脑配对，共同统计注视两块屏幕的时间，有统计到重合时段的会删除重复统计。但依然会有部分误差。"), matchWrapTop(18));
+        root.addView(helpText("2. 使用手机几秒内会自动开始统计，如果没有开始，点击右上角的“启动”。"), matchWrapTop(8));
         return scroll;
     }
 
@@ -202,11 +213,20 @@ public final class MainActivity extends Activity {
         row.addView(statusDot, dotParams);
 
         statusValue = new TextView(this);
-        statusValue.setText("后台统计中");
+        statusValue.setText("统计中");
         statusValue.setTextSize(18);
         statusValue.setTextColor(COLOR_MUTED);
         row.addView(statusValue, wrapWrap());
         return row;
+    }
+
+    private TextView helpText(String value) {
+        TextView text = new TextView(this);
+        text.setText(value);
+        text.setTextSize(12);
+        text.setTextColor(COLOR_MUTED);
+        text.setLineSpacing(0f, 1.15f);
+        return text;
     }
 
     private LinearLayout buildMetricCard(String label, TextView value, View.OnClickListener clickListener) {
@@ -288,8 +308,34 @@ public final class MainActivity extends Activity {
         weekValue.setText(DurationFormatter.format(store.displayWeekSeconds(today)));
         monthValue.setText(DurationFormatter.format(store.displayMonthSeconds(today)));
         reminderValue.setText(ReminderThreshold.format(store.getReminderMinutes()));
-        statusValue.setText("后台统计中");
+        SyncSettings syncSettings = store.getSyncSettings();
+        statusValue.setText(ConnectionStatusText.format("统计中", syncSettings.isPaired, syncSettings.lastError == null || syncSettings.lastError.trim().isEmpty(), "电脑"));
+        if (pairingButton != null) {
+            pairingButton.setText(syncSettings.isPaired ? "\u65ad\u5f00\u8fde\u63a5" : "\u624b\u673a\u914d\u5bf9");
+        }
         statusDot.setBackground(oval(COLOR_GREEN));
+        checkPcStillConnected(syncSettings);
+    }
+
+    private void checkPcStillConnected(SyncSettings syncSettings) {
+        if (syncSettings == null || !syncSettings.isPaired || syncStatusCheckInFlight) {
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        if (now < nextSyncStatusCheckMillis) {
+            return;
+        }
+
+        syncStatusCheckInFlight = true;
+        nextSyncStatusCheckMillis = now + 5000L;
+        new Thread(() -> {
+            new AndroidSyncRunner(store).syncOnce();
+            handler.post(() -> {
+                syncStatusCheckInFlight = false;
+                refresh();
+            });
+        }, "EyeTimeConnectionCheck").start();
     }
 
     private void showReminderDialog() {
@@ -403,6 +449,7 @@ public final class MainActivity extends Activity {
             refresh();
             dialog.dismiss();
             Toast.makeText(this, "提醒时间已保存", Toast.LENGTH_SHORT).show();
+            runSyncAfterSettingsChange();
         });
         actions.addView(save, weightedButtonParams(dp(6), 0));
 
@@ -418,6 +465,286 @@ public final class MainActivity extends Activity {
         dialog.show();
         if (window != null) {
             window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        }
+    }
+
+    private void showPairingDialog() {
+        Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        SyncSettings currentSettings = store.getSyncSettings();
+        String pairingCode = PairingCodeGenerator.generate();
+        AtomicBoolean pairingStopped = new AtomicBoolean(false);
+
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(22), dp(22), dp(22), dp(24));
+        panel.setBackground(rounded(Color.WHITE, dp(26), Color.rgb(229, 235, 232), 1));
+
+        TextView title = new TextView(this);
+        title.setText("\u624b\u673a\u914d\u5bf9");
+        title.setTextSize(24);
+        title.setTextColor(COLOR_TEXT);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setIncludeFontPadding(false);
+        panel.addView(title, matchWrap());
+
+        TextView hint = new TextView(this);
+        hint.setText("\u5148\u5728\u7535\u8111\u4e0a\u70b9\u51fb\u201c\u624b\u673a\u914d\u5bf9\u201d\uff0c\u8f93\u5165\u4e0b\u9762\u7684 6 \u4f4d\u7801\u3002\u624b\u673a\u4f1a\u81ea\u52a8\u5bfb\u627e\u7535\u8111\uff0c\u627e\u4e0d\u5230\u65f6\u518d\u624b\u52a8\u586b\u5730\u5740\u3002");
+        hint.setTextSize(14);
+        hint.setTextColor(COLOR_MUTED);
+        hint.setLineSpacing(0f, 1.12f);
+        panel.addView(hint, matchWrapTop(10));
+
+        TextView code = new TextView(this);
+        code.setText(pairingCode);
+        code.setTextSize(42);
+        code.setTypeface(Typeface.DEFAULT_BOLD);
+        code.setGravity(Gravity.CENTER);
+        code.setTextColor(COLOR_GREEN);
+        code.setIncludeFontPadding(false);
+        code.setBackground(rounded(COLOR_SOFT, dp(18), COLOR_LINE, 1));
+        LinearLayout.LayoutParams codeParams = matchWrapTop(18);
+        codeParams.height = dp(78);
+        panel.addView(code, codeParams);
+
+        EditText hostInput = new EditText(this);
+        hostInput.setHint("\u7535\u8111 IP \u5730\u5740\uff0c\u4f8b\u5982 192.168.1.8");
+        hostInput.setText(currentSettings.peerHost);
+        hostInput.setTextSize(16);
+        hostInput.setSingleLine(true);
+        hostInput.setInputType(InputType.TYPE_CLASS_TEXT);
+        hostInput.setTextColor(COLOR_TEXT);
+        hostInput.setVisibility(View.GONE);
+        panel.addView(hostInput, matchWrapTop(18));
+
+        EditText portInput = new EditText(this);
+        portInput.setHint("\u7aef\u53e3");
+        portInput.setText(String.valueOf(currentSettings.peerPort > 0 ? currentSettings.peerPort : 17420));
+        portInput.setTextSize(16);
+        portInput.setSingleLine(true);
+        portInput.setInputType(InputType.TYPE_CLASS_NUMBER);
+        portInput.setTextColor(COLOR_TEXT);
+        portInput.setVisibility(View.GONE);
+        panel.addView(portInput, matchWrapTop(10));
+
+        TextView status = new TextView(this);
+        status.setText("\u6b63\u5728\u540c\u4e00\u4e2a WiFi \u91cc\u5bfb\u627e\u7535\u8111\u2026");
+        status.setTextSize(13);
+        status.setTextColor(COLOR_MUTED);
+        status.setLineSpacing(0f, 1.1f);
+        panel.addView(status, matchWrapTop(12));
+
+        final TextView[] pairButton = new TextView[1];
+        TextView manual = lightTopButton("\u627e\u4e0d\u5230\u7535\u8111\uff1f\u624b\u52a8\u586b\u5199");
+        manual.setOnClickListener(v -> {
+            pairingStopped.set(true);
+            hostInput.setVisibility(View.VISIBLE);
+            portInput.setVisibility(View.VISIBLE);
+            manual.setVisibility(View.GONE);
+            if (pairButton[0] != null) {
+                pairButton[0].setEnabled(true);
+                pairButton[0].setText("\u624b\u52a8\u8fde\u63a5");
+            }
+            status.setText("\u8bf7\u8f93\u5165\u7535\u8111 IP \u5730\u5740\uff0c\u7136\u540e\u70b9\u51fb\u624b\u52a8\u8fde\u63a5\u3002");
+        });
+        panel.addView(manual, matchWrapTop(12));
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setGravity(Gravity.CENTER);
+        panel.addView(actions, matchWrapTop(20));
+
+        TextView cancel = actionButton("\u53d6\u6d88", false);
+        cancel.setOnClickListener(v -> dialog.dismiss());
+        actions.addView(cancel, weightedButtonParams(0, dp(6)));
+
+        TextView pair = actionButton("\u7b49\u5f85\u7535\u8111\u786e\u8ba4", true);
+        pairButton[0] = pair;
+        pair.setEnabled(false);
+        pair.setOnClickListener(v -> {
+            String manualHost = hostInput.getText().toString().trim();
+            int manualPort = parsePort(portInput.getText().toString(), 17420);
+            if (manualHost.isEmpty()) {
+                Toast.makeText(this, "\u8bf7\u8f93\u5165\u7535\u8111 IP \u5730\u5740", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            if (manualPort <= 0 || manualPort > 65535) {
+                Toast.makeText(this, "\u8bf7\u8f93\u5165\u6b63\u786e\u7aef\u53e3", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            pair.setEnabled(false);
+            pair.setText("\u8fde\u63a5\u4e2d");
+            status.setText("\u6b63\u5728\u8fde\u63a5\u7535\u8111\u2026");
+            new Thread(() -> {
+                SyncSettings settings = store.getSyncSettings();
+                settings.peerHost = manualHost;
+                settings.peerPort = manualPort;
+
+                boolean paired = new AndroidPairingClient().pair(settings, store.getDeviceId(), pairingCode);
+                store.saveSyncSettings(settings);
+                handler.post(() -> {
+                    pair.setEnabled(true);
+                    pair.setText("\u624b\u52a8\u8fde\u63a5");
+                    status.setText(paired ? "\u5df2\u548c\u7535\u8111\u914d\u5bf9\u3002" : "\u914d\u5bf9\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u914d\u5bf9\u7801\u548c\u7535\u8111\u662f\u5426\u5728\u540c\u4e00 WiFi\u3002");
+                    Toast.makeText(
+                            this,
+                            paired ? "\u5df2\u548c\u7535\u8111\u914d\u5bf9" : "\u914d\u5bf9\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u914d\u5bf9\u7801\u548c\u7535\u8111\u72b6\u6001",
+                            Toast.LENGTH_SHORT).show();
+                    if (paired) {
+                        refresh();
+                        dialog.dismiss();
+                    }
+                });
+            }, "EyeTimePairing").start();
+        });
+        actions.addView(pair, weightedButtonParams(dp(6), 0));
+
+        dialog.setContentView(panel);
+        dialog.setOnDismissListener(d -> pairingStopped.set(true));
+        dialog.show();
+        Window shownWindow = dialog.getWindow();
+        if (shownWindow != null) {
+            shownWindow.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            shownWindow.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.9f), ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
+        startAutomaticPairing(pairingStopped, pairingCode, status, pair, hostInput, portInput, manual, dialog);
+    }
+
+    private void showDisconnectDialog() {
+        Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(24), dp(24), dp(24), dp(24));
+        panel.setBackground(rounded(Color.WHITE, dp(26), Color.rgb(229, 235, 232), 1));
+
+        TextView title = new TextView(this);
+        title.setText("\u65ad\u5f00\u8fde\u63a5");
+        title.setTextSize(24);
+        title.setTextColor(COLOR_TEXT);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setIncludeFontPadding(false);
+        panel.addView(title, matchWrap());
+
+        TextView message = new TextView(this);
+        message.setText("\u65ad\u5f00\u540e\uff0c\u4e0b\u6b21\u8fde\u63a5\u9700\u8981\u91cd\u65b0\u914d\u5bf9\u3002");
+        message.setTextSize(15);
+        message.setTextColor(COLOR_MUTED);
+        message.setLineSpacing(0f, 1.15f);
+        panel.addView(message, matchWrapTop(12));
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setGravity(Gravity.CENTER);
+        panel.addView(actions, matchWrapTop(22));
+
+        TextView cancel = actionButton("\u53d6\u6d88", false);
+        cancel.setOnClickListener(v -> dialog.dismiss());
+        actions.addView(cancel, weightedButtonParams(0, dp(6)));
+
+        TextView disconnect = actionButton("\u65ad\u5f00\u8fde\u63a5", true);
+        disconnect.setOnClickListener(v -> {
+            disconnect.setEnabled(false);
+            disconnect.setText("\u6b63\u5728\u65ad\u5f00");
+            new Thread(() -> {
+                SyncSettings settings = store.getSyncSettings();
+                new AndroidPairingClient().disconnect(settings, store.getDeviceId());
+                store.saveSyncSettings(SyncSettings.unpaired());
+                handler.post(() -> {
+                    refresh();
+                    Toast.makeText(this, "\u5df2\u65ad\u5f00\u7535\u8111", Toast.LENGTH_SHORT).show();
+                    dialog.dismiss();
+                });
+            }, "EyeTimeDisconnect").start();
+        });
+        actions.addView(disconnect, weightedButtonParams(dp(6), 0));
+
+        dialog.setContentView(panel);
+        dialog.show();
+        Window shownWindow = dialog.getWindow();
+        if (shownWindow != null) {
+            shownWindow.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            shownWindow.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.9f), ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
+    }
+
+    private void startAutomaticPairing(
+            AtomicBoolean stopped,
+            String pairingCode,
+            TextView status,
+            TextView pair,
+            EditText hostInput,
+            EditText portInput,
+            TextView manual,
+            Dialog dialog) {
+        new Thread(() -> {
+            AndroidPcDiscoveryClient discoveryClient = new AndroidPcDiscoveryClient();
+            AndroidPairingClient pairingClient = new AndroidPairingClient();
+            for (int attempt = 0; attempt < 150 && !stopped.get(); attempt++) {
+                AndroidPcDiscoveryClient.DiscoveryResult discovery = discoveryClient.discover();
+                if (stopped.get()) {
+                    return;
+                }
+                if (!discovery.found) {
+                    if (attempt == 2) {
+                        handler.post(() -> {
+                            if (!stopped.get()) {
+                                status.setText("\u8fd8\u5728\u5bfb\u627e\u7535\u8111\u3002\u8bf7\u786e\u8ba4\u7535\u8111\u5df2\u6253\u5f00\u201c\u624b\u673a\u914d\u5bf9\u201d\u7a97\u53e3\u3002");
+                            }
+                        });
+                    }
+                    sleepPairingInterval(stopped);
+                    continue;
+                }
+
+                SyncSettings settings = store.getSyncSettings();
+                settings.peerHost = discovery.host;
+                settings.peerPort = discovery.port;
+                boolean paired = pairingClient.pair(settings, store.getDeviceId(), pairingCode);
+                store.saveSyncSettings(settings);
+                if (paired) {
+                    stopped.set(true);
+                    handler.post(() -> {
+                        status.setText("\u5df2\u548c\u7535\u8111\u914d\u5bf9\u3002");
+                        Toast.makeText(this, "\u5df2\u548c\u7535\u8111\u914d\u5bf9", Toast.LENGTH_SHORT).show();
+                        refresh();
+                        dialog.dismiss();
+                    });
+                    return;
+                }
+
+                handler.post(() -> {
+                    if (!stopped.get()) {
+                        status.setText("\u5df2\u627e\u5230\u7535\u8111\uff0c\u7b49\u5f85\u7535\u8111\u786e\u8ba4\u914d\u5bf9\u7801\u2026");
+                    }
+                });
+                sleepPairingInterval(stopped);
+            }
+
+            handler.post(() -> {
+                if (!stopped.get()) {
+                    pair.setEnabled(true);
+                    pair.setText("\u624b\u52a8\u8fde\u63a5");
+                    hostInput.setVisibility(View.VISIBLE);
+                    portInput.setVisibility(View.VISIBLE);
+                    manual.setVisibility(View.GONE);
+                    status.setText("\u6682\u65f6\u6ca1\u6709\u81ea\u52a8\u8fde\u4e0a\u3002\u53ef\u4ee5\u624b\u52a8\u586b\u5199\u7535\u8111 IP \u5730\u5740\u540e\u518d\u8fde\u63a5\u3002");
+                }
+            });
+        }, "EyeTimeAutoPairing").start();
+    }
+
+    private static void sleepPairingInterval(AtomicBoolean stopped) {
+        for (int i = 0; i < 20 && !stopped.get(); i++) {
+            try {
+                Thread.sleep(100L);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                stopped.set(true);
+                return;
+            }
         }
     }
 
@@ -474,6 +801,14 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private int parsePort(String raw, int fallback) {
+        try {
+            return Integer.parseInt(raw.trim());
+        } catch (Exception ex) {
+            return fallback;
+        }
+    }
+
     private void startTrackerService() {
         Intent intent = new Intent(this, EyeTimeService.class);
         intent.setAction(EyeTimeService.ACTION_START);
@@ -482,6 +817,15 @@ public final class MainActivity extends Activity {
         } else {
             startService(intent);
         }
+    }
+
+    private void runSyncAfterSettingsChange() {
+        SyncSettings settings = store.getSyncSettings();
+        if (!settings.isPaired) {
+            return;
+        }
+
+        new Thread(() -> new AndroidSyncRunner(store).syncOnce(), "EyeTimeSettingsSync").start();
     }
 
     private void requestNotificationPermission() {

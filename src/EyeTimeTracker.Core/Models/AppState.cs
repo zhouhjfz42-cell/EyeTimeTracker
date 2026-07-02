@@ -2,8 +2,12 @@ namespace EyeTimeTracker.Core.Models;
 
 public sealed class AppState
 {
+    public string DeviceId { get; set; } = Guid.NewGuid().ToString("N");
+    public string Platform { get; set; } = "windows";
     public TrackerSettings Settings { get; set; } = TrackerSettings.Default;
     public List<DailyRecord> Records { get; set; } = new();
+    public List<UsageSegment> Segments { get; set; } = new();
+    public SyncSettings Sync { get; set; } = SyncSettings.Unpaired;
 
     public DailyRecord GetOrCreateRecord(DateOnly date)
     {
@@ -36,6 +40,29 @@ public sealed class AppState
         if (record.CurrentSessionSeconds < 0)
         {
             record.CurrentSessionSeconds = 0;
+        }
+    }
+
+    public static void Normalize(AppState state)
+    {
+        state.Settings ??= TrackerSettings.Default;
+        state.Records ??= new List<DailyRecord>();
+        state.Segments ??= new List<UsageSegment>();
+        state.Sync ??= SyncSettings.Unpaired;
+
+        if (string.IsNullOrWhiteSpace(state.DeviceId))
+        {
+            state.DeviceId = Guid.NewGuid().ToString("N");
+        }
+
+        if (string.IsNullOrWhiteSpace(state.Platform))
+        {
+            state.Platform = "windows";
+        }
+
+        foreach (var record in state.Records)
+        {
+            NormalizeRecord(record);
         }
     }
 }
