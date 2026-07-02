@@ -1,6 +1,7 @@
 using System.Drawing.Drawing2D;
 using EyeTimeTracker.App.Platform;
 using EyeTimeTracker.App.Tracking;
+using EyeTimeTracker.Core.Formatting;
 using EyeTimeTracker.Core.Models;
 using EyeTimeTracker.Core.Reminders;
 
@@ -26,6 +27,9 @@ public sealed class MainForm : Form
     private readonly FitTextLabel _statusValue;
     private readonly StatusDot _statusDot;
     private readonly Icon _appIcon;
+    private readonly Action? _showPairingDialog;
+    private readonly Action? _disconnectPairing;
+    private RoundedButton? _pairingButton;
     private DateOnly? _displayResetDate;
     private long _todayDisplayBaseline;
     private long _yesterdayDisplayBaseline;
@@ -33,10 +37,17 @@ public sealed class MainForm : Form
     private long _monthDisplayBaseline;
     private bool _closingForExit;
 
-    public MainForm(TrackingController controller, StartupManager startupManager, Icon appIcon)
+    public MainForm(
+        TrackingController controller,
+        StartupManager startupManager,
+        Icon appIcon,
+        Action? showPairingDialog = null,
+        Action? disconnectPairing = null)
     {
         _controller = controller ?? throw new ArgumentNullException(nameof(controller));
         _ = startupManager ?? throw new ArgumentNullException(nameof(startupManager));
+        _showPairingDialog = showPairingDialog;
+        _disconnectPairing = disconnectPairing;
 
         AutoScaleMode = AutoScaleMode.None;
         Text = "\u7528\u773c\u65f6\u95f4\u8bb0\u5f55";
@@ -157,9 +168,9 @@ public sealed class MainForm : Form
         statusValue = new FitTextLabel
         {
             Text = "\u7edf\u8ba1\u4e2d",
-            Bounds = new Rectangle(178, 148, 160, 46),
+            Bounds = new Rectangle(178, 148, 320, 46),
             MaxFontSize = 14F,
-            MinFontSize = 12F,
+            MinFontSize = 10F,
             FontStyle = FontStyle.Regular,
             ForeColor = TextSecondary,
             BackColor = Color.Transparent,
@@ -186,10 +197,28 @@ public sealed class MainForm : Form
         root.Controls.Add(BuildMetricCard("\u672c\u6708", new Rectangle(34, 484, 282, 136), out monthValue));
         root.Controls.Add(BuildReminderCard(new Rectangle(344, 484, 282, 136), out reminderValue));
 
+        if (_showPairingDialog is not null)
+        {
+            _pairingButton = new RoundedButton
+            {
+                Text = "\u624b\u673a\u914d\u5bf9",
+                Bounds = new Rectangle(34, 668, 282, 58),
+                ButtonColor = Color.FromArgb(242, 244, 247),
+                HoverColor = Color.FromArgb(232, 236, 240),
+                PressedColor = Color.FromArgb(220, 226, 232),
+                TextColor = Color.FromArgb(52, 64, 84),
+                Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Bold, GraphicsUnit.Point)
+            };
+            _pairingButton.Click += (_, _) => HandlePairingButtonClick();
+            root.Controls.Add(_pairingButton);
+        }
+
         var statsButton = new RoundedButton
         {
             Text = "\u7edf\u8ba1",
-            Bounds = new Rectangle(200, 668, 260, 58),
+            Bounds = _showPairingDialog is null
+                ? new Rectangle(200, 668, 260, 58)
+                : new Rectangle(344, 668, 282, 58),
             ButtonColor = AccentGreen,
             HoverColor = Color.FromArgb(19, 145, 111),
             PressedColor = Color.FromArgb(17, 124, 96),
@@ -325,8 +354,27 @@ public sealed class MainForm : Form
         _yesterdayValue.Text = FormatDuration(yesterdayTotal);
         _weekValue.Text = FormatDuration(weekTotal);
         _monthValue.Text = FormatDuration(monthTotal);
-        _statusValue.Text = current.IsCounting ? "\u7edf\u8ba1\u4e2d" : "\u6682\u505c";
+        _statusValue.Text = ConnectionStatusFormatter.Format(
+            current.IsCounting ? "\u7edf\u8ba1\u4e2d" : "\u6682\u505c",
+            _controller.IsPaired,
+            _controller.IsPeerOnline,
+            "\u624b\u673a");
         _statusDot.IsActive = current.IsCounting;
+        if (_pairingButton is not null)
+        {
+            _pairingButton.Text = _controller.IsPaired ? "\u65ad\u5f00\u8fde\u63a5" : "\u624b\u673a\u914d\u5bf9";
+        }
+    }
+
+    private void HandlePairingButtonClick()
+    {
+        if (_controller.IsPaired)
+        {
+            _disconnectPairing?.Invoke();
+            return;
+        }
+
+        _showPairingDialog?.Invoke();
     }
 
     private void ShowReminderDialog()

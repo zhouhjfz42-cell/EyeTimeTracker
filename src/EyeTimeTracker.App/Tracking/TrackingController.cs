@@ -1,8 +1,10 @@
 using System.Windows.Forms;
 using EyeTimeTracker.App.Platform;
+using EyeTimeTracker.App.Sync;
 using EyeTimeTracker.Core.Models;
 using EyeTimeTracker.Core.Reminders;
 using EyeTimeTracker.Core.Storage;
+using EyeTimeTracker.Core.Sync;
 using EyeTimeTracker.Core.Tracking;
 
 namespace EyeTimeTracker.App.Tracking;
@@ -11,6 +13,7 @@ public sealed class TrackingController : IDisposable
 {
     private static readonly TimeSpan TickInterval = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan SaveInterval = TimeSpan.FromMinutes(1);
+    private const int PeerOfflineAfterSeconds = 90;
 
     private readonly object _gate = new();
     private readonly object _saveGate = new();
@@ -95,6 +98,31 @@ public sealed class TrackingController : IDisposable
         }
     }
 
+    public bool IsPaired
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _state.Sync.IsPaired;
+            }
+        }
+    }
+
+    public bool IsPeerOnline
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return SyncPeerConnectionState.IsOnline(
+                    _state.Sync,
+                    DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                    PeerOfflineAfterSeconds);
+            }
+        }
+    }
+
     public IReadOnlyList<DailyRecord> GetRecordsSnapshot()
     {
         lock (_gate)
@@ -118,6 +146,26 @@ public sealed class TrackingController : IDisposable
         }
 
         TrySaveSnapshot(snapshot);
+    }
+
+    public PcSyncCoordinator CreateSyncCoordinator()
+    {
+        return new PcSyncCoordinator(LoadSyncStateSnapshot, SaveSyncStateSnapshot);
+    }
+
+    public void DisconnectSyncPeer()
+    {
+        StateSaveSnapshot snapshot;
+        var now = DateTimeOffset.Now;
+
+        lock (_gate)
+        {
+            _state.Sync = SyncSettings.Unpaired;
+            snapshot = CreateSaveSnapshotLocked(now);
+        }
+
+        TrySaveSnapshot(snapshot);
+        RaiseUpdated(Current);
     }
 
     public void Dispose()
@@ -171,7 +219,17 @@ public sealed class TrackingController : IDisposable
                     return;
                 }
 
+                var beforeDate = _accumulator.Today.Date;
+                var beforeTotalSeconds = _accumulator.Today.TotalSeconds;
                 _accumulator.Tick(snapshot, _state.Settings);
+                var countedSeconds = _accumulator.Today.Date == beforeDate
+                    ? Math.Max(0, _accumulator.Today.TotalSeconds - beforeTotalSeconds)
+                    : 0;
+                if (countedSeconds > 0)
+                {
+                    AddUsageSegmentLocked(snapshot, _state.Settings, countedSeconds);
+                }
+
                 var record = PersistAccumulatorLocked();
 
                 if (_reminderPolicy.ShouldNotify(record, _state.Settings))
@@ -247,19 +305,79 @@ public sealed class TrackingController : IDisposable
         return record;
     }
 
+    private void AddUsageSegmentLocked(ActivitySnapshot snapshot, TrackerSettings settings, long countedSeconds)
+    {
+        var intervalEnd = snapshot.Timestamp;
+        var intervalStart = intervalEnd.AddSeconds(-countedSeconds);
+        var source = settings.CountAudio
+            && snapshot.IsAudioActive
+            && snapshot.IdleTime.TotalSeconds > settings.IdleThresholdSeconds
+                ? "pc-media"
+                : "pc-input";
+        var segment = UsageSegmentFactory.Create(
+            _state.DeviceId,
+            _state.Platform,
+            source,
+            intervalStart,
+            intervalEnd);
+
+        if (_state.Segments.Any(existing => existing.SegmentId == segment.SegmentId))
+        {
+            return;
+        }
+
+        _state.Segments.Add(segment);
+    }
+
     private StateSaveSnapshot CreateSaveSnapshotLocked(DateTimeOffset savedAt)
     {
         return new StateSaveSnapshot(CloneStateLocked(), savedAt, ++_nextSaveVersion);
+    }
+
+    private AppState LoadSyncStateSnapshot()
+    {
+        lock (_gate)
+        {
+            PersistAccumulatorLocked();
+            return CloneStateLocked();
+        }
+    }
+
+    private void SaveSyncStateSnapshot(AppState syncedState)
+    {
+        ArgumentNullException.ThrowIfNull(syncedState);
+        StateSaveSnapshot snapshot;
+        var now = DateTimeOffset.Now;
+
+        lock (_gate)
+        {
+            AppState.Normalize(syncedState);
+            _state.Settings = syncedState.Settings;
+            _state.Segments = syncedState.Segments
+                .Select(CloneSegment)
+                .ToList();
+            _state.Sync = CloneSyncSettings(syncedState.Sync);
+            snapshot = CreateSaveSnapshotLocked(now);
+        }
+
+        TrySaveSnapshot(snapshot);
+        RaiseUpdated(Current);
     }
 
     private AppState CloneStateLocked()
     {
         return new AppState
         {
+            DeviceId = _state.DeviceId,
+            Platform = _state.Platform,
             Settings = _state.Settings,
             Records = _state.Records
                 .Select(CloneRecord)
-                .ToList()
+                .ToList(),
+            Segments = _state.Segments
+                .Select(CloneSegment)
+                .ToList(),
+            Sync = CloneSyncSettings(_state.Sync)
         };
     }
 
@@ -274,6 +392,37 @@ public sealed class TrackingController : IDisposable
             CurrentSessionSeconds = record.CurrentSessionSeconds,
             ReminderShown = record.ReminderShown,
             LastReminderStep = record.LastReminderStep
+        };
+    }
+
+    private static UsageSegment CloneSegment(UsageSegment segment)
+    {
+        return new UsageSegment
+        {
+            SegmentId = segment.SegmentId,
+            DeviceId = segment.DeviceId,
+            Platform = segment.Platform,
+            Source = segment.Source,
+            StartUnixSeconds = segment.StartUnixSeconds,
+            EndUnixSeconds = segment.EndUnixSeconds,
+            LocalDate = segment.LocalDate,
+            CreatedAtUnixSeconds = segment.CreatedAtUnixSeconds,
+            UpdatedAtUnixSeconds = segment.UpdatedAtUnixSeconds
+        };
+    }
+
+    private static SyncSettings CloneSyncSettings(SyncSettings sync)
+    {
+        return new SyncSettings
+        {
+            IsPaired = sync.IsPaired,
+            PeerDeviceId = sync.PeerDeviceId,
+            PeerPlatform = sync.PeerPlatform,
+            SharedSecret = sync.SharedSecret,
+            LastKnownHost = sync.LastKnownHost,
+            LastKnownPort = sync.LastKnownPort,
+            LastSyncUnixSeconds = sync.LastSyncUnixSeconds,
+            LastError = sync.LastError
         };
     }
 

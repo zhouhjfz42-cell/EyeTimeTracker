@@ -78,12 +78,7 @@ public sealed class JsonStateStore
             return new AppState();
         }
 
-        state.Settings ??= TrackerSettings.Default;
-        state.Records ??= new List<DailyRecord>();
-        foreach (var record in state.Records)
-        {
-            AppState.NormalizeRecord(record);
-        }
+        AppState.Normalize(state);
 
         return state;
     }
