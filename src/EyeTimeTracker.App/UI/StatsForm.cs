@@ -1,5 +1,6 @@
 using System.Drawing.Drawing2D;
 using EyeTimeTracker.App.Tracking;
+using EyeTimeTracker.Core.Formatting;
 using EyeTimeTracker.Core.Models;
 using EyeTimeTracker.Core.Reminders;
 
@@ -1031,6 +1032,9 @@ public sealed class StatsForm : Form
     private sealed class HourlyHeatChart : Control
     {
         private long[] _hourlySeconds = new long[24];
+        private readonly ToolTip _tooltip = CreateChartToolTip();
+        private readonly List<ChartHit> _hits = new();
+        private string? _visibleTip;
 
         public HourlyHeatChart()
         {
@@ -1050,6 +1054,7 @@ public sealed class StatsForm : Form
         protected override void OnPaint(PaintEventArgs e)
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            _hits.Clear();
             var center = new PointF(Width / 2F, Height / 2F);
             var outerRadius = Math.Min(Width, Height) / 2F - 20F;
             var innerRadius = 42F;
@@ -1068,7 +1073,9 @@ public sealed class StatsForm : Form
 
                 var angle = -90F + hour * 15F;
                 var length = 10F + (float)seconds / maxSeconds * (outerRadius - innerRadius - 14F);
-                DrawHourBar(e.Graphics, center, angle, innerRadius, innerRadius + length, AccentGreen);
+                var bounds = DrawHourBar(e.Graphics, center, angle, innerRadius, innerRadius + length, AccentGreen);
+                bounds.Inflate(8F, 8F);
+                _hits.Add(new ChartHit(bounds, ChartValueFormatter.FormatMinutes(seconds)));
             }
 
             using var centerFill = new SolidBrush(PanelBackground);
@@ -1081,7 +1088,48 @@ public sealed class StatsForm : Form
             e.Graphics.DrawString("24H", titleFont, titleBrush, new RectangleF(center.X - 48F, center.Y - 18F, 96F, 36F), format);
         }
 
-        private static void DrawHourBar(Graphics graphics, PointF center, float angleDegrees, float innerRadius, float outerRadius, Color color)
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            ShowHitToolTip(e.Location);
+        }
+
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            base.OnMouseLeave(e);
+            HideHitToolTip();
+        }
+
+        private void ShowHitToolTip(Point point)
+        {
+            var text = _hits.FirstOrDefault(hit => hit.Bounds.Contains(point)).Text;
+            if (string.IsNullOrEmpty(text))
+            {
+                HideHitToolTip();
+                return;
+            }
+
+            if (_visibleTip == text)
+            {
+                return;
+            }
+
+            _visibleTip = text;
+            _tooltip.Show(text, this, point.X + 12, point.Y + 12, 2500);
+        }
+
+        private void HideHitToolTip()
+        {
+            if (_visibleTip is null)
+            {
+                return;
+            }
+
+            _visibleTip = null;
+            _tooltip.Hide(this);
+        }
+
+        private static RectangleF DrawHourBar(Graphics graphics, PointF center, float angleDegrees, float innerRadius, float outerRadius, Color color)
         {
             var angle = angleDegrees * Math.PI / 180D;
             var innerHalf = 3.5F;
@@ -1102,12 +1150,16 @@ public sealed class StatsForm : Form
 
             using var brush = new SolidBrush(color);
             graphics.FillPolygon(brush, points);
+            return BoundsOf(points);
         }
     }
 
     private sealed class WeekBarChart : Control
     {
         private IReadOnlyList<DailyRecord> _records = Array.Empty<DailyRecord>();
+        private readonly ToolTip _tooltip = CreateChartToolTip();
+        private readonly List<ChartHit> _hits = new();
+        private string? _visibleTip;
 
         public WeekBarChart()
         {
@@ -1127,6 +1179,7 @@ public sealed class StatsForm : Form
         protected override void OnPaint(PaintEventArgs e)
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            _hits.Clear();
             var records = _records.Count == 7 ? _records : Enumerable.Range(0, 7).Select(_ => new DailyRecord()).ToList();
             var maxSeconds = Math.Max(1L, records.Max(record => record.TotalSeconds));
             var labels = new[] { "一", "二", "三", "四", "五", "六", "日" };
@@ -1141,14 +1194,60 @@ public sealed class StatsForm : Form
                 var y = Height - 26 - barHeight;
                 using var brush = new SolidBrush(AccentGreen);
                 e.Graphics.FillRectangle(brush, x, y, width, barHeight);
+                var bounds = new RectangleF(x - 6, y - 6, width + 12, barHeight + 12);
+                _hits.Add(new ChartHit(bounds, ChartValueFormatter.FormatCompactHours(records[i].TotalSeconds)));
                 e.Graphics.DrawString(labels[i], font, textBrush, x + 6, Height - 18);
             }
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            ShowHitToolTip(e.Location);
+        }
+
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            base.OnMouseLeave(e);
+            HideHitToolTip();
+        }
+
+        private void ShowHitToolTip(Point point)
+        {
+            var text = _hits.FirstOrDefault(hit => hit.Bounds.Contains(point)).Text;
+            if (string.IsNullOrEmpty(text))
+            {
+                HideHitToolTip();
+                return;
+            }
+
+            if (_visibleTip == text)
+            {
+                return;
+            }
+
+            _visibleTip = text;
+            _tooltip.Show(text, this, point.X + 12, point.Y + 12, 2500);
+        }
+
+        private void HideHitToolTip()
+        {
+            if (_visibleTip is null)
+            {
+                return;
+            }
+
+            _visibleTip = null;
+            _tooltip.Hide(this);
         }
     }
 
     private sealed class MonthTrendChart : Control
     {
         private IReadOnlyList<DailyRecord> _records = Array.Empty<DailyRecord>();
+        private readonly ToolTip _tooltip = CreateChartToolTip();
+        private readonly List<ChartHit> _hits = new();
+        private string? _visibleTip;
 
         public MonthTrendChart()
         {
@@ -1168,6 +1267,7 @@ public sealed class StatsForm : Form
         protected override void OnPaint(PaintEventArgs e)
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            _hits.Clear();
             using var warn = new Pen(AccentYellow, 1.5F) { DashPattern = new float[] { 4F, 5F } };
             var warnY = Height * 0.32F;
             e.Graphics.DrawLine(warn, 8, warnY, Width - 8, warnY);
@@ -1192,11 +1292,76 @@ public sealed class StatsForm : Form
             }
 
             using var brush = new SolidBrush(AccentGreen);
-            foreach (var point in points)
+            for (var i = 0; i < points.Length; i++)
             {
+                var point = points[i];
                 e.Graphics.FillEllipse(brush, point.X - 3F, point.Y - 3F, 6F, 6F);
+                _hits.Add(new ChartHit(new RectangleF(point.X - 12F, point.Y - 12F, 24F, 24F), ChartValueFormatter.FormatCompactHours(_records[i].TotalSeconds)));
             }
         }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            ShowHitToolTip(e.Location);
+        }
+
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            base.OnMouseLeave(e);
+            HideHitToolTip();
+        }
+
+        private void ShowHitToolTip(Point point)
+        {
+            var text = _hits.FirstOrDefault(hit => hit.Bounds.Contains(point)).Text;
+            if (string.IsNullOrEmpty(text))
+            {
+                HideHitToolTip();
+                return;
+            }
+
+            if (_visibleTip == text)
+            {
+                return;
+            }
+
+            _visibleTip = text;
+            _tooltip.Show(text, this, point.X + 12, point.Y + 12, 2500);
+        }
+
+        private void HideHitToolTip()
+        {
+            if (_visibleTip is null)
+            {
+                return;
+            }
+
+            _visibleTip = null;
+            _tooltip.Hide(this);
+        }
+    }
+
+    private readonly record struct ChartHit(RectangleF Bounds, string Text);
+
+    private static ToolTip CreateChartToolTip()
+    {
+        return new ToolTip
+        {
+            InitialDelay = 0,
+            ReshowDelay = 0,
+            AutoPopDelay = 2500,
+            ShowAlways = true
+        };
+    }
+
+    private static RectangleF BoundsOf(IReadOnlyList<PointF> points)
+    {
+        var minX = points.Min(point => point.X);
+        var maxX = points.Max(point => point.X);
+        var minY = points.Min(point => point.Y);
+        var maxY = points.Max(point => point.Y);
+        return new RectangleF(minX, minY, maxX - minX, maxY - minY);
     }
 
     private sealed class ContinuousBandsControl : Control
@@ -1233,12 +1398,16 @@ public sealed class StatsForm : Form
             using var labelFont = new Font("Microsoft YaHei UI", 8F);
             using var valueFont = new Font("Microsoft YaHei UI", 8F, FontStyle.Bold);
             using var textBrush = new SolidBrush(TextSecondary);
+            using var labelFormat = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Near };
+            var labelBounds = new RectangleF(0, 0, 84, 20);
+            var trackLeft = 104;
 
             for (var i = 0; i < 3; i++)
             {
                 var y = 8 + i * 45;
-                e.Graphics.DrawString(labels[i], labelFont, textBrush, 0, y);
-                var track = new Rectangle(78, y + 2, Width - 118, 12);
+                labelBounds.Y = y;
+                e.Graphics.DrawString(labels[i], labelFont, textBrush, labelBounds, labelFormat);
+                var track = new Rectangle(trackLeft, y + 2, Width - trackLeft - 40, 12);
                 using (var trackBrush = new SolidBrush(Color.FromArgb(232, 243, 239)))
                 {
                     e.Graphics.FillRectangle(trackBrush, track);

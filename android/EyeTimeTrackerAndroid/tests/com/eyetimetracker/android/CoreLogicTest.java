@@ -7,6 +7,7 @@ public final class CoreLogicTest {
         shouldPauseWhenScreenOff();
         shouldPauseWhenScreenOnButIdleAndNoMedia();
         shouldFormatDurations();
+        shouldFormatChartTooltips();
         shouldClassifyTodayToneByFixedHealthyThresholds();
         shouldFormatReminderThresholds();
         shouldFormatReminderAlertText();
@@ -38,6 +39,13 @@ public final class CoreLogicTest {
         assertEquals("0分钟", DurationFormatter.format(59), "under one minute floors to zero");
         assertEquals("4分钟", DurationFormatter.format(299), "minutes only");
         assertEquals("1小时05分", DurationFormatter.format(3900), "hours and minutes");
+    }
+
+    private static void shouldFormatChartTooltips() {
+        assertEquals("28分钟", DurationFormatter.formatTooltipMinutes(28L * 60L), "formats chart minutes");
+        assertEquals("0.5小时", DurationFormatter.formatTooltipHours(30L * 60L), "formats half hour tooltip");
+        assertEquals("1小时", DurationFormatter.formatTooltipHours(60L * 60L), "formats full hour tooltip");
+        assertEquals("2.5小时", DurationFormatter.formatTooltipHours(150L * 60L), "formats two and half hour tooltip");
     }
 
     private static void shouldClassifyTodayToneByFixedHealthyThresholds() {

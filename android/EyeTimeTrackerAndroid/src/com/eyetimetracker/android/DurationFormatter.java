@@ -14,4 +14,19 @@ public final class DurationFormatter {
         }
         return String.format("%d分钟", minutes);
     }
+
+    public static String formatTooltipMinutes(long totalSeconds) {
+        long minutes = Math.max(0L, totalSeconds) / 60L;
+        return String.format("%d分钟", minutes);
+    }
+
+    public static String formatTooltipHours(long totalSeconds) {
+        long safeSeconds = Math.max(0L, totalSeconds);
+        long halfHourUnits = Math.round(safeSeconds / 1800.0);
+        long wholeHours = halfHourUnits / 2L;
+        if (halfHourUnits % 2L == 0L) {
+            return String.format("%d小时", wholeHours);
+        }
+        return String.format("%d.5小时", wholeHours);
+    }
 }

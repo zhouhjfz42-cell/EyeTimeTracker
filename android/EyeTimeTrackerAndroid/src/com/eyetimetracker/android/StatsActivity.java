@@ -11,7 +11,9 @@ import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -100,12 +102,12 @@ public final class StatsActivity extends Activity {
         heatParams.topMargin = dp(18);
         dayPanel.addView(heatView, heatParams);
 
-        GridLayout insightGrid = new GridLayout(this);
-        insightGrid.setColumnCount(3);
-        dayPanel.addView(insightGrid, matchWrapTop(14));
-        addCard(insightGrid, insightInfoCard("最集中", peakHour(todaySummary.hourlySeconds)), 0, 0);
-        addCard(insightGrid, insightInfoCard("夜间", DurationFormatter.format(nightSeconds(todaySummary.hourlySeconds))), 0, 1);
-        addCard(insightGrid, insightInfoCard("最长连续", DurationFormatter.format(longestSession(todaySummary))), 0, 2);
+        LinearLayout insightRow = new LinearLayout(this);
+        insightRow.setOrientation(LinearLayout.HORIZONTAL);
+        dayPanel.addView(insightRow, matchWrapTop(14));
+        addInsightCard(insightRow, insightInfoCard("最集中", peakHour(todaySummary.hourlySeconds)), 0);
+        addInsightCard(insightRow, insightInfoCard("夜间", DurationFormatter.format(nightSeconds(todaySummary.hourlySeconds))), 1);
+        addInsightCard(insightRow, insightInfoCard("最长连续", DurationFormatter.format(longestSession(todaySummary))), 2);
 
         LinearLayout weekPanel = panel();
         root.addView(weekPanel, matchWrapTop(18));
@@ -430,8 +432,16 @@ public final class StatsActivity extends Activity {
         TextView valueText = text(value, 19, COLOR_TEXT, false);
         valueText.setSingleLine(true);
         valueText.setIncludeFontPadding(false);
+        valueText.setAutoSizeTextTypeUniformWithConfiguration(15, 19, 1, TypedValue.COMPLEX_UNIT_SP);
         card.addView(valueText, matchWrapTop(12));
         return card;
+    }
+
+    private void addInsightCard(LinearLayout row, View card, int column) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        int horizontalGap = dp(4);
+        params.setMargins(column == 0 ? 0 : horizontalGap, 0, column == 2 ? 0 : horizontalGap, 0);
+        row.addView(card, params);
     }
 
     private void addCard(GridLayout grid, View card, int row, int column) {
@@ -574,9 +584,56 @@ public final class StatsActivity extends Activity {
         return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
     }
 
+    private static final class ChartHit {
+        final RectF bounds;
+        final String text;
+        final float x;
+        final float y;
+
+        ChartHit(RectF bounds, String text, float x, float y) {
+            this.bounds = bounds;
+            this.text = text;
+            this.x = x;
+            this.y = y;
+        }
+    }
+
+    private static void drawChartTip(Canvas canvas, Paint paint, String text, float x, float y, float density, int viewWidth) {
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+
+        paint.setTypeface(Typeface.DEFAULT_BOLD);
+        paint.setTextSize(13f * density);
+        paint.setTextAlign(Paint.Align.LEFT);
+        float paddingX = 10f * density;
+        float paddingY = 7f * density;
+        Paint.FontMetrics metrics = paint.getFontMetrics();
+        float width = paint.measureText(text) + paddingX * 2f;
+        float height = metrics.bottom - metrics.top + paddingY * 2f;
+        float left = Math.max(4f * density, Math.min(x - width / 2f, viewWidth - width - 4f * density));
+        float top = Math.max(4f * density, y - height - 10f * density);
+        RectF rect = new RectF(left, top, left + width, top + height);
+
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(Color.rgb(252, 254, 253));
+        canvas.drawRoundRect(rect, 14f * density, 14f * density, paint);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(1f * density);
+        paint.setColor(COLOR_LINE);
+        canvas.drawRoundRect(rect, 14f * density, 14f * density, paint);
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(COLOR_TEXT);
+        canvas.drawText(text, left + paddingX, top + paddingY - metrics.top, paint);
+    }
+
     public static final class HourlyHeatView extends View {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final List<ChartHit> hits = new ArrayList<>();
         private long[] hourlySeconds = new long[24];
+        private String tipText = null;
+        private float tipX;
+        private float tipY;
 
         public HourlyHeatView(android.content.Context context) {
             super(context);
@@ -589,6 +646,7 @@ public final class StatsActivity extends Activity {
 
         @Override protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
+            hits.clear();
             float cx = getWidth() / 2f;
             float cy = getHeight() / 2f;
             float outer = Math.min(getWidth(), getHeight()) / 2f - 18f;
@@ -603,7 +661,9 @@ public final class StatsActivity extends Activity {
                     continue;
                 }
                 float length = dpLocal(10) + hourlySeconds[hour] * (outer - inner - dpLocal(12)) / (float) max;
-                drawHourBar(canvas, cx, cy, -90f + hour * 15f, inner, inner + length, COLOR_BLUE);
+                RectF bounds = drawHourBar(canvas, cx, cy, -90f + hour * 15f, inner, inner + length, COLOR_BLUE);
+                bounds.inset(-dpLocal(8), -dpLocal(8));
+                hits.add(new ChartHit(bounds, DurationFormatter.formatTooltipMinutes(hourlySeconds[hour]), bounds.centerX(), bounds.centerY()));
             }
             paint.setStyle(Paint.Style.FILL);
             paint.setColor(Color.rgb(252, 254, 253));
@@ -618,9 +678,34 @@ public final class StatsActivity extends Activity {
             paint.setTextSize(dpLocal(22));
             paint.setColor(COLOR_TEXT);
             canvas.drawText("24H", cx, cy + dpLocal(8), paint);
+            drawChartTip(canvas, paint, tipText, tipX, tipY, getResources().getDisplayMetrics().density, getWidth());
         }
 
-        private void drawHourBar(Canvas canvas, float cx, float cy, float degrees, float inner, float outer, int color) {
+        @Override public boolean onTouchEvent(MotionEvent event) {
+            if (event.getAction() != MotionEvent.ACTION_UP) {
+                return true;
+            }
+
+            updateTip(event.getX(), event.getY());
+            return true;
+        }
+
+        private void updateTip(float x, float y) {
+            for (ChartHit hit : hits) {
+                if (hit.bounds.contains(x, y)) {
+                    tipText = hit.text;
+                    tipX = hit.x;
+                    tipY = hit.y;
+                    invalidate();
+                    return;
+                }
+            }
+
+            tipText = null;
+            invalidate();
+        }
+
+        private RectF drawHourBar(Canvas canvas, float cx, float cy, float degrees, float inner, float outer, int color) {
             double angle = Math.toRadians(degrees);
             float dx = (float) Math.cos(angle);
             float dy = (float) Math.sin(angle);
@@ -641,6 +726,9 @@ public final class StatsActivity extends Activity {
             paint.setStyle(Paint.Style.FILL);
             paint.setColor(color);
             canvas.drawPath(path, paint);
+            RectF bounds = new RectF();
+            path.computeBounds(bounds, true);
+            return bounds;
         }
 
         private float dpLocal(float value) {
@@ -650,7 +738,11 @@ public final class StatsActivity extends Activity {
 
     public static final class WeekBarView extends View {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final List<ChartHit> hits = new ArrayList<>();
         private List<DailySummary> summaries = new ArrayList<>();
+        private String tipText = null;
+        private float tipX;
+        private float tipY;
 
         public WeekBarView(android.content.Context context) {
             super(context);
@@ -662,6 +754,7 @@ public final class StatsActivity extends Activity {
         }
 
         @Override protected void onDraw(Canvas canvas) {
+            hits.clear();
             long max = 1L;
             for (DailySummary summary : summaries) {
                 max = Math.max(max, summary.totalSeconds);
@@ -678,10 +771,39 @@ public final class StatsActivity extends Activity {
                 float top = getHeight() - dpLocal(24) - h;
                 paint.setStyle(Paint.Style.FILL);
                 paint.setColor(COLOR_BLUE);
-                canvas.drawRect(left, top, left + slot * 0.36f, getHeight() - dpLocal(24), paint);
+                RectF bar = new RectF(left, top, left + slot * 0.36f, getHeight() - dpLocal(24));
+                canvas.drawRect(bar, paint);
+                RectF hit = new RectF(bar);
+                hit.inset(-dpLocal(8), -dpLocal(8));
+                hits.add(new ChartHit(hit, DurationFormatter.formatTooltipHours(seconds), hit.centerX(), top));
                 paint.setColor(COLOR_MUTED);
                 canvas.drawText(labels[i], i * slot + slot / 2f, getHeight() - dpLocal(4), paint);
             }
+            drawChartTip(canvas, paint, tipText, tipX, tipY, getResources().getDisplayMetrics().density, getWidth());
+        }
+
+        @Override public boolean onTouchEvent(MotionEvent event) {
+            if (event.getAction() != MotionEvent.ACTION_UP) {
+                return true;
+            }
+
+            updateTip(event.getX(), event.getY());
+            return true;
+        }
+
+        private void updateTip(float x, float y) {
+            for (ChartHit hit : hits) {
+                if (hit.bounds.contains(x, y)) {
+                    tipText = hit.text;
+                    tipX = hit.x;
+                    tipY = hit.y;
+                    invalidate();
+                    return;
+                }
+            }
+
+            tipText = null;
+            invalidate();
         }
 
         private float dpLocal(float value) {
@@ -691,7 +813,11 @@ public final class StatsActivity extends Activity {
 
     public static final class MonthTrendView extends View {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final List<ChartHit> hits = new ArrayList<>();
         private List<DailySummary> summaries = new ArrayList<>();
+        private String tipText = null;
+        private float tipX;
+        private float tipY;
 
         public MonthTrendView(android.content.Context context) {
             super(context);
@@ -703,6 +829,7 @@ public final class StatsActivity extends Activity {
         }
 
         @Override protected void onDraw(Canvas canvas) {
+            hits.clear();
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(dpLocal(2));
             paint.setColor(COLOR_YELLOW);
@@ -715,9 +842,11 @@ public final class StatsActivity extends Activity {
                 max = Math.max(max, summary.totalSeconds);
             }
             Path path = new Path();
+            ArrayList<float[]> points = new ArrayList<>();
             for (int i = 0; i < summaries.size(); i++) {
                 float x = summaries.size() == 1 ? getWidth() / 2f : dpLocal(10) + i * ((getWidth() - dpLocal(20)) / (summaries.size() - 1));
                 float y = getHeight() - dpLocal(18) - summaries.get(i).totalSeconds * (getHeight() - dpLocal(36)) / (float) max;
+                points.add(new float[] { x, y });
                 if (i == 0) {
                     path.moveTo(x, y);
                 } else {
@@ -728,6 +857,40 @@ public final class StatsActivity extends Activity {
             paint.setStrokeWidth(dpLocal(4));
             paint.setStyle(Paint.Style.STROKE);
             canvas.drawPath(path, paint);
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(COLOR_BLUE);
+            for (int i = 0; i < points.size(); i++) {
+                float x = points.get(i)[0];
+                float y = points.get(i)[1];
+                canvas.drawCircle(x, y, dpLocal(3.5f), paint);
+                RectF hit = new RectF(x - dpLocal(12), y - dpLocal(12), x + dpLocal(12), y + dpLocal(12));
+                hits.add(new ChartHit(hit, DurationFormatter.formatTooltipHours(summaries.get(i).totalSeconds), x, y));
+            }
+            drawChartTip(canvas, paint, tipText, tipX, tipY, getResources().getDisplayMetrics().density, getWidth());
+        }
+
+        @Override public boolean onTouchEvent(MotionEvent event) {
+            if (event.getAction() != MotionEvent.ACTION_UP) {
+                return true;
+            }
+
+            updateTip(event.getX(), event.getY());
+            return true;
+        }
+
+        private void updateTip(float x, float y) {
+            for (ChartHit hit : hits) {
+                if (hit.bounds.contains(x, y)) {
+                    tipText = hit.text;
+                    tipX = hit.x;
+                    tipY = hit.y;
+                    invalidate();
+                    return;
+                }
+            }
+
+            tipText = null;
+            invalidate();
         }
 
         private float dpLocal(float value) {

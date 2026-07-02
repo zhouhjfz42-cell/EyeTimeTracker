@@ -1,4 +1,5 @@
 using EyeTimeTracker.Core.Models;
+using EyeTimeTracker.Core.Formatting;
 using EyeTimeTracker.Core.Reminders;
 using EyeTimeTracker.Core.Storage;
 using EyeTimeTracker.Core.Tracking;
@@ -197,6 +198,15 @@ static void TestTodayToneThresholds()
     AssertEqual(TodayTone.Danger, TodayTonePolicy.FromSeconds(8L * 3600L + 1L), nameof(TestTodayToneThresholds) + " over eight hours");
 }
 
+static void TestChartValueFormatting()
+{
+    AssertEqual("0分钟", ChartValueFormatter.FormatMinutes(59), nameof(TestChartValueFormatting) + " zero minutes");
+    AssertEqual("28分钟", ChartValueFormatter.FormatMinutes(28 * 60), nameof(TestChartValueFormatting) + " minute tooltip");
+    AssertEqual("0.5小时", ChartValueFormatter.FormatCompactHours(30 * 60), nameof(TestChartValueFormatting) + " half hour");
+    AssertEqual("1小时", ChartValueFormatter.FormatCompactHours(60 * 60), nameof(TestChartValueFormatting) + " full hour");
+    AssertEqual("2.5小时", ChartValueFormatter.FormatCompactHours(150 * 60), nameof(TestChartValueFormatting) + " two and half hours");
+}
+
 static void TestReminderMessageText()
 {
     AssertEqual("\u7528\u773c\u63d0\u9192", ReminderMessage.Title, nameof(TestReminderMessageText) + " title");
@@ -330,6 +340,7 @@ TestReminderOnlyOncePerDay();
 TestReminderRepeatsAtThresholdMultiples();
 TestReminderThresholdMinutesAndDisplay();
 TestTodayToneThresholds();
+TestChartValueFormatting();
 TestReminderMessageText();
 TestJsonStateRoundTrip();
 TestGetOrCreateRecordReusesExistingRecord();
