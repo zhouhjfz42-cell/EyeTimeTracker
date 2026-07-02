@@ -1056,7 +1056,8 @@ public sealed class StatsForm : Form
             using var border = new Pen(BorderColor, 2F);
             e.Graphics.DrawEllipse(border, center.X - outerRadius, center.Y - outerRadius, outerRadius * 2F, outerRadius * 2F);
 
-            var maxSeconds = Math.Max(1L, _hourlySeconds.Max());
+            const long hourSeconds = 3600L;
+            var maxSeconds = hourSeconds;
             for (var hour = 0; hour < 24; hour++)
             {
                 var seconds = _hourlySeconds[hour];

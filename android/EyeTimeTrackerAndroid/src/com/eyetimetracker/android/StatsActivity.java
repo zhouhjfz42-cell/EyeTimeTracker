@@ -597,10 +597,7 @@ public final class StatsActivity extends Activity {
             paint.setStrokeWidth(dpLocal(2));
             paint.setColor(COLOR_LINE);
             canvas.drawCircle(cx, cy, outer, paint);
-            long max = 1L;
-            for (long seconds : hourlySeconds) {
-                max = Math.max(max, seconds);
-            }
+            long max = 3600L;
             for (int hour = 0; hour < 24; hour++) {
                 if (hourlySeconds[hour] <= 0L) {
                     continue;
