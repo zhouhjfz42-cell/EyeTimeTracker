@@ -185,6 +185,13 @@ static void TestReminderRepeatsAtThresholdMultiples()
     AssertEqual(2, dailyRecord.LastReminderStep, nameof(TestReminderRepeatsAtThresholdMultiples) + " second step");
 }
 
+static void TestReminderDisplayCountUsesVisibleTotal()
+{
+    AssertEqual(0, ReminderDisplayCount.FromSeconds(44 * 60, TrackerSettings.Default with { ReminderThresholdSeconds = 45 * 60 }), nameof(TestReminderDisplayCountUsesVisibleTotal) + " below threshold");
+    AssertEqual(1, ReminderDisplayCount.FromSeconds(90 * 60, TrackerSettings.Default with { ReminderThresholdSeconds = 45 * 60, RepeatReminder = false }), nameof(TestReminderDisplayCountUsesVisibleTotal) + " once policy");
+    AssertEqual(2, ReminderDisplayCount.FromSeconds(90 * 60, TrackerSettings.Default with { ReminderThresholdSeconds = 45 * 60, RepeatReminder = true }), nameof(TestReminderDisplayCountUsesVisibleTotal) + " repeat policy");
+}
+
 static void TestReminderThresholdMinutesAndDisplay()
 {
     AssertEqual(19800, ReminderThreshold.FromMinutes(330), nameof(TestReminderThresholdMinutesAndDisplay) + " seconds");
@@ -869,6 +876,67 @@ static void TestSegmentsDeDuplicateOverlappingDevices()
     AssertEqual(30L, summary.TotalSeconds, nameof(TestSegmentsDeDuplicateOverlappingDevices));
 }
 
+static void TestSegmentRecordsReplaceLegacyRecordsForSyncedDays()
+{
+    var t0 = new DateTimeOffset(2026, 7, 2, 10, 0, 0, TimeSpan.Zero);
+    var legacy = new DailyRecord(new DateOnly(2026, 7, 2))
+    {
+        TotalSeconds = 10_000,
+        HourlySeconds = Enumerable.Repeat(0L, 24).ToArray(),
+        SessionSeconds = [10_000],
+        ReminderShown = true,
+        LastReminderStep = 9
+    };
+    var segmented = UsageSegmentMerger.BuildDailyRecord(new DateOnly(2026, 7, 2), new[]
+    {
+        Segment("pc", "windows", "pc-input", t0, 600),
+        Segment("phone", "android", "android-screen", t0.AddMinutes(20), 300)
+    });
+
+    var visible = DailyRecordReconciler.UseSegmentRecordForSyncedDay(legacy, segmented);
+
+    AssertEqual(900L, visible.TotalSeconds, nameof(TestSegmentRecordsReplaceLegacyRecordsForSyncedDays) + " total");
+    AssertEqual(0, visible.LastReminderStep, nameof(TestSegmentRecordsReplaceLegacyRecordsForSyncedDays) + " reminder step is not copied");
+    AssertEqual(false, visible.ReminderShown, nameof(TestSegmentRecordsReplaceLegacyRecordsForSyncedDays) + " reminder shown is not copied");
+}
+
+static void TestUsageDeviceBreakdownCountsPcAndPhone()
+{
+    var t0 = new DateTimeOffset(2026, 7, 2, 12, 0, 0, TimeSpan.Zero);
+    var segments = new[]
+    {
+        Segment("pc", "windows", "pc-input", t0, 60),
+        Segment("phone", "android", "android-screen", t0.AddMinutes(2), 30)
+    };
+    var localHour = DateTimeOffset.FromUnixTimeSeconds(t0.ToUnixTimeSeconds()).LocalDateTime.Hour;
+
+    var breakdown = UsageDeviceBreakdown.Build(new DateOnly(2026, 7, 2), segments);
+
+    AssertEqual(60L, breakdown.PcSeconds, nameof(TestUsageDeviceBreakdownCountsPcAndPhone) + " pc seconds");
+    AssertEqual(30L, breakdown.PhoneSeconds, nameof(TestUsageDeviceBreakdownCountsPcAndPhone) + " phone seconds");
+    AssertEqual(67, breakdown.PcPercent, nameof(TestUsageDeviceBreakdownCountsPcAndPhone) + " pc percent");
+    AssertEqual(33, breakdown.PhonePercent, nameof(TestUsageDeviceBreakdownCountsPcAndPhone) + " phone percent");
+    AssertEqual(60L, breakdown.PcHourlySeconds[localHour], nameof(TestUsageDeviceBreakdownCountsPcAndPhone) + " pc hourly");
+    AssertEqual(30L, breakdown.PhoneHourlySeconds[localHour], nameof(TestUsageDeviceBreakdownCountsPcAndPhone) + " phone hourly");
+}
+
+static void TestUsageDeviceBreakdownCapsHourlySourceStackAtOneHour()
+{
+    var t0 = new DateTimeOffset(2026, 7, 2, 12, 0, 0, TimeSpan.Zero);
+    var segments = new[]
+    {
+        Segment("pc", "windows", "pc-input", t0, 3600),
+        Segment("phone", "android", "android-screen", t0, 3600)
+    };
+    var localHour = DateTimeOffset.FromUnixTimeSeconds(t0.ToUnixTimeSeconds()).LocalDateTime.Hour;
+
+    var breakdown = UsageDeviceBreakdown.Build(new DateOnly(2026, 7, 2), segments);
+
+    AssertEqual(3600L, breakdown.PcHourlySeconds[localHour] + breakdown.PhoneHourlySeconds[localHour], nameof(TestUsageDeviceBreakdownCapsHourlySourceStackAtOneHour) + " stacked cap");
+    AssertEqual(1800L, breakdown.PcHourlySeconds[localHour], nameof(TestUsageDeviceBreakdownCapsHourlySourceStackAtOneHour) + " pc scaled");
+    AssertEqual(1800L, breakdown.PhoneHourlySeconds[localHour], nameof(TestUsageDeviceBreakdownCapsHourlySourceStackAtOneHour) + " phone scaled");
+}
+
 static void TestUsageSegmentFactoryCreatesExpectedSegment()
 {
     var start = new DateTimeOffset(2026, 7, 2, 8, 0, 0, TimeSpan.Zero);
@@ -941,6 +1009,7 @@ TestFractionalTicksAreTruncated();
 TestDateRolloverStartsNewDay();
 TestReminderOnlyOncePerDay();
 TestReminderRepeatsAtThresholdMultiples();
+TestReminderDisplayCountUsesVisibleTotal();
 TestReminderThresholdMinutesAndDisplay();
 TestTodayToneThresholds();
 TestChartValueFormatting();
@@ -970,6 +1039,9 @@ TestPcSyncServerHandlesOneJsonSyncRequest();
 TestPcSyncServerAcceptsPairRequestWithCurrentCode();
 TestPcDiscoveryServerRespondsWithSyncPort();
 TestSegmentsDeDuplicateOverlappingDevices();
+TestSegmentRecordsReplaceLegacyRecordsForSyncedDays();
+TestUsageDeviceBreakdownCountsPcAndPhone();
+TestUsageDeviceBreakdownCapsHourlySourceStackAtOneHour();
 TestUsageSegmentFactoryCreatesExpectedSegment();
 TestContinuousBreaksAfterThreeMinutes();
 TestSyncMessageSigningIsStable();

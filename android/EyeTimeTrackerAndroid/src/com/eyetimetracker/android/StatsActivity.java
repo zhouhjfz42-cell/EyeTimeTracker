@@ -31,7 +31,7 @@ public final class StatsActivity extends Activity {
     private static final int COLOR_TEXT = Color.rgb(17, 24, 39);
     private static final int COLOR_MUTED = Color.rgb(101, 114, 137);
     private static final int COLOR_GREEN = Color.rgb(22, 163, 127);
-    private static final int COLOR_BLUE = Color.rgb(79, 141, 247);
+    private static final int COLOR_BLUE = Color.rgb(91, 92, 226);
     private static final int COLOR_YELLOW = Color.rgb(240, 184, 58);
     private static final int COLOR_RED = Color.rgb(233, 104, 104);
     private static final int COLOR_SOFT = Color.rgb(238, 249, 245);
@@ -73,7 +73,12 @@ public final class StatsActivity extends Activity {
     private View buildUi() {
         LocalDate today = LocalDate.now();
         DailySummary todaySummary = store.getDay(selectedDay);
+        DeviceUsageBreakdown deviceBreakdown = store.getDeviceBreakdown(selectedDay);
         List<DailySummary> week = store.getDays(selectedWeekStart, selectedWeekStart.plusDays(6));
+        List<DeviceUsageBreakdown> weekBreakdowns = new ArrayList<>();
+        for (int i = 0; i < 7; i++) {
+            weekBreakdowns.add(store.getDeviceBreakdown(selectedWeekStart.plusDays(i)));
+        }
         LocalDate monthEnd = selectedMonthStart.getYear() == today.getYear() && selectedMonthStart.getMonthValue() == today.getMonthValue()
                 ? today
                 : selectedMonthStart.plusMonths(1).minusDays(1);
@@ -106,13 +111,20 @@ public final class StatsActivity extends Activity {
         dayPanel.addView(metrics, matchWrapTop(16));
         addCard(metrics, metricCard("今日用眼", DurationFormatter.format(todaySummary.totalSeconds), colorForToday(todaySummary.totalSeconds)), 0, 0);
         addCard(metrics, metricCard("最长连续", DurationFormatter.format(longestSession(todaySummary)), COLOR_YELLOW), 0, 1);
-        addCard(metrics, metricCard("电脑 / 手机", todaySummary.totalSeconds > 0 ? "0% / 100%" : "0% / 0%", COLOR_TEXT), 1, 0);
-        addCard(metrics, metricCard("提醒触发", Math.max(0, todaySummary.lastReminderStep) + "次", COLOR_TEXT), 1, 1);
+        addCard(metrics, metricCard("电脑 / 手机", deviceBreakdown.pcPercent() + "%/" + deviceBreakdown.phonePercent() + "%", COLOR_TEXT), 1, 0);
+        addCard(metrics, metricCard(
+                "提醒触发",
+                ReminderPolicy.displayCount(
+                        todaySummary.totalSeconds,
+                        store.getReminderMinutes(),
+                        store.isRepeatReminderEnabled()) + "次",
+                COLOR_TEXT), 1, 1);
 
         dayPanel.addView(deviceLegend(), matchWrapTop(12));
 
         HourlyHeatView heatView = new HourlyHeatView(this);
         heatView.setHourlySeconds(todaySummary.hourlySeconds);
+        heatView.setSourceHourlySeconds(deviceBreakdown.pcHourlySeconds, deviceBreakdown.phoneHourlySeconds);
         LinearLayout.LayoutParams heatParams = new LinearLayout.LayoutParams(dp(250), dp(250));
         heatParams.gravity = Gravity.CENTER_HORIZONTAL;
         heatParams.topMargin = dp(18);
@@ -131,6 +143,7 @@ public final class StatsActivity extends Activity {
         weekPill.setOnClickListener(v -> showDateSheet(DatePickMode.WEEK));
         WeekBarView weekView = new WeekBarView(this);
         weekView.setSummaries(week);
+        weekView.setDeviceBreakdowns(weekBreakdowns);
         weekPanel.addView(weekView, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(210)));
         weekPanel.addView(note("本周合计 " + DurationFormatter.format(sum(week))), matchWrapTop(8));
 
@@ -672,6 +685,8 @@ public final class StatsActivity extends Activity {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final List<ChartHit> hits = new ArrayList<>();
         private long[] hourlySeconds = new long[24];
+        private long[] pcHourlySeconds = new long[24];
+        private long[] phoneHourlySeconds = new long[24];
         private String tipText = null;
         private float tipX;
         private float tipY;
@@ -685,27 +700,41 @@ public final class StatsActivity extends Activity {
             invalidate();
         }
 
+        public void setSourceHourlySeconds(long[] pcValues, long[] phoneValues) {
+            pcHourlySeconds = normalizeHourly(pcValues);
+            phoneHourlySeconds = normalizeHourly(phoneValues);
+            invalidate();
+        }
+
         @Override protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
             hits.clear();
             float cx = getWidth() / 2f;
             float cy = getHeight() / 2f;
-            float outer = Math.min(getWidth(), getHeight()) / 2f - 18f;
+            float outer = Math.min(getWidth(), getHeight()) / 2f - 30f;
             float inner = 42f * getResources().getDisplayMetrics().density;
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(dpLocal(2));
             paint.setColor(COLOR_LINE);
             canvas.drawCircle(cx, cy, outer, paint);
             long max = 3600L;
+            boolean hasSource = sum(pcHourlySeconds) + sum(phoneHourlySeconds) > 0L;
             for (int hour = 0; hour < 24; hour++) {
-                if (hourlySeconds[hour] <= 0L) {
+                long pcSeconds = hasSource ? pcHourlySeconds[hour] : 0L;
+                long phoneSeconds = hasSource ? phoneHourlySeconds[hour] : hourlySeconds[hour];
+                long[] capped = capHourSourceSeconds(pcSeconds, phoneSeconds);
+                pcSeconds = capped[0];
+                phoneSeconds = capped[1];
+                long seconds = pcSeconds + phoneSeconds;
+                if (seconds <= 0L) {
                     continue;
                 }
-                float length = dpLocal(10) + hourlySeconds[hour] * (outer - inner - dpLocal(12)) / (float) max;
-                RectF bounds = drawHourBar(canvas, cx, cy, -90f + hour * 15f, inner, inner + length, COLOR_BLUE);
+                float length = dpLocal(10) + seconds * (outer - inner - dpLocal(12)) / (float) max;
+                RectF bounds = drawSourceHourBar(canvas, cx, cy, -90f + hour * 15f, inner, length, pcSeconds, phoneSeconds);
                 bounds.inset(-dpLocal(8), -dpLocal(8));
-                hits.add(new ChartHit(bounds, DurationFormatter.formatTooltipMinutes(hourlySeconds[hour]), bounds.centerX(), bounds.centerY()));
+                hits.add(new ChartHit(bounds, DurationFormatter.formatTooltipMinutes(seconds), bounds.centerX(), bounds.centerY()));
             }
+            drawHourLabels(canvas, cx, cy, outer);
             paint.setStyle(Paint.Style.FILL);
             paint.setColor(Color.rgb(252, 254, 253));
             canvas.drawCircle(cx, cy, inner, paint);
@@ -746,14 +775,50 @@ public final class StatsActivity extends Activity {
             invalidate();
         }
 
-        private RectF drawHourBar(Canvas canvas, float cx, float cy, float degrees, float inner, float outer, int color) {
+        private RectF drawSourceHourBar(Canvas canvas, float cx, float cy, float degrees, float inner, float length, long pcSeconds, long phoneSeconds) {
+            long total = Math.max(1L, pcSeconds + phoneSeconds);
+            RectF bounds = null;
+            float cursor = inner;
+            if (pcSeconds > 0L) {
+                float pcLength = length * pcSeconds / total;
+                bounds = drawHourBarSection(canvas, cx, cy, degrees, inner, cursor - inner, cursor + pcLength - inner, length, COLOR_GREEN);
+                cursor += pcLength;
+            }
+            if (phoneSeconds > 0L) {
+                RectF phoneBounds = drawHourBarSection(canvas, cx, cy, degrees, inner, cursor - inner, length, length, COLOR_BLUE);
+                if (bounds == null) {
+                    bounds = phoneBounds;
+                } else {
+                    bounds.union(phoneBounds);
+                }
+            }
+            return bounds == null ? new RectF() : bounds;
+        }
+
+        private static long[] capHourSourceSeconds(long pcSeconds, long phoneSeconds) {
+            long hourSeconds = 3600L;
+            pcSeconds = Math.max(0L, pcSeconds);
+            phoneSeconds = Math.max(0L, phoneSeconds);
+            long totalSeconds = pcSeconds + phoneSeconds;
+            if (totalSeconds <= hourSeconds) {
+                return new long[] { pcSeconds, phoneSeconds };
+            }
+
+            long scaledPcSeconds = Math.round(pcSeconds * (double) hourSeconds / totalSeconds);
+            scaledPcSeconds = Math.max(0L, Math.min(hourSeconds, scaledPcSeconds));
+            return new long[] { scaledPcSeconds, hourSeconds - scaledPcSeconds };
+        }
+
+        private RectF drawHourBarSection(Canvas canvas, float cx, float cy, float degrees, float baseInner, float startOffset, float endOffset, float fullLength, int color) {
             double angle = Math.toRadians(degrees);
             float dx = (float) Math.cos(angle);
             float dy = (float) Math.sin(angle);
             float px = -dy;
             float py = dx;
-            float innerHalf = dpLocal(3.5f);
-            float outerHalf = dpLocal(6.5f);
+            float innerHalf = interpolatedHalfWidth(startOffset, fullLength);
+            float outerHalf = interpolatedHalfWidth(endOffset, fullLength);
+            float inner = baseInner + startOffset;
+            float outer = baseInner + endOffset;
             float ix = cx + dx * inner;
             float iy = cy + dy * inner;
             float ox = cx + dx * outer;
@@ -772,6 +837,50 @@ public final class StatsActivity extends Activity {
             return bounds;
         }
 
+        private float interpolatedHalfWidth(float offset, float fullLength) {
+            float innerHalf = dpLocal(3.5f);
+            float outerHalf = dpLocal(6.5f);
+            if (fullLength <= 0f) {
+                return innerHalf;
+            }
+            float ratio = Math.max(0f, Math.min(1f, offset / fullLength));
+            return innerHalf + (outerHalf - innerHalf) * ratio;
+        }
+
+        private void drawHourLabels(Canvas canvas, float cx, float cy, float outer) {
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(COLOR_MUTED);
+            paint.setTypeface(Typeface.DEFAULT);
+            paint.setTextSize(dpLocal(11));
+            paint.setTextAlign(Paint.Align.CENTER);
+            Paint.FontMetrics metrics = paint.getFontMetrics();
+            float baselineOffset = -(metrics.ascent + metrics.descent) / 2f;
+            int[] hours = { 0, 6, 12, 18 };
+            for (int hour : hours) {
+                double angle = Math.toRadians(-90f + hour * 15f);
+                float radius = outer + dpLocal(14);
+                float x = cx + (float) Math.cos(angle) * radius;
+                float y = cy + (float) Math.sin(angle) * radius + baselineOffset;
+                canvas.drawText(String.valueOf(hour), x, y, paint);
+            }
+        }
+
+        private static long[] normalizeHourly(long[] values) {
+            long[] normalized = new long[24];
+            if (values != null) {
+                System.arraycopy(values, 0, normalized, 0, Math.min(24, values.length));
+            }
+            return normalized;
+        }
+
+        private static long sum(long[] values) {
+            long total = 0L;
+            for (long value : values) {
+                total += value;
+            }
+            return total;
+        }
+
         private float dpLocal(float value) {
             return value * getResources().getDisplayMetrics().density;
         }
@@ -781,6 +890,7 @@ public final class StatsActivity extends Activity {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final List<ChartHit> hits = new ArrayList<>();
         private List<DailySummary> summaries = new ArrayList<>();
+        private List<DeviceUsageBreakdown> deviceBreakdowns = new ArrayList<>();
         private String tipText = null;
         private float tipX;
         private float tipY;
@@ -791,6 +901,11 @@ public final class StatsActivity extends Activity {
 
         public void setSummaries(List<DailySummary> values) {
             summaries = values == null ? new ArrayList<>() : values;
+            invalidate();
+        }
+
+        public void setDeviceBreakdowns(List<DeviceUsageBreakdown> values) {
+            deviceBreakdowns = values == null ? new ArrayList<>() : values;
             invalidate();
         }
 
@@ -811,9 +926,19 @@ public final class StatsActivity extends Activity {
                 float left = i * slot + slot * 0.32f;
                 float top = getHeight() - dpLocal(24) - h;
                 paint.setStyle(Paint.Style.FILL);
-                paint.setColor(COLOR_BLUE);
                 RectF bar = new RectF(left, top, left + slot * 0.36f, getHeight() - dpLocal(24));
-                canvas.drawRect(bar, paint);
+                DeviceUsageBreakdown breakdown = i < deviceBreakdowns.size() ? deviceBreakdowns.get(i) : new DeviceUsageBreakdown(0L, 0L);
+                long sourceSeconds = breakdown.pcSeconds + breakdown.phoneSeconds;
+                if (sourceSeconds > 0L) {
+                    float phoneHeight = h * breakdown.phoneSeconds / sourceSeconds;
+                    paint.setColor(COLOR_BLUE);
+                    canvas.drawRect(left, top, left + slot * 0.36f, top + phoneHeight, paint);
+                    paint.setColor(COLOR_GREEN);
+                    canvas.drawRect(left, top + phoneHeight, left + slot * 0.36f, getHeight() - dpLocal(24), paint);
+                } else {
+                    paint.setColor(COLOR_BLUE);
+                    canvas.drawRect(bar, paint);
+                }
                 RectF hit = new RectF(bar);
                 hit.inset(-dpLocal(8), -dpLocal(8));
                 hits.add(new ChartHit(hit, DurationFormatter.formatTooltipHours(seconds), hit.centerX(), top));

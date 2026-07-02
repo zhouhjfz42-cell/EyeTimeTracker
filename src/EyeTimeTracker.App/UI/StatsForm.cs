@@ -3,6 +3,7 @@ using EyeTimeTracker.App.Tracking;
 using EyeTimeTracker.Core.Formatting;
 using EyeTimeTracker.Core.Models;
 using EyeTimeTracker.Core.Reminders;
+using EyeTimeTracker.Core.Sync;
 
 namespace EyeTimeTracker.App.UI;
 
@@ -12,7 +13,7 @@ public sealed class StatsForm : Form
     private static readonly Color PanelBackground = Color.FromArgb(252, 254, 253);
     private static readonly Color SoftGreen = Color.FromArgb(238, 249, 245);
     private static readonly Color AccentGreen = Color.FromArgb(22, 163, 127);
-    private static readonly Color AccentBlue = Color.FromArgb(79, 141, 247);
+    private static readonly Color AccentBlue = Color.FromArgb(91, 92, 226);
     private static readonly Color AccentYellow = Color.FromArgb(240, 184, 58);
     private static readonly Color AccentRed = Color.FromArgb(233, 104, 104);
     private static readonly Color TextPrimary = Color.FromArgb(17, 24, 39);
@@ -25,13 +26,13 @@ public sealed class StatsForm : Form
     private readonly FitTextLabel _deviceShareValue;
     private readonly FitTextLabel _reminderCountValue;
     private readonly HourlyHeatChart _hourlyChart;
-    private readonly FitTextLabel _peakPeriodValue;
-    private readonly FitTextLabel _nightValue;
-    private readonly FitTextLabel _longestInsightValue;
+    private readonly FitTextLabel _summaryTitle;
+    private readonly FitTextLabel _summaryLineOne;
+    private readonly FitTextLabel _summaryLineTwo;
+    private readonly FitTextLabel _summaryLineThree;
     private readonly WeekBarChart _weekChart;
     private readonly MonthTrendChart _monthChart;
     private readonly ContinuousBandsControl _continuousBands;
-    private readonly DeviceShareControl _deviceShareChart;
     private readonly FitTextLabel _weekNote;
     private readonly FitTextLabel _monthNote;
     private readonly FitTextLabel _continuousNote;
@@ -103,8 +104,8 @@ public sealed class StatsForm : Form
         var dayPanel = CreatePanel(new Rectangle(30, 98, 1120, 290));
         root.Controls.Add(dayPanel);
         AddPanelTitle(dayPanel, "单日情况", new Rectangle(24, 18, 180, 36));
-        _daySelectorText = AddPill(dayPanel, "今天 ▾", new Rectangle(812, 18, 96, 30), ShowDayMenu);
-        AddLegend(dayPanel, new Point(928, 24));
+        _daySelectorText = AddPill(dayPanel, "今天 ▾", new Rectangle(170, 22, 96, 30), ShowDayMenu);
+        AddLegend(dayPanel, new Point(292, 27));
 
         dayPanel.Controls.Add(BuildSmallMetric("今日用眼", out _dayTotalValue, new Rectangle(24, 70, 155, 78), AccentGreen));
         dayPanel.Controls.Add(BuildSmallMetric("最长连续", out _longestSessionValue, new Rectangle(194, 70, 155, 78), AccentYellow));
@@ -118,16 +119,10 @@ public sealed class StatsForm : Form
         };
         dayPanel.Controls.Add(_hourlyChart);
 
-        _peakPeriodValue = AddInsight(dayPanel, "最集中时段", new Rectangle(660, 72, 200, 58));
-        _nightValue = AddInsight(dayPanel, "夜间用眼", new Rectangle(660, 148, 200, 58));
-        _longestInsightValue = AddInsight(dayPanel, "最长连续", new Rectangle(660, 224, 200, 58));
-
-        _deviceShareChart = new DeviceShareControl
-        {
-            Bounds = new Rectangle(875, 74, 220, 150),
-            BackColor = Color.Transparent
-        };
-        dayPanel.Controls.Add(_deviceShareChart);
+        _summaryTitle = AddSummaryLabel(dayPanel, "今日摘要", new Rectangle(690, 18, 180, 36), 13.5F, 12F, TextPrimary, FontStyle.Bold);
+        _summaryLineOne = AddSummaryLabel(dayPanel, "", new Rectangle(692, 66, 380, 34), 10.5F, 9F, TextSecondary, FontStyle.Regular);
+        _summaryLineTwo = AddSummaryLabel(dayPanel, "", new Rectangle(692, 112, 380, 34), 10.5F, 9F, TextSecondary, FontStyle.Regular);
+        _summaryLineThree = AddSummaryLabel(dayPanel, "", new Rectangle(692, 158, 380, 34), 10.5F, 9F, TextSecondary, FontStyle.Regular);
 
         var weekPanel = CreatePanel(new Rectangle(30, 410, 350, 300));
         root.Controls.Add(weekPanel);
@@ -204,20 +199,25 @@ public sealed class StatsForm : Form
 
         var sessions = SessionValues(todayRecord).ToList();
         var longest = sessions.Count == 0 ? todayRecord.CurrentSessionSeconds : sessions.Max();
+        var deviceBreakdown = _controller.GetDeviceBreakdown(_selectedDay);
+        var weekBreakdowns = Enumerable.Range(0, 7)
+            .Select(offset => _controller.GetDeviceBreakdown(_selectedWeekStart.AddDays(offset)))
+            .ToList();
 
         _dayTotalValue.Text = FormatDuration(todayRecord.TotalSeconds);
         _dayTotalValue.ForeColor = TodayColor(todayRecord.TotalSeconds);
         _longestSessionValue.Text = FormatDuration(longest);
-        _deviceShareValue.Text = todayRecord.TotalSeconds > 0 ? "100% / 0%" : "0% / 0%";
-        _reminderCountValue.Text = todayRecord.LastReminderStep > 0 ? $"{todayRecord.LastReminderStep}次" : "0次";
+        _deviceShareValue.Text = $"{deviceBreakdown.PcPercent}%/{deviceBreakdown.PhonePercent}%";
+        _reminderCountValue.Text = $"{ReminderDisplayCount.FromSeconds(todayRecord.TotalSeconds, _controller.Settings)}次";
         _hourlyChart.HourlySeconds = todayRecord.HourlySeconds;
-        _deviceShareChart.SetShares(todayRecord.TotalSeconds, 0);
+        _hourlyChart.SetSourceHourlySeconds(deviceBreakdown.PcHourlySeconds, deviceBreakdown.PhoneHourlySeconds);
 
-        _peakPeriodValue.Text = PeakHourText(todayRecord.HourlySeconds);
-        _nightValue.Text = FormatDuration(NightSeconds(todayRecord.HourlySeconds));
-        _longestInsightValue.Text = FormatDuration(longest);
+        _summaryLineOne.Text = $"主要集中在 {PeakHourText(todayRecord.HourlySeconds)}";
+        _summaryLineTwo.Text = $"最长连续 {FormatDuration(longest)}";
+        _summaryLineThree.Text = SummarySourceText(deviceBreakdown);
 
         _weekChart.Records = weekRecords;
+        _weekChart.DeviceBreakdowns = weekBreakdowns;
         _weekNote.Text = $"本周合计 {FormatDuration(weekRecords.Sum(record => record.TotalSeconds))}";
 
         _monthChart.Records = monthRecords;
@@ -397,6 +397,18 @@ public sealed class StatsForm : Form
         return $"{hour:00}:00-{(hour + 1) % 24:00}:00";
     }
 
+    private static string SummarySourceText(UsageDeviceBreakdown breakdown)
+    {
+        if (breakdown.PcSeconds + breakdown.PhoneSeconds <= 0)
+        {
+            return "暂无设备来源数据";
+        }
+
+        return breakdown.PhonePercent >= breakdown.PcPercent
+            ? $"手机占比 {breakdown.PhonePercent}%，可减少碎片查看"
+            : $"电脑占比 {breakdown.PcPercent}%，注意定时休息";
+    }
+
     private static long NightSeconds(long[] hourlySeconds)
     {
         long total = 0;
@@ -531,6 +543,30 @@ public sealed class StatsForm : Form
             ForeColor = TextSecondary,
             BackColor = Color.Transparent
         });
+    }
+
+    private static FitTextLabel AddSummaryLabel(
+        Control parent,
+        string text,
+        Rectangle bounds,
+        float maxFontSize,
+        float minFontSize,
+        Color color,
+        FontStyle style)
+    {
+        var label = new FitTextLabel
+        {
+            Text = text,
+            Bounds = bounds,
+            MaxFontSize = maxFontSize,
+            MinFontSize = minFontSize,
+            FontStyle = style,
+            ForeColor = color,
+            BackColor = Color.Transparent,
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+        parent.Controls.Add(label);
+        return label;
     }
 
     private static FitTextLabel AddInsight(Control parent, string label, Rectangle bounds)
@@ -1032,6 +1068,8 @@ public sealed class StatsForm : Form
     private sealed class HourlyHeatChart : Control
     {
         private long[] _hourlySeconds = new long[24];
+        private long[] _pcHourlySeconds = new long[24];
+        private long[] _phoneHourlySeconds = new long[24];
         private readonly ToolTip _tooltip = CreateChartToolTip();
         private readonly List<ChartHit> _hits = new();
         private string? _visibleTip;
@@ -1051,21 +1089,32 @@ public sealed class StatsForm : Form
             }
         }
 
+        public void SetSourceHourlySeconds(long[] pcHourlySeconds, long[] phoneHourlySeconds)
+        {
+            _pcHourlySeconds = pcHourlySeconds?.Length == 24 ? (long[])pcHourlySeconds.Clone() : new long[24];
+            _phoneHourlySeconds = phoneHourlySeconds?.Length == 24 ? (long[])phoneHourlySeconds.Clone() : new long[24];
+            Invalidate();
+        }
+
         protected override void OnPaint(PaintEventArgs e)
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             _hits.Clear();
             var center = new PointF(Width / 2F, Height / 2F);
-            var outerRadius = Math.Min(Width, Height) / 2F - 20F;
+            var outerRadius = Math.Min(Width, Height) / 2F - 30F;
             var innerRadius = 42F;
             using var border = new Pen(BorderColor, 2F);
             e.Graphics.DrawEllipse(border, center.X - outerRadius, center.Y - outerRadius, outerRadius * 2F, outerRadius * 2F);
 
             const long hourSeconds = 3600L;
             var maxSeconds = hourSeconds;
+            var hasSource = _pcHourlySeconds.Sum() + _phoneHourlySeconds.Sum() > 0;
             for (var hour = 0; hour < 24; hour++)
             {
-                var seconds = _hourlySeconds[hour];
+                var pcSeconds = hasSource ? _pcHourlySeconds[hour] : _hourlySeconds[hour];
+                var phoneSeconds = hasSource ? _phoneHourlySeconds[hour] : 0;
+                (pcSeconds, phoneSeconds) = CapHourSourceSeconds(pcSeconds, phoneSeconds);
+                var seconds = pcSeconds + phoneSeconds;
                 if (seconds <= 0)
                 {
                     continue;
@@ -1073,10 +1122,12 @@ public sealed class StatsForm : Form
 
                 var angle = -90F + hour * 15F;
                 var length = 10F + (float)seconds / maxSeconds * (outerRadius - innerRadius - 14F);
-                var bounds = DrawHourBar(e.Graphics, center, angle, innerRadius, innerRadius + length, AccentGreen);
+                var bounds = DrawSourceHourBar(e.Graphics, center, angle, innerRadius, length, pcSeconds, phoneSeconds);
                 bounds.Inflate(8F, 8F);
                 _hits.Add(new ChartHit(bounds, ChartValueFormatter.FormatMinutes(seconds)));
             }
+
+            DrawHourLabels(e.Graphics, center, outerRadius);
 
             using var centerFill = new SolidBrush(PanelBackground);
             e.Graphics.FillEllipse(centerFill, center.X - innerRadius, center.Y - innerRadius, innerRadius * 2F, innerRadius * 2F);
@@ -1129,15 +1180,25 @@ public sealed class StatsForm : Form
             _tooltip.Hide(this);
         }
 
-        private static RectangleF DrawHourBar(Graphics graphics, PointF center, float angleDegrees, float innerRadius, float outerRadius, Color color)
+        private static RectangleF DrawHourBarSection(
+            Graphics graphics,
+            PointF center,
+            float angleDegrees,
+            float baseInnerRadius,
+            float startOffset,
+            float endOffset,
+            float fullLength,
+            Color color)
         {
             var angle = angleDegrees * Math.PI / 180D;
-            var innerHalf = 3.5F;
-            var outerHalf = 6.2F;
+            var innerHalf = InterpolateHalfWidth(startOffset, fullLength);
+            var outerHalf = InterpolateHalfWidth(endOffset, fullLength);
             var dx = (float)Math.Cos(angle);
             var dy = (float)Math.Sin(angle);
             var px = -dy;
             var py = dx;
+            var innerRadius = baseInnerRadius + startOffset;
+            var outerRadius = baseInnerRadius + endOffset;
             var inner = new PointF(center.X + dx * innerRadius, center.Y + dy * innerRadius);
             var outer = new PointF(center.X + dx * outerRadius, center.Y + dy * outerRadius);
             var points = new[]
@@ -1152,11 +1213,77 @@ public sealed class StatsForm : Form
             graphics.FillPolygon(brush, points);
             return BoundsOf(points);
         }
+
+        private static RectangleF DrawSourceHourBar(Graphics graphics, PointF center, float angleDegrees, float innerRadius, float length, long pcSeconds, long phoneSeconds)
+        {
+            var total = Math.Max(1L, pcSeconds + phoneSeconds);
+            RectangleF? bounds = null;
+            var cursor = innerRadius;
+            if (pcSeconds > 0)
+            {
+                var pcLength = length * pcSeconds / total;
+                bounds = DrawHourBarSection(graphics, center, angleDegrees, innerRadius, cursor - innerRadius, cursor + pcLength - innerRadius, length, AccentGreen);
+                cursor += pcLength;
+            }
+
+            if (phoneSeconds > 0)
+            {
+                var phoneBounds = DrawHourBarSection(graphics, center, angleDegrees, innerRadius, cursor - innerRadius, length, length, AccentBlue);
+                bounds = bounds.HasValue ? RectangleF.Union(bounds.Value, phoneBounds) : phoneBounds;
+            }
+
+            return bounds ?? RectangleF.Empty;
+        }
+
+        private static (long PcSeconds, long PhoneSeconds) CapHourSourceSeconds(long pcSeconds, long phoneSeconds)
+        {
+            const long hourSeconds = 3600L;
+            pcSeconds = Math.Max(0, pcSeconds);
+            phoneSeconds = Math.Max(0, phoneSeconds);
+            var totalSeconds = pcSeconds + phoneSeconds;
+            if (totalSeconds <= hourSeconds)
+            {
+                return (pcSeconds, phoneSeconds);
+            }
+
+            var scaledPcSeconds = (long)Math.Round(pcSeconds * (double)hourSeconds / totalSeconds);
+            scaledPcSeconds = Math.Clamp(scaledPcSeconds, 0, hourSeconds);
+            return (scaledPcSeconds, hourSeconds - scaledPcSeconds);
+        }
+
+        private static float InterpolateHalfWidth(float offset, float fullLength)
+        {
+            const float innerHalf = 3.5F;
+            const float outerHalf = 6.2F;
+            if (fullLength <= 0)
+            {
+                return innerHalf;
+            }
+
+            var ratio = Math.Clamp(offset / fullLength, 0F, 1F);
+            return innerHalf + (outerHalf - innerHalf) * ratio;
+        }
+
+        private static void DrawHourLabels(Graphics graphics, PointF center, float outerRadius)
+        {
+            using var font = new Font("Microsoft YaHei UI", 8F, FontStyle.Regular);
+            using var brush = new SolidBrush(TextSecondary);
+            using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+            foreach (var hour in new[] { 0, 6, 12, 18 })
+            {
+                var angle = (-90F + hour * 15F) * Math.PI / 180D;
+                var radius = outerRadius + 14F;
+                var x = center.X + (float)Math.Cos(angle) * radius;
+                var y = center.Y + (float)Math.Sin(angle) * radius;
+                graphics.DrawString(hour.ToString(), font, brush, new RectangleF(x - 14F, y - 9F, 28F, 18F), format);
+            }
+        }
     }
 
     private sealed class WeekBarChart : Control
     {
         private IReadOnlyList<DailyRecord> _records = Array.Empty<DailyRecord>();
+        private IReadOnlyList<UsageDeviceBreakdown> _deviceBreakdowns = Array.Empty<UsageDeviceBreakdown>();
         private readonly ToolTip _tooltip = CreateChartToolTip();
         private readonly List<ChartHit> _hits = new();
         private string? _visibleTip;
@@ -1176,11 +1303,24 @@ public sealed class StatsForm : Form
             }
         }
 
+        public IReadOnlyList<UsageDeviceBreakdown> DeviceBreakdowns
+        {
+            get => _deviceBreakdowns;
+            set
+            {
+                _deviceBreakdowns = value ?? Array.Empty<UsageDeviceBreakdown>();
+                Invalidate();
+            }
+        }
+
         protected override void OnPaint(PaintEventArgs e)
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             _hits.Clear();
             var records = _records.Count == 7 ? _records : Enumerable.Range(0, 7).Select(_ => new DailyRecord()).ToList();
+            var breakdowns = _deviceBreakdowns.Count == 7
+                ? _deviceBreakdowns
+                : Enumerable.Range(0, 7).Select(_ => new UsageDeviceBreakdown(0, 0)).ToList();
             var maxSeconds = Math.Max(1L, records.Max(record => record.TotalSeconds));
             var labels = new[] { "一", "二", "三", "四", "五", "六", "日" };
             using var textBrush = new SolidBrush(TextSecondary);
@@ -1192,8 +1332,23 @@ public sealed class StatsForm : Form
                 var x = 12 + i * ((Width - 24) / 7);
                 var width = 24;
                 var y = Height - 26 - barHeight;
-                using var brush = new SolidBrush(AccentGreen);
-                e.Graphics.FillRectangle(brush, x, y, width, barHeight);
+                var breakdown = breakdowns[i];
+                var sourceSeconds = breakdown.PcSeconds + breakdown.PhoneSeconds;
+                if (sourceSeconds > 0)
+                {
+                    var phoneHeight = (int)Math.Round(barHeight * breakdown.PhoneSeconds / (double)sourceSeconds);
+                    var pcHeight = barHeight - phoneHeight;
+                    using var pcBrush = new SolidBrush(AccentGreen);
+                    using var phoneBrush = new SolidBrush(AccentBlue);
+                    e.Graphics.FillRectangle(phoneBrush, x, y, width, phoneHeight);
+                    e.Graphics.FillRectangle(pcBrush, x, y + phoneHeight, width, pcHeight);
+                }
+                else
+                {
+                    using var brush = new SolidBrush(AccentGreen);
+                    e.Graphics.FillRectangle(brush, x, y, width, barHeight);
+                }
+
                 var bounds = new RectangleF(x - 6, y - 6, width + 12, barHeight + 12);
                 _hits.Add(new ChartHit(bounds, ChartValueFormatter.FormatCompactHours(records[i].TotalSeconds)));
                 e.Graphics.DrawString(labels[i], font, textBrush, x + 6, Height - 18);

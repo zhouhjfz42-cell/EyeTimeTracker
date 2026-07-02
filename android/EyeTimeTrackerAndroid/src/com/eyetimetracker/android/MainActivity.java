@@ -189,7 +189,7 @@ public final class MainActivity extends Activity {
         statsButton.setOnClickListener(v -> startActivity(new Intent(this, StatsActivity.class)));
         actions.addView(statsButton, weightedButtonParams(dp(6), 0));
 
-        root.addView(helpText("1. 将手机和电脑配对，共同统计注视两块屏幕的时间，有统计到重合时段的会删除重复统计。但依然会有部分误差。"), matchWrapTop(18));
+        root.addView(helpText("1. 将手机和电脑配对，共同统计注视两块屏幕的时间，有统计到重合时段的会删除重复统计，但可能会有部分误差；"), matchWrapTop(18));
         root.addView(helpText("2. 使用手机几秒内会自动开始统计，如果没有开始，点击右上角的“启动”。"), matchWrapTop(8));
         return scroll;
     }

@@ -23,4 +23,13 @@ public final class DailySummaryReconciler {
                 legacy.reminderShown,
                 legacy.lastReminderStep);
     }
+
+    public static DailySummary useSegmentSummaryForSyncedDay(DailySummary legacy, DailySummary segmented) {
+        if (segmented != null) {
+            return segmented;
+        }
+        return legacy == null
+                ? new DailySummary("", 0L, false, 0)
+                : legacy;
+    }
 }

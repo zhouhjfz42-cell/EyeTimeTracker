@@ -6,188 +6,130 @@
 
 `codex-wifi-sync-foundation`
 
-请在新窗口先确认：
+新窗口开始时先确认：
 
 ```powershell
 git status --short --branch
 ```
 
-预期分支是 `codex-wifi-sync-foundation`。不要切回 `master` 继续做 WiFi 同步半成品。
+不要切回 `master` 继续做功能。提交、推送只在用户明确要求时执行。
 
-## 当前 Git 状态
+## 今日收尾状态
 
-本轮 WiFi 同步基础工作尚未提交、尚未推送。
+本轮 WiFi 局域网同步和双端统计显示相关工作已经完成验证，并按用户要求准备提交和推送到 GitHub。
 
-最近已推送到 GitHub 的提交：
+本轮主要内容：
 
-- `2947586 完善统计图表交互与显示`
-- `8817ef9 docs: add product roadmap`
-- `a8b63bb 修正24H图按小时满格缩放`
+- PC 和 Android 均已支持配对、同步、断开、离线/重连状态显示。
+- PC 主界面和 Android 主界面在配对成功后显示已连接状态。
+- 双端断开时，会按同步响应清理配对状态。
+- Android 离开 WiFi 后显示暂时离线，再回到 WiFi 后可重连。
+- PC 和 Android 统计页都区分电脑/手机来源。
+- 今日用眼、最长连续、来源比例、提醒次数等显示改为基于同步后的可见统计。
+- 有同步明细的日期，两端都用同步明细生成的统计；没有同步明细的日期继续使用本机旧汇总。
+- 24 小时圆形柱状图增加 0、6、12、18 点标记。
+- 24 小时图来源叠加时，每小时最多显示 60 分钟；电脑/手机重合时按比例压缩到 60 分钟内。
+- PC 统计页右侧改为“今日摘要”，筛选和颜色示例移到“单日情况”标题后。
+- Android 底部说明文字已更新为用户指定文案。
+- PC 托盘菜单样式已从旧系统菜单改为应用内统一风格。
 
-当前未提交变更包含：
+## 已新增或重点修改文件
 
-- WiFi 同步设计文档
-- WiFi 同步实施计划
-- PC 端 10 秒片段模型、合并去重、签名消息
-- Android 端 10 秒片段模型、合并去重、签名消息
-- PC/Android 本地计时写入片段
+PC：
 
-## 已完成内容
-
-### 设计与计划
-
-已新增：
-
-- `docs/superpowers/specs/2026-07-02-wifi-lan-sync-design.md`
-- `docs/superpowers/plans/2026-07-02-wifi-lan-sync.md`
-
-设计结论：
-
-- 第一版只支持一台 PC + 一台 Android 手机。
-- PC 应用内置轻量同步监听，随 PC 程序运行；缩到托盘也运行；退出程序则停止。
-- 不做独立 Windows Service。
-- Android 主动连接 PC。
-- 手机仍是主设备：手机生成配对码，手机端提醒设置覆盖 PC。
-- 精确去重从新 10 秒片段数据开始；旧每日汇总继续显示，但无法精确反推跨设备重叠区间。
-
-### PC Core
-
-已新增：
-
-- `src/EyeTimeTracker.Core/Models/UsageSegment.cs`
-- `src/EyeTimeTracker.Core/Models/SyncSettings.cs`
-- `src/EyeTimeTracker.Core/Sync/UsageSegmentId.cs`
-- `src/EyeTimeTracker.Core/Sync/UsageSegmentFactory.cs`
-- `src/EyeTimeTracker.Core/Sync/UsageSegmentMerger.cs`
-- `src/EyeTimeTracker.Core/Sync/SyncMessages.cs`
-- `src/EyeTimeTracker.Core/Sync/SyncMessageSigner.cs`
-
-已修改：
-
-- `src/EyeTimeTracker.Core/Models/AppState.cs`
-- `src/EyeTimeTracker.Core/Storage/JsonStateStore.cs`
-
-已实现：
-
-- 10 秒片段模型。
-- 稳定片段 ID。
-- 10 秒桶合并去重。
-- 按片段生成 `DailyRecord`。
-- 连续使用按 3 分钟中断规则分段。
-- 同步消息类型：`pairRequest`、`pairAccept`、`syncRequest`、`syncResponse`、`reminderClaim`。
-- HMAC-SHA256 签名与 5 分钟时间戳过期校验。
-
-### PC App
-
-已修改：
-
+- `src/EyeTimeTracker.Core/Sync/UsageDeviceBreakdown.cs`
+- `src/EyeTimeTracker.Core/Sync/DailyRecordReconciler.cs`
+- `src/EyeTimeTracker.Core/Reminders/ReminderDisplayCount.cs`
 - `src/EyeTimeTracker.App/Tracking/TrackingController.cs`
+- `src/EyeTimeTracker.App/UI/StatsForm.cs`
+- `src/EyeTimeTracker.App/UI/TrayApplicationContext.cs`
 
-已实现：
+Android：
 
-- 本地真实计时路径在有效计时后写入 `UsageSegment`。
-- `pc-input` 与 `pc-media` 来源区分。
-- 保存状态时保留 `Segments` 和 `Sync` 字段。
-
-尚未实现：
-
-- PC 同步监听。
-- PC 配对窗口。
-- PC 同步状态 UI。
-- 配对后 PC 提醒设置只读。
-
-### Android
-
-已新增：
-
-- `android/EyeTimeTrackerAndroid/src/com/eyetimetracker/android/UsageSegment.java`
-- `android/EyeTimeTrackerAndroid/src/com/eyetimetracker/android/UsageSegmentId.java`
-- `android/EyeTimeTrackerAndroid/src/com/eyetimetracker/android/UsageSegmentMerger.java`
-- `android/EyeTimeTrackerAndroid/src/com/eyetimetracker/android/SyncMessages.java`
-- `android/EyeTimeTrackerAndroid/src/com/eyetimetracker/android/SyncMessageSigner.java`
-
-已修改：
-
+- `android/EyeTimeTrackerAndroid/src/com/eyetimetracker/android/DeviceUsageBreakdown.java`
+- `android/EyeTimeTrackerAndroid/src/com/eyetimetracker/android/DailySummaryReconciler.java`
 - `android/EyeTimeTrackerAndroid/src/com/eyetimetracker/android/EyeTimeStore.java`
-- `android/EyeTimeTrackerAndroid/src/com/eyetimetracker/android/EyeTimeService.java`
+- `android/EyeTimeTrackerAndroid/src/com/eyetimetracker/android/MainActivity.java`
+- `android/EyeTimeTrackerAndroid/src/com/eyetimetracker/android/ReminderPolicy.java`
+- `android/EyeTimeTrackerAndroid/src/com/eyetimetracker/android/StatsActivity.java`
 - `android/EyeTimeTrackerAndroid/tests/com/eyetimetracker/android/CoreLogicTest.java`
 
-已实现：
+Tests：
 
-- Android 本地计时写入 `segments`。
-- `getDay()` 在当天存在片段时，优先用片段合并统计；没有片段时继续读取旧汇总。
-- `sumRange()` 通过 `getDay()` 汇总，因此新片段会进入周/月统计。
-- Android 端同步消息类型和 HMAC-SHA256 签名校验。
-
-尚未实现：
-
-- Android 连接 PC。
-- Android 配对 UI。
-- Android 同步状态 UI。
-- Android 后台定时同步。
+- `tests/EyeTimeTracker.Tests/Program.cs`
 
 ## 已验证
 
-最近一次已通过：
+已通过：
 
 ```powershell
 dotnet run --project tests\EyeTimeTracker.Tests\EyeTimeTracker.Tests.csproj
-dotnet build src\EyeTimeTracker.App\EyeTimeTracker.App.csproj -o outputs\verify-pc-sync-contracts
-powershell -NoProfile -ExecutionPolicy Bypass -File android\EyeTimeTrackerAndroid\build-android.ps1
 ```
 
-Android 核心测试也通过：
+Android 核心测试已通过，测试内容包括：
 
-```powershell
-$out = 'outputs\android-core-tests'
-New-Item -ItemType Directory -Force -Path $out | Out-Null
-javac -encoding UTF-8 -d $out android\EyeTimeTrackerAndroid\src\com\eyetimetracker\android\ActivityDecision.java android\EyeTimeTrackerAndroid\src\com\eyetimetracker\android\DailySummary.java android\EyeTimeTrackerAndroid\src\com\eyetimetracker\android\DurationFormatter.java android\EyeTimeTrackerAndroid\src\com\eyetimetracker\android\TodayTone.java android\EyeTimeTrackerAndroid\src\com\eyetimetracker\android\ReminderThreshold.java android\EyeTimeTrackerAndroid\src\com\eyetimetracker\android\ReminderAlert.java android\EyeTimeTrackerAndroid\src\com\eyetimetracker\android\ReminderPolicy.java android\EyeTimeTrackerAndroid\src\com\eyetimetracker\android\UsageSegment.java android\EyeTimeTrackerAndroid\src\com\eyetimetracker\android\UsageSegmentId.java android\EyeTimeTrackerAndroid\src\com\eyetimetracker\android\UsageSegmentMerger.java android\EyeTimeTrackerAndroid\src\com\eyetimetracker\android\SyncMessages.java android\EyeTimeTrackerAndroid\src\com\eyetimetracker\android\SyncMessageSigner.java android\EyeTimeTrackerAndroid\tests\com\eyetimetracker\android\CoreLogicTest.java
-java -cp $out com.eyetimetracker.android.CoreLogicTest
+- 同步片段合并去重。
+- 双端来源比例。
+- 每小时来源叠加最多 60 分钟。
+- 同步日期优先使用同步明细统计。
+- 提醒次数按可见总时长计算。
+
+APK 已生成并安装到手机：
+
+```text
+C:\Users\zhouh\Documents\Codex\2026-06-26\new-chat\outputs\android\EyeTimeTrackerAndroid-debug.apk
 ```
 
-## 下一步
+PC 最近可用程序位置：
 
-下一步按计划做 **PC 应用内同步监听**。
+```text
+C:\Users\zhouh\Documents\Codex\2026-06-26\new-chat\outputs\verify-sync-summary-fix\EyeTimeTracker.App.exe
+```
 
-建议顺序：
+如果旧输出目录被正在运行的 PC 程序占用，后续构建应生成到新的输出目录，并给用户可点击链接。
 
-1. 新增 `src/EyeTimeTracker.App/Sync/PcSyncCoordinator.cs`
-   - 先不碰真实 Socket。
-   - 直接测试：接收 Android 片段，合并进 PC `AppState.Segments`。
-   - 返回 PC 本地片段。
-   - Android 设置覆盖 PC 设置。
+## 用户明确偏好
 
-2. 新增 `src/EyeTimeTracker.App/Sync/PcSyncServer.cs`
-   - 使用 `TcpListener`。
-   - 默认端口 `17420`，被占用时尝试 `17421` 到 `17429`。
-   - 一次 TCP 连接处理一条 JSON 请求并返回一条 JSON 响应。
-   - 网络异常不能让 PC 应用崩溃，只记录 `LastError`。
+- 后续不要使用用户看不懂的术语；如果必须说，要用普通话解释。
+- 每次有代码改动后：
+  - 自动构建 PC 版。
+  - 自动显示 PC 程序的可点击链接。
+  - 自动构建 Android APK。
+  - 自动安装安卓版到已连接手机。
+- 不要自动提交或推送，除非用户明确说“保存 git / 提交 / 推送”。
+- 用户不喜欢需要复制路径，尽量给可点击链接。
 
-3. 暂时不要急着做 UI。
-   - 先用测试或最小本地请求验证 server/coordinator。
-   - UI 放到 PC listener 能跑通之后再做。
+## 明天优先事项
 
-## 注意事项
+用户提出底层统计问题：希望确认或调整为“每天固定 10 秒格子”，双端都使用同一套时间格子，重合时同一格只算一次。
 
-- 用户明确说：提交、推送要等他说；不要自动 commit/push。
-- 用户明确说：除特殊提醒外，功能通常要 PC 和 Android 双端一起实施。
-- 当前阶段还没有安装新 APK 到手机。
-- 现在是基础同步分支，不要在 `master` 上继续做。
-- 文档和代码都在未提交状态，新窗口不要误以为这些已经进 Git。
+当前实现已经使用 Unix 时间的统一 10 秒格子进行同步合并：
+
+- PC：`UsageSegmentMerger` 使用 `unixSeconds / 10`。
+- Android：`UsageSegmentMerger` 使用同样的 10 秒格子。
+
+明天建议先做一次专项复核：
+
+1. 确认 PC 和 Android 所有新增片段都使用同一套 Unix 10 秒格子。
+2. 检查是否存在 UI 或本机旧汇总仍按“本机动作开始秒数”造成统计分叉。
+3. 如果需要，补测试明确：
+   - 任意秒数开始的 PC/Android 重合片段能落到同一批 10 秒格子。
+   - 同一小时最多 3600 秒。
+   - 跨小时片段能正确分配到两个小时。
+4. 如果测试证明现有实现已满足，则只补测试和说明，不需要重写逻辑。
 
 ## 新窗口启动建议
-
-新窗口开始时执行：
 
 ```powershell
 git status --short --branch
 dotnet run --project tests\EyeTimeTracker.Tests\EyeTimeTracker.Tests.csproj
 ```
 
-然后阅读：
+然后查看：
 
-- `docs/superpowers/specs/2026-07-02-wifi-lan-sync-design.md`
-- `docs/superpowers/plans/2026-07-02-wifi-lan-sync.md`
-- `src/EyeTimeTracker.Core/Sync/SyncMessages.cs`
-- `src/EyeTimeTracker.Core/Sync/SyncMessageSigner.cs`
-- `src/EyeTimeTracker.App/Tracking/TrackingController.cs`
+- `src/EyeTimeTracker.Core/Sync/UsageSegmentMerger.cs`
+- `src/EyeTimeTracker.Core/Sync/UsageDeviceBreakdown.cs`
+- `android/EyeTimeTrackerAndroid/src/com/eyetimetracker/android/UsageSegmentMerger.java`
+- `android/EyeTimeTrackerAndroid/src/com/eyetimetracker/android/DeviceUsageBreakdown.java`
+- `src/EyeTimeTracker.App/UI/StatsForm.cs`
+- `android/EyeTimeTrackerAndroid/src/com/eyetimetracker/android/StatsActivity.java`

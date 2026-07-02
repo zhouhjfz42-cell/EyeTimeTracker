@@ -128,9 +128,16 @@ public sealed class TrackingController : IDisposable
         lock (_gate)
         {
             PersistAccumulatorLocked();
-            return _state.Records
-                .Select(CloneRecord)
-                .ToList();
+            return CreateVisibleRecordsSnapshotLocked();
+        }
+    }
+
+    public UsageDeviceBreakdown GetDeviceBreakdown(DateOnly date)
+    {
+        lock (_gate)
+        {
+            PersistAccumulatorLocked();
+            return UsageDeviceBreakdown.Build(date, _state.Segments);
         }
     }
 
@@ -379,6 +386,27 @@ public sealed class TrackingController : IDisposable
                 .ToList(),
             Sync = CloneSyncSettings(_state.Sync)
         };
+    }
+
+    private List<DailyRecord> CreateVisibleRecordsSnapshotLocked()
+    {
+        var recordsByDate = _state.Records
+            .Select(CloneRecord)
+            .ToDictionary(record => record.Date);
+
+        foreach (var date in _state.Segments
+            .Where(segment => segment.LocalDate != default)
+            .Select(segment => segment.LocalDate)
+            .Distinct())
+        {
+            var segmentRecord = UsageSegmentMerger.BuildDailyRecord(date, _state.Segments);
+            recordsByDate.TryGetValue(date, out var existing);
+            recordsByDate[date] = DailyRecordReconciler.UseSegmentRecordForSyncedDay(existing, segmentRecord);
+        }
+
+        return recordsByDate.Values
+            .OrderBy(record => record.Date)
+            .ToList();
     }
 
     private static DailyRecord CloneRecord(DailyRecord record)

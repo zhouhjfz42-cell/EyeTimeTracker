@@ -13,11 +13,13 @@ public final class CoreLogicTest {
         shouldFormatReminderAlertText();
         shouldFormatConnectionStatus();
         shouldNotifyOnceOrAtRepeatMultiples();
+        shouldDisplayReminderCountFromVisibleTotal();
         shouldCreateStableUsageSegmentIds();
         shouldMergeOverlappingSegmentsOnlyOnce();
+        shouldComputeDeviceBreakdown();
+        shouldCapHourlySourceStackAtOneHour();
         shouldBreakContinuousSegmentsAfterThreeMinutes();
-        shouldKeepLegacyDailyTotalWhenSegmentsAreLower();
-        shouldUseSegmentSummaryWhenSegmentsAreHigherButKeepReminderState();
+        shouldUseSegmentSummaryWhenSegmentsExist();
         shouldSignSyncMessages();
         shouldRejectSyncMessagesWithWrongSecret();
         shouldRejectStaleSyncMessages();
@@ -109,6 +111,12 @@ public final class CoreLogicTest {
         assertEquals(2, ReminderPolicy.reachedStep(660L * 60L, 330), "repeat step is based on today's total");
     }
 
+    private static void shouldDisplayReminderCountFromVisibleTotal() {
+        assertEquals(0, ReminderPolicy.displayCount(44L * 60L, 45, false), "display reminder count below threshold");
+        assertEquals(1, ReminderPolicy.displayCount(90L * 60L, 45, false), "display reminder count once policy");
+        assertEquals(2, ReminderPolicy.displayCount(90L * 60L, 45, true), "display reminder count repeat policy");
+    }
+
     private static UsageSegment segment(String device, String platform, String source, long startSeconds, long durationSeconds) {
         return new UsageSegment(
                 UsageSegmentId.create(device, source, startSeconds, startSeconds + durationSeconds),
@@ -142,6 +150,41 @@ public final class CoreLogicTest {
         assertEquals(30L, summary.totalSeconds, "overlapping device segments count once");
     }
 
+    private static void shouldComputeDeviceBreakdown() {
+        long t0 = java.time.OffsetDateTime.of(2026, 7, 2, 12, 0, 0, 0, java.time.ZoneOffset.UTC).toEpochSecond();
+        java.util.List<UsageSegment> segments = new java.util.ArrayList<>();
+        segments.add(segment("pc", "windows", "pc-input", t0, 60));
+        segments.add(segment("phone", "android", "android-screen", t0 + 120L, 30));
+        int localHour = java.time.Instant.ofEpochSecond(t0)
+                .atZone(java.time.ZoneId.systemDefault())
+                .getHour();
+
+        DeviceUsageBreakdown breakdown = DeviceUsageBreakdown.build("2026-07-02", segments);
+
+        assertEquals(60L, breakdown.pcSeconds, "device breakdown pc seconds");
+        assertEquals(30L, breakdown.phoneSeconds, "device breakdown phone seconds");
+        assertEquals(67, breakdown.pcPercent(), "device breakdown pc percent");
+        assertEquals(33, breakdown.phonePercent(), "device breakdown phone percent");
+        assertEquals(60L, breakdown.pcHourlySeconds[localHour], "device breakdown pc hourly");
+        assertEquals(30L, breakdown.phoneHourlySeconds[localHour], "device breakdown phone hourly");
+    }
+
+    private static void shouldCapHourlySourceStackAtOneHour() {
+        long t0 = java.time.OffsetDateTime.of(2026, 7, 2, 12, 0, 0, 0, java.time.ZoneOffset.UTC).toEpochSecond();
+        java.util.List<UsageSegment> segments = new java.util.ArrayList<>();
+        segments.add(segment("pc", "windows", "pc-input", t0, 3600));
+        segments.add(segment("phone", "android", "android-screen", t0, 3600));
+        int localHour = java.time.Instant.ofEpochSecond(t0)
+                .atZone(java.time.ZoneId.systemDefault())
+                .getHour();
+
+        DeviceUsageBreakdown breakdown = DeviceUsageBreakdown.build("2026-07-02", segments);
+
+        assertEquals(3600L, breakdown.pcHourlySeconds[localHour] + breakdown.phoneHourlySeconds[localHour], "hourly source stack caps at one hour");
+        assertEquals(1800L, breakdown.pcHourlySeconds[localHour], "hourly source pc scales down");
+        assertEquals(1800L, breakdown.phoneHourlySeconds[localHour], "hourly source phone scales down");
+    }
+
     private static void shouldBreakContinuousSegmentsAfterThreeMinutes() {
         long t0 = java.time.OffsetDateTime.of(2026, 7, 2, 9, 0, 0, 0, java.time.ZoneOffset.UTC).toEpochSecond();
         java.util.List<UsageSegment> segments = new java.util.ArrayList<>();
@@ -155,32 +198,18 @@ public final class CoreLogicTest {
         assertEquals(60L, summary.sessionSeconds[1], "second continuous session");
     }
 
-    private static void shouldKeepLegacyDailyTotalWhenSegmentsAreLower() {
+    private static void shouldUseSegmentSummaryWhenSegmentsExist() {
         long[] legacyHourly = new long[24];
         legacyHourly[9] = 3_600L;
         DailySummary legacy = new DailySummary("2026-07-02", 3_600L, legacyHourly, new long[] { 3_600L }, 300L, true, 2);
         DailySummary segmented = new DailySummary("2026-07-02", 120L, false, 0);
 
-        DailySummary summary = DailySummaryReconciler.preserveVisibleTotal(legacy, segmented);
+        DailySummary summary = DailySummaryReconciler.useSegmentSummaryForSyncedDay(legacy, segmented);
 
-        assertEquals(3_600L, summary.totalSeconds, "legacy daily total stays visible");
-        assertEquals(3_600L, summary.hourlySeconds[9], "legacy hourly data stays visible");
-        assertEquals(true, summary.reminderShown, "legacy reminder state stays visible");
-        assertEquals(2, summary.lastReminderStep, "legacy reminder step stays visible");
-    }
-
-    private static void shouldUseSegmentSummaryWhenSegmentsAreHigherButKeepReminderState() {
-        long[] segmentHourly = new long[24];
-        segmentHourly[10] = 4_200L;
-        DailySummary legacy = new DailySummary("2026-07-02", 3_600L, true, 2);
-        DailySummary segmented = new DailySummary("2026-07-02", 4_200L, segmentHourly, new long[] { 4_200L }, 0L, false, 0);
-
-        DailySummary summary = DailySummaryReconciler.preserveVisibleTotal(legacy, segmented);
-
-        assertEquals(4_200L, summary.totalSeconds, "segment summary can increase visible total");
-        assertEquals(4_200L, summary.hourlySeconds[10], "segment hourly data is used");
-        assertEquals(true, summary.reminderShown, "legacy reminder state is kept");
-        assertEquals(2, summary.lastReminderStep, "legacy reminder step is kept");
+        assertEquals(120L, summary.totalSeconds, "segment summary replaces legacy total");
+        assertEquals(0L, summary.hourlySeconds[9], "legacy hourly data does not override synced day");
+        assertEquals(false, summary.reminderShown, "legacy reminder state does not override synced day");
+        assertEquals(0, summary.lastReminderStep, "legacy reminder step does not override synced day");
     }
 
     private static void shouldSignSyncMessages() {

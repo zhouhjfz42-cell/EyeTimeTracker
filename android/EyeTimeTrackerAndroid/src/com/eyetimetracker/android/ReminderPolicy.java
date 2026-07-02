@@ -27,4 +27,12 @@ public final class ReminderPolicy {
         }
         return !reminderShown;
     }
+
+    public static int displayCount(long totalSeconds, int thresholdMinutes, boolean repeatEnabled) {
+        int step = reachedStep(totalSeconds, thresholdMinutes);
+        if (repeatEnabled) {
+            return step;
+        }
+        return step > 0 ? 1 : 0;
+    }
 }

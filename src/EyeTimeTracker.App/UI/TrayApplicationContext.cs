@@ -1,3 +1,4 @@
+using System.Drawing.Drawing2D;
 using EyeTimeTracker.App.Platform;
 using EyeTimeTracker.App.Sync;
 using EyeTimeTracker.App.Tracking;
@@ -22,12 +23,12 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     public TrayApplicationContext()
     {
-        _menu = new ContextMenuStrip();
-        _menu.Items.Add(new ToolStripMenuItem("\u6253\u5f00", null, (_, _) => OpenMainWindow()));
-        _pairingMenuItem = new ToolStripMenuItem("\u624b\u673a\u914d\u5bf9", null, (_, _) => HandlePairingAction());
+        _menu = CreateTrayMenu();
+        _menu.Items.Add(CreateMenuItem("\u6253\u5f00", (_, _) => OpenMainWindow()));
+        _pairingMenuItem = CreateMenuItem("\u624b\u673a\u914d\u5bf9", (_, _) => HandlePairingAction());
         _menu.Items.Add(_pairingMenuItem);
-        _menu.Items.Add(new ToolStripSeparator());
-        _menu.Items.Add(new ToolStripMenuItem("\u9000\u51fa", null, (_, _) => ExitApplication()));
+        _menu.Items.Add(new ToolStripSeparator { Margin = new Padding(10, 5, 10, 5) });
+        _menu.Items.Add(CreateMenuItem("\u9000\u51fa", (_, _) => ExitApplication()));
 
         _uiDispatcher = new Control();
         _ = _uiDispatcher.Handle;
@@ -56,6 +57,34 @@ public sealed class TrayApplicationContext : ApplicationContext
         _startupManager = new StartupManager();
         ApplyStartupSetting();
         OpenMainWindow();
+    }
+
+    private static ContextMenuStrip CreateTrayMenu()
+    {
+        return new ContextMenuStrip
+        {
+            ShowImageMargin = false,
+            ShowCheckMargin = false,
+            AutoSize = true,
+            Padding = new Padding(8, 8, 8, 8),
+            BackColor = Color.FromArgb(252, 254, 253),
+            ForeColor = Color.FromArgb(17, 24, 39),
+            Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Regular, GraphicsUnit.Point),
+            Renderer = new TrayMenuRenderer()
+        };
+    }
+
+    private static ToolStripMenuItem CreateMenuItem(string text, EventHandler onClick)
+    {
+        return new ToolStripMenuItem(text, null, onClick)
+        {
+            AutoSize = false,
+            Width = 168,
+            Height = 38,
+            Padding = new Padding(16, 0, 16, 0),
+            Margin = new Padding(0, 1, 0, 1),
+            ForeColor = Color.FromArgb(17, 24, 39)
+        };
     }
 
     private void OpenMainWindow()
@@ -199,5 +228,70 @@ public sealed class TrayApplicationContext : ApplicationContext
         _uiDispatcher.Dispose();
         _menu.Dispose();
         ExitThread();
+    }
+
+    private sealed class TrayMenuRenderer : ToolStripProfessionalRenderer
+    {
+        private static readonly Color MenuBackground = Color.FromArgb(252, 254, 253);
+        private static readonly Color HoverBackground = Color.FromArgb(238, 249, 245);
+        private static readonly Color Border = Color.FromArgb(217, 238, 231);
+        private static readonly Color Text = Color.FromArgb(17, 24, 39);
+        private static readonly Color Muted = Color.FromArgb(101, 114, 137);
+
+        protected override void OnRenderToolStripBackground(ToolStripRenderEventArgs e)
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using var brush = new SolidBrush(MenuBackground);
+            e.Graphics.FillRectangle(brush, e.AffectedBounds);
+        }
+
+        protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            var bounds = new Rectangle(0, 0, e.ToolStrip.Width - 1, e.ToolStrip.Height - 1);
+            using var path = RoundedRect(bounds, 12);
+            using var pen = new Pen(Border);
+            e.Graphics.DrawPath(pen, path);
+        }
+
+        protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)
+        {
+            if (!e.Item.Selected)
+            {
+                return;
+            }
+
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            var bounds = new Rectangle(4, 2, e.Item.Width - 8, e.Item.Height - 4);
+            using var path = RoundedRect(bounds, 10);
+            using var brush = new SolidBrush(HoverBackground);
+            e.Graphics.FillPath(brush, path);
+        }
+
+        protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
+        {
+            e.TextColor = e.Item.Enabled ? Text : Muted;
+            e.TextFormat = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding;
+            base.OnRenderItemText(e);
+        }
+
+        protected override void OnRenderSeparator(ToolStripSeparatorRenderEventArgs e)
+        {
+            var y = e.Item.Height / 2;
+            using var pen = new Pen(Border);
+            e.Graphics.DrawLine(pen, 8, y, e.Item.Width - 8, y);
+        }
+
+        private static GraphicsPath RoundedRect(Rectangle bounds, int radius)
+        {
+            var path = new GraphicsPath();
+            var diameter = radius * 2;
+            path.AddArc(bounds.Left, bounds.Top, diameter, diameter, 180, 90);
+            path.AddArc(bounds.Right - diameter, bounds.Top, diameter, diameter, 270, 90);
+            path.AddArc(bounds.Right - diameter, bounds.Bottom - diameter, diameter, diameter, 0, 90);
+            path.AddArc(bounds.Left, bounds.Bottom - diameter, diameter, diameter, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
     }
 }

@@ -53,7 +53,7 @@ public final class EyeTimeStore {
             List<UsageSegment> segments = readSegments(state, date, date);
             if (!segments.isEmpty()) {
                 DailySummary merged = UsageSegmentMerger.buildDailySummary(date.toString(), segments);
-                return DailySummaryReconciler.preserveVisibleTotal(legacy, merged);
+                return DailySummaryReconciler.useSegmentSummaryForSyncedDay(legacy, merged);
             }
             return legacy;
         } catch (JSONException ex) {
@@ -98,6 +98,14 @@ public final class EyeTimeStore {
             return readSegments(loadState(), start, end);
         } catch (JSONException ignored) {
             return new ArrayList<>();
+        }
+    }
+
+    public synchronized DeviceUsageBreakdown getDeviceBreakdown(LocalDate date) {
+        try {
+            return DeviceUsageBreakdown.build(date.toString(), readSegments(loadState(), date, date));
+        } catch (JSONException ignored) {
+            return new DeviceUsageBreakdown(0L, 0L);
         }
     }
 
