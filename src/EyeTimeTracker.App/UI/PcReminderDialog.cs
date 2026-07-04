@@ -24,7 +24,7 @@ public sealed class PcReminderDialog : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         TopMost = true;
-        ClientSize = new Size(470, 270);
+        ClientSize = new Size(470, 290);
         BackColor = Color.White;
         Font = AppFonts.Create(9F, FontStyle.Regular, GraphicsUnit.Point);
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
@@ -53,17 +53,19 @@ public sealed class PcReminderDialog : Form
         Controls.Add(new StaticText
         {
             Text = body,
-            Bounds = new Rectangle(28, 94, 414, 74),
+            Bounds = new Rectangle(28, 94, 414, 96),
             Font = AppFonts.Create(11F, FontStyle.Regular, GraphicsUnit.Point),
             ForeColor = TextSecondary,
             BackColor = Color.Transparent,
-            TextAlign = ContentAlignment.TopLeft
+            TextAlign = ContentAlignment.TopLeft,
+            WordWrap = true,
+            UseEllipsis = false
         });
 
         var okButton = new RoundedButton
         {
             Text = "\u6211\u77e5\u9053\u4e86",
-            Bounds = new Rectangle(135, 198, 200, 48),
+            Bounds = new Rectangle(135, 218, 200, 48),
             ButtonColor = AccentGreen,
             HoverColor = Color.FromArgb(19, 145, 111),
             PressedColor = Color.FromArgb(17, 124, 96),
@@ -190,6 +192,8 @@ public sealed class PcReminderDialog : Form
     private sealed class StaticText : Control
     {
         public ContentAlignment TextAlign { get; set; } = ContentAlignment.MiddleLeft;
+        public bool WordWrap { get; set; }
+        public bool UseEllipsis { get; set; } = true;
 
         public StaticText()
         {
@@ -210,28 +214,34 @@ public sealed class PcReminderDialog : Form
                 e.Graphics.Clear(BackColor);
             }
 
-            e.Graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
-            using var brush = new SolidBrush(ForeColor);
-            using var format = CreateStringFormat();
-            e.Graphics.DrawString(Text, Font, brush, ClientRectangle, format);
+            var flags = CreateTextFormatFlags();
+            TextRenderer.DrawText(e.Graphics, Text, Font, ClientRectangle, ForeColor, flags);
         }
 
-        private StringFormat CreateStringFormat()
+        private TextFormatFlags CreateTextFormatFlags()
         {
-            var format = (StringFormat)StringFormat.GenericTypographic.Clone();
-            format.Trimming = StringTrimming.EllipsisCharacter;
-            format.FormatFlags &= ~StringFormatFlags.NoWrap;
-            format.Alignment = TextAlign is ContentAlignment.TopRight or ContentAlignment.MiddleRight or ContentAlignment.BottomRight
-                ? StringAlignment.Far
-                : TextAlign is ContentAlignment.TopCenter or ContentAlignment.MiddleCenter or ContentAlignment.BottomCenter
-                    ? StringAlignment.Center
-                    : StringAlignment.Near;
-            format.LineAlignment = TextAlign is ContentAlignment.BottomLeft or ContentAlignment.BottomCenter or ContentAlignment.BottomRight
-                ? StringAlignment.Far
-                : TextAlign is ContentAlignment.TopLeft or ContentAlignment.TopCenter or ContentAlignment.TopRight
-                    ? StringAlignment.Near
-                    : StringAlignment.Center;
-            return format;
+            var flags = TextFormatFlags.NoPadding | TextFormatFlags.PreserveGraphicsClipping;
+            flags |= WordWrap ? TextFormatFlags.WordBreak : TextFormatFlags.SingleLine;
+            if (UseEllipsis)
+            {
+                flags |= TextFormatFlags.EndEllipsis;
+            }
+
+            flags |= TextAlign switch
+            {
+                ContentAlignment.TopCenter or ContentAlignment.MiddleCenter or ContentAlignment.BottomCenter => TextFormatFlags.HorizontalCenter,
+                ContentAlignment.TopRight or ContentAlignment.MiddleRight or ContentAlignment.BottomRight => TextFormatFlags.Right,
+                _ => TextFormatFlags.Left
+            };
+
+            flags |= TextAlign switch
+            {
+                ContentAlignment.MiddleLeft or ContentAlignment.MiddleCenter or ContentAlignment.MiddleRight => TextFormatFlags.VerticalCenter,
+                ContentAlignment.BottomLeft or ContentAlignment.BottomCenter or ContentAlignment.BottomRight => TextFormatFlags.Bottom,
+                _ => TextFormatFlags.Top
+            };
+
+            return flags;
         }
     }
 
