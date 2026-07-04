@@ -40,6 +40,7 @@ public final class ReminderThreshold {
     }
 
     public static String formatRepeatLabel(int minutes) {
-        return "反复提醒（当天内每" + clampMinutes(minutes) + "分钟提醒一次）";
+        clampMinutes(minutes);
+        return "反复提醒（每达到时间就提醒一次，一天\n内可能出现多次提醒）";
     }
 }

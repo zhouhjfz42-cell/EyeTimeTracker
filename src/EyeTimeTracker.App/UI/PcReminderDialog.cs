@@ -2,35 +2,36 @@ using System.Drawing.Drawing2D;
 
 namespace EyeTimeTracker.App.UI;
 
-public sealed class PcDisconnectDialog : Form
+public sealed class PcReminderDialog : Form
 {
     private static readonly Color TextPrimary = Color.FromArgb(17, 24, 39);
     private static readonly Color TextSecondary = Color.FromArgb(102, 112, 133);
     private static readonly Color AccentGreen = Color.FromArgb(22, 166, 125);
     private static readonly Color BorderColor = Color.FromArgb(225, 232, 229);
 
-    public PcDisconnectDialog(Icon? icon)
+    public PcReminderDialog(string title, string body, Icon? icon)
     {
         AutoScaleMode = AutoScaleMode.None;
-        Text = "\u65ad\u5f00\u8fde\u63a5";
+        Text = title;
         if (icon is not null)
         {
             Icon = (Icon)icon.Clone();
         }
 
-        StartPosition = FormStartPosition.CenterParent;
+        StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.None;
         MaximizeBox = false;
         MinimizeBox = false;
         ShowInTaskbar = false;
-        ClientSize = new Size(470, 286);
+        TopMost = true;
+        ClientSize = new Size(470, 270);
         BackColor = Color.White;
         Font = AppFonts.Create(9F, FontStyle.Regular, GraphicsUnit.Point);
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
 
         Controls.Add(new StaticText
         {
-            Text = "\u65ad\u5f00",
+            Text = title,
             Bounds = new Rectangle(28, 24, 300, 58),
             Font = AppFonts.Create(19F, FontStyle.Bold, GraphicsUnit.Point),
             ForeColor = TextPrimary,
@@ -44,52 +45,36 @@ public sealed class PcDisconnectDialog : Form
         };
         closeButton.Click += (_, _) =>
         {
-            DialogResult = DialogResult.Cancel;
+            DialogResult = DialogResult.OK;
             Close();
         };
         Controls.Add(closeButton);
 
         Controls.Add(new StaticText
         {
-            Text = "\u65ad\u5f00\u540e\uff0c\u624b\u673a\u548c\u7535\u8111\u5c06\u505c\u6b62\u540c\u6b65\u3002\r\n\u4e0b\u6b21\u8fde\u63a5\u9700\u8981\u91cd\u65b0\u914d\u5bf9\u3002",
-            Bounds = new Rectangle(28, 94, 414, 72),
+            Text = body,
+            Bounds = new Rectangle(28, 94, 414, 74),
             Font = AppFonts.Create(11F, FontStyle.Regular, GraphicsUnit.Point),
             ForeColor = TextSecondary,
             BackColor = Color.Transparent,
             TextAlign = ContentAlignment.TopLeft
         });
 
-        var cancelButton = new RoundedButton
+        var okButton = new RoundedButton
         {
-            Text = "\u53d6\u6d88",
-            Bounds = new Rectangle(28, 214, 190, 48),
-            ButtonColor = Color.FromArgb(242, 244, 247),
-            HoverColor = Color.FromArgb(232, 236, 240),
-            PressedColor = Color.FromArgb(220, 226, 232),
-            TextColor = Color.FromArgb(52, 64, 84)
-        };
-        cancelButton.Click += (_, _) =>
-        {
-            DialogResult = DialogResult.Cancel;
-            Close();
-        };
-        Controls.Add(cancelButton);
-
-        var disconnectButton = new RoundedButton
-        {
-            Text = "\u65ad\u5f00\u8fde\u63a5",
-            Bounds = new Rectangle(238, 214, 204, 48),
+            Text = "\u6211\u77e5\u9053\u4e86",
+            Bounds = new Rectangle(135, 198, 200, 48),
             ButtonColor = AccentGreen,
             HoverColor = Color.FromArgb(19, 145, 111),
             PressedColor = Color.FromArgb(17, 124, 96),
             TextColor = Color.White
         };
-        disconnectButton.Click += (_, _) =>
+        okButton.Click += (_, _) =>
         {
             DialogResult = DialogResult.OK;
             Close();
         };
-        Controls.Add(disconnectButton);
+        Controls.Add(okButton);
     }
 
     protected override void OnResize(EventArgs e)
@@ -113,16 +98,9 @@ public sealed class PcDisconnectDialog : Form
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
-        if (keyData == Keys.Enter)
+        if (keyData is Keys.Enter or Keys.Escape)
         {
             DialogResult = DialogResult.OK;
-            Close();
-            return true;
-        }
-
-        if (keyData == Keys.Escape)
-        {
-            DialogResult = DialogResult.Cancel;
             Close();
             return true;
         }
@@ -241,7 +219,7 @@ public sealed class PcDisconnectDialog : Form
         private StringFormat CreateStringFormat()
         {
             var format = (StringFormat)StringFormat.GenericTypographic.Clone();
-            format.Trimming = StringTrimming.None;
+            format.Trimming = StringTrimming.EllipsisCharacter;
             format.FormatFlags &= ~StringFormatFlags.NoWrap;
             format.Alignment = TextAlign is ContentAlignment.TopRight or ContentAlignment.MiddleRight or ContentAlignment.BottomRight
                 ? StringAlignment.Far

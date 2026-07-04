@@ -2,16 +2,20 @@ package com.eyetimetracker.android;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.util.Log;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 public final class EyeTimeStore {
+    private static final String DIAG_TAG = "EyeTimeDiag";
     private static final String PREFS = "eye_time_tracker";
     private static final String STATE = "state_json";
     private static final String DEVICE_ID = "device_id";
@@ -32,6 +36,7 @@ public final class EyeTimeStore {
     private static final String RESET_WEEK_SECONDS = "display_reset_week_seconds";
     private static final String RESET_MONTH_START = "display_reset_month_start";
     private static final String RESET_MONTH_SECONDS = "display_reset_month_seconds";
+    private static final String MAIN_ACTIVITY_VISIBLE = "main_activity_visible";
     private static final String PLATFORM = "android";
 
     private final SharedPreferences prefs;
@@ -50,7 +55,7 @@ public final class EyeTimeStore {
             JSONObject state = loadState();
             JSONObject record = getOrCreateRecord(state, date.toString());
             DailySummary legacy = readLegacyDailySummary(date.toString(), record);
-            List<UsageSegment> segments = readSegments(state, date, date);
+            List<UsageSegment> segments = readEffectiveSegments(state, date, date);
             if (!segments.isEmpty()) {
                 DailySummary merged = UsageSegmentMerger.buildDailySummary(date.toString(), segments);
                 return DailySummaryReconciler.useSegmentSummaryForSyncedDay(legacy, merged);
@@ -93,9 +98,22 @@ public final class EyeTimeStore {
         }
     }
 
+    public synchronized int addSegments(List<UsageSegment> newSegments) {
+        try {
+            JSONObject state = loadState();
+            int changed = mergeSegments(state, newSegments);
+            if (changed > 0) {
+                saveState(state);
+            }
+            return changed;
+        } catch (JSONException ignored) {
+            return 0;
+        }
+    }
+
     public synchronized List<UsageSegment> getSegments(LocalDate start, LocalDate end) {
         try {
-            return readSegments(loadState(), start, end);
+            return readEffectiveSegments(loadState(), start, end);
         } catch (JSONException ignored) {
             return new ArrayList<>();
         }
@@ -103,7 +121,7 @@ public final class EyeTimeStore {
 
     public synchronized DeviceUsageBreakdown getDeviceBreakdown(LocalDate date) {
         try {
-            return DeviceUsageBreakdown.build(date.toString(), readSegments(loadState(), date, date));
+            return DeviceUsageBreakdown.build(date.toString(), readEffectiveSegments(loadState(), date, date));
         } catch (JSONException ignored) {
             return new DeviceUsageBreakdown(0L, 0L);
         }
@@ -126,12 +144,16 @@ public final class EyeTimeStore {
     }
 
     public synchronized List<DailySummary> getDays(LocalDate start, LocalDate end) {
+        long startedAt = System.currentTimeMillis();
         List<DailySummary> summaries = new ArrayList<>();
         LocalDate cursor = start;
         while (!cursor.isAfter(end)) {
             summaries.add(getDay(cursor));
             cursor = cursor.plusDays(1);
         }
+        Log.i(DIAG_TAG, "EyeTimeStore getDays range=" + start + ".." + end
+                + " days=" + summaries.size()
+                + " ms=" + elapsed(startedAt));
         return summaries;
     }
 
@@ -166,6 +188,14 @@ public final class EyeTimeStore {
                 .apply();
     }
 
+    public synchronized void setMainActivityVisible(boolean visible) {
+        prefs.edit().putBoolean(MAIN_ACTIVITY_VISIBLE, visible).apply();
+    }
+
+    public synchronized boolean isMainActivityVisible() {
+        return prefs.getBoolean(MAIN_ACTIVITY_VISIBLE, false);
+    }
+
     public synchronized SyncSettings getSyncSettings() {
         SyncSettings settings = new SyncSettings();
         settings.isPaired = prefs.getBoolean(SYNC_IS_PAIRED, false);
@@ -177,6 +207,25 @@ public final class EyeTimeStore {
         settings.lastSyncUnixSeconds = prefs.getLong(SYNC_LAST_SYNC_UNIX_SECONDS, 0L);
         settings.lastError = prefs.getString(SYNC_LAST_ERROR, "");
         return settings;
+    }
+
+    public synchronized String diagnosticSnapshot() {
+        try {
+            JSONObject state = loadState();
+            JSONArray records = state.optJSONArray("records");
+            JSONArray segments = state.optJSONArray("segments");
+            SyncSettings settings = getSyncSettings();
+            return "records=" + (records == null ? 0 : records.length())
+                    + " segments=" + (segments == null ? 0 : segments.length())
+                    + " stateChars=" + state.toString().length()
+                    + " paired=" + settings.isPaired
+                    + " peerHost=" + safe(settings.peerHost)
+                    + " peerPort=" + settings.peerPort
+                    + " lastSync=" + settings.lastSyncUnixSeconds
+                    + " lastError=" + safe(settings.lastError);
+        } catch (Exception ex) {
+            return "diagnosticError=" + (ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage());
+        }
     }
 
     public synchronized void saveSyncSettings(SyncSettings settings) {
@@ -336,14 +385,33 @@ public final class EyeTimeStore {
     }
 
     private static void addSegment(JSONObject state, UsageSegment segment) throws JSONException {
+        mergeSegments(state, java.util.Collections.singletonList(segment));
+    }
+
+    static int mergeSegments(JSONObject state, List<UsageSegment> newSegments) throws JSONException {
+        if (newSegments == null || newSegments.isEmpty()) {
+            return 0;
+        }
         JSONArray segments = ensureSegments(state);
+        Set<String> existingIds = new HashSet<>();
         for (int i = 0; i < segments.length(); i++) {
             JSONObject existing = segments.optJSONObject(i);
-            if (existing != null && segment.segmentId.equals(existing.optString("segmentId"))) {
-                return;
+            if (existing != null) {
+                existingIds.add(existing.optString("segmentId"));
             }
         }
-        segments.put(segmentToJson(segment));
+
+        int changed = 0;
+        for (UsageSegment segment : newSegments) {
+            if (segment == null || segment.segmentId == null || segment.segmentId.trim().isEmpty()) {
+                continue;
+            }
+            if (existingIds.add(segment.segmentId)) {
+                segments.put(segmentToJson(segment));
+                changed++;
+            }
+        }
+        return changed;
     }
 
     private static JSONArray ensureSegments(JSONObject state) throws JSONException {
@@ -397,6 +465,43 @@ public final class EyeTimeStore {
             LocalDate date = LocalDate.parse(segment.localDate);
             if (!date.isBefore(start) && !date.isAfter(end)) {
                 values.add(segment);
+            }
+        }
+        return values;
+    }
+
+    private List<UsageSegment> readEffectiveSegments(JSONObject state, LocalDate start, LocalDate end) throws JSONException {
+        long startedAt = System.currentTimeMillis();
+        List<UsageSegment> segments = readSegments(state, start, end);
+        List<DailySummary> legacySummaries = readLegacyDailySummaries(state, start, end);
+        List<UsageSegment> effective = LegacyUsageSegments.normalizeEffectiveSegments(
+                segments,
+                legacySummaries,
+                ensureDeviceId(),
+                PLATFORM);
+        Log.i(DIAG_TAG, "EyeTimeStore readEffectiveSegments range=" + start + ".." + end
+                + " stored=" + segments.size()
+                + " legacyDays=" + legacySummaries.size()
+                + " effective=" + effective.size()
+                + " ms=" + elapsed(startedAt));
+        return effective;
+    }
+
+    private List<DailySummary> readLegacyDailySummaries(JSONObject state, LocalDate start, LocalDate end) throws JSONException {
+        JSONArray records = state.getJSONArray("records");
+        List<DailySummary> values = new ArrayList<>();
+        for (int i = 0; i < records.length(); i++) {
+            JSONObject record = records.optJSONObject(i);
+            if (record == null) {
+                continue;
+            }
+            String dateValue = record.optString("date", "");
+            if (dateValue.trim().isEmpty()) {
+                continue;
+            }
+            LocalDate date = LocalDate.parse(dateValue);
+            if (!date.isBefore(start) && !date.isAfter(end)) {
+                values.add(readLegacyDailySummary(dateValue, record));
             }
         }
         return values;
@@ -459,5 +564,9 @@ public final class EyeTimeStore {
 
     private static String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private static long elapsed(long startedAt) {
+        return System.currentTimeMillis() - startedAt;
     }
 }

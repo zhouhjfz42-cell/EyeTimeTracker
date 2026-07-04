@@ -43,7 +43,7 @@ public static class ReminderThreshold
 
     public static string FormatRepeatLabel(int minutes)
     {
-        var safeMinutes = Math.Clamp(minutes, MinMinutes, MaxMinutes);
-        return string.Format("\u53cd\u590d\u63d0\u9192\uff08\u5f53\u5929\u5185\u6bcf{0}\u5206\u949f\u63d0\u9192\u4e00\u6b21\uff09", safeMinutes);
+        _ = Math.Clamp(minutes, MinMinutes, MaxMinutes);
+        return "\u53cd\u590d\u63d0\u9192\uff08\u6bcf\u8fbe\u5230\u65f6\u95f4\u5c31\u63d0\u9192\u4e00\u6b21\uff0c\u4e00\u5929\n\u5185\u53ef\u80fd\u51fa\u73b0\u591a\u6b21\u63d0\u9192\uff09";
     }
 }

@@ -1,6 +1,7 @@
 using System.Windows.Forms;
 using EyeTimeTracker.Core.Models;
 using EyeTimeTracker.Core.Reminders;
+using EyeTimeTracker.App.UI;
 
 namespace EyeTimeTracker.App.Platform;
 
@@ -42,31 +43,7 @@ public sealed class NotificationService
     {
         var title = ReminderMessage.Title;
         var body = ReminderMessage.Body(settings.ReminderThresholdSeconds, settings.RepeatReminder, reminderStep);
-        ShowTopMostReminder(title, body);
-        _notifyIcon.BalloonTipTitle = title;
-        _notifyIcon.BalloonTipText = body;
-        _notifyIcon.BalloonTipIcon = ToolTipIcon.Info;
-        _notifyIcon.ShowBalloonTip(5000);
-    }
-
-    private static void ShowTopMostReminder(string title, string body)
-    {
-        using var owner = new Form
-        {
-            StartPosition = FormStartPosition.Manual,
-            Size = new System.Drawing.Size(1, 1),
-            Location = new System.Drawing.Point(-2000, -2000),
-            ShowInTaskbar = false,
-            TopMost = true
-        };
-
-        owner.Show();
-        owner.Hide();
-        MessageBox.Show(
-            owner,
-            body,
-            title,
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Information);
+        using var dialog = new PcReminderDialog(title, body, _notifyIcon.Icon);
+        dialog.ShowDialog();
     }
 }

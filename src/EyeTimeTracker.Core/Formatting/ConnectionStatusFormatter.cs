@@ -9,7 +9,7 @@ public static class ConnectionStatusFormatter
             return baseStatus;
         }
 
-        return $"{baseStatus}\uff08\u5df2\u8fde\u63a5{peerName}\uff09";
+        return $"{baseStatus}\uff08\u5df2\u8fde{peerName}\uff09";
     }
 
     public static string Format(string baseStatus, bool isPaired, bool isOnline, string peerName)
@@ -20,7 +20,7 @@ public static class ConnectionStatusFormatter
         }
 
         return isOnline
-            ? $"{baseStatus}\uff08\u5df2\u8fde\u63a5{peerName}\uff09"
-            : $"{baseStatus}\uff08{peerName}\u6682\u65f6\u79bb\u7ebf\uff09";
+            ? $"{baseStatus}\uff08\u5df2\u8fde{peerName}\uff09"
+            : $"{baseStatus}\uff08{peerName}\u79bb\u7ebf\uff09";
     }
 }

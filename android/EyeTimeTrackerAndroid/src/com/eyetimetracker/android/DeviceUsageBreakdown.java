@@ -54,6 +54,8 @@ public final class DeviceUsageBreakdown {
             }
         }
 
+        pcBuckets.removeAll(phoneBuckets);
+
         return new DeviceUsageBreakdown(
                 pcBuckets.size() * BUCKET_SECONDS,
                 phoneBuckets.size() * BUCKET_SECONDS,

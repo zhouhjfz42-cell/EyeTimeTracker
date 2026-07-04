@@ -26,10 +26,13 @@ public sealed class MainForm : Form
     private readonly FitTextLabel _reminderValue;
     private readonly FitTextLabel _statusValue;
     private readonly StatusDot _statusDot;
+    private readonly StartupManager _startupManager;
     private readonly Icon _appIcon;
     private readonly Action? _showPairingDialog;
     private readonly Action? _disconnectPairing;
+    private ToggleSwitch? _startupSwitch;
     private RoundedButton? _pairingButton;
+    private RoundedButton? _statsButton;
     private DateOnly? _displayResetDate;
     private long _todayDisplayBaseline;
     private long _yesterdayDisplayBaseline;
@@ -45,7 +48,7 @@ public sealed class MainForm : Form
         Action? disconnectPairing = null)
     {
         _controller = controller ?? throw new ArgumentNullException(nameof(controller));
-        _ = startupManager ?? throw new ArgumentNullException(nameof(startupManager));
+        _startupManager = startupManager ?? throw new ArgumentNullException(nameof(startupManager));
         _showPairingDialog = showPairingDialog;
         _disconnectPairing = disconnectPairing;
 
@@ -59,7 +62,7 @@ public sealed class MainForm : Form
         MinimizeBox = true;
         ClientSize = new Size(660, 760);
         BackColor = PageBackground;
-        Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
+        Font = AppFonts.Create(9F, FontStyle.Regular, GraphicsUnit.Point);
 
         var root = new Panel
         {
@@ -125,7 +128,7 @@ public sealed class MainForm : Form
         root.Controls.Add(new FitTextLabel
         {
             Text = "\u7528\u773c\u65f6\u95f4",
-            Bounds = new Rectangle(34, 30, 270, 76),
+            Bounds = MainFormLayout.TitleBounds,
             MaxFontSize = 22F,
             MinFontSize = 20F,
             FontStyle = FontStyle.Bold,
@@ -137,7 +140,7 @@ public sealed class MainForm : Form
         root.Controls.Add(new FitTextLabel
         {
             Text = "\u952e\u9f20\u52a8\u4f5c\u3001\u5a92\u4f53\u64ad\u653e\u65f6\u8ba1\u5165\u7edf\u8ba1",
-            Bounds = new Rectangle(34, 96, 600, 42),
+            Bounds = MainFormLayout.SubtitleBounds,
             MaxFontSize = 11F,
             MinFontSize = 10F,
             FontStyle = FontStyle.Regular,
@@ -146,10 +149,33 @@ public sealed class MainForm : Form
             TextAlign = ContentAlignment.MiddleLeft
         });
 
+        var startupLabel = new FitTextLabel
+        {
+            Text = "\u5f00\u673a\u542f\u52a8",
+            Bounds = MainFormLayout.StartupLabelBounds,
+            MaxFontSize = 10.5F,
+            MinFontSize = 9F,
+            FontStyle = FontStyle.Regular,
+            ForeColor = TextSecondary,
+            BackColor = Color.Transparent,
+            TextAlign = ContentAlignment.MiddleRight
+        };
+        root.Controls.Add(startupLabel);
+
+        _startupSwitch = new ToggleSwitch
+        {
+            Bounds = MainFormLayout.StartupSwitchBounds,
+            Checked = _controller.Settings.StartWithWindows
+        };
+        _startupSwitch.Click += (_, _) => UpdateStartupSetting(_startupSwitch.Checked);
+        root.Controls.Add(_startupSwitch);
+        startupLabel.BringToFront();
+        _startupSwitch.BringToFront();
+
         root.Controls.Add(new FitTextLabel
         {
             Text = "\u4eca\u5929",
-            Bounds = new Rectangle(34, 148, 104, 46),
+            Bounds = new Rectangle(34, 144, 104, 52),
             MaxFontSize = 14F,
             MinFontSize = 14F,
             FontStyle = FontStyle.Regular,
@@ -160,7 +186,7 @@ public sealed class MainForm : Form
 
         statusDot = new StatusDot
         {
-            Bounds = new Rectangle(154, 163, 16, 16)
+            Bounds = new Rectangle(154, 162, 16, 16)
         };
         root.Controls.Add(statusDot);
         statusDot.BringToFront();
@@ -168,7 +194,7 @@ public sealed class MainForm : Form
         statusValue = new FitTextLabel
         {
             Text = "\u7edf\u8ba1\u4e2d",
-            Bounds = new Rectangle(178, 148, 320, 46),
+            Bounds = new Rectangle(178, 144, 310, 52),
             MaxFontSize = 14F,
             MinFontSize = 10F,
             FontStyle = FontStyle.Regular,
@@ -202,31 +228,30 @@ public sealed class MainForm : Form
             _pairingButton = new RoundedButton
             {
                 Text = "\u624b\u673a\u914d\u5bf9",
-                Bounds = new Rectangle(34, 668, 282, 58),
-                ButtonColor = Color.FromArgb(242, 244, 247),
-                HoverColor = Color.FromArgb(232, 236, 240),
-                PressedColor = Color.FromArgb(220, 226, 232),
-                TextColor = Color.FromArgb(52, 64, 84),
-                Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Bold, GraphicsUnit.Point)
+                Bounds = MainFormLayout.PairingButtonBounds,
+                ButtonColor = AccentGreen,
+                HoverColor = Color.FromArgb(19, 145, 111),
+                PressedColor = Color.FromArgb(17, 124, 96),
+                TextColor = Color.White,
+                Font = AppFonts.Create(11F, FontStyle.Bold, GraphicsUnit.Point)
             };
             _pairingButton.Click += (_, _) => HandlePairingButtonClick();
             root.Controls.Add(_pairingButton);
+            _pairingButton.BringToFront();
         }
 
-        var statsButton = new RoundedButton
+        _statsButton = new RoundedButton
         {
-            Text = "\u7edf\u8ba1",
-            Bounds = _showPairingDialog is null
-                ? new Rectangle(200, 668, 260, 58)
-                : new Rectangle(344, 668, 282, 58),
+            Text = "\u7edf\u8ba1\u9875",
+            Bounds = new Rectangle(200, 668, 260, 58),
             ButtonColor = AccentGreen,
             HoverColor = Color.FromArgb(19, 145, 111),
             PressedColor = Color.FromArgb(17, 124, 96),
             TextColor = Color.White,
-            Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Bold, GraphicsUnit.Point)
+            Font = AppFonts.Create(13F, FontStyle.Bold, GraphicsUnit.Point)
         };
-        statsButton.Click += (_, _) => ShowStats();
-        root.Controls.Add(statsButton);
+        _statsButton.Click += (_, _) => ShowStats();
+        root.Controls.Add(_statsButton);
     }
 
     private void ShowStats()
@@ -291,9 +316,9 @@ public sealed class MainForm : Form
         card.Controls.Add(new FitTextLabel
         {
             Text = title,
-            Bounds = new Rectangle(24, 20, 220, 36),
-            MaxFontSize = 12F,
-            MinFontSize = 11F,
+            Bounds = new Rectangle(24, 14, 228, 44),
+            MaxFontSize = 11.5F,
+            MinFontSize = 9.5F,
             FontStyle = FontStyle.Regular,
             ForeColor = TextSecondary,
             BackColor = Color.Transparent,
@@ -328,13 +353,11 @@ public sealed class MainForm : Form
     {
         var records = _controller.GetRecordsSnapshot();
         var today = current.Date;
-        var yesterday = today.AddDays(-1);
-        var weekStart = today.AddDays(-GetMondayOffset(today.DayOfWeek));
-        var monthStart = new DateOnly(today.Year, today.Month, 1);
-        var todayTotal = current.TotalSeconds;
-        var yesterdayTotal = RecordSeconds(records, yesterday);
-        var weekTotal = SumRecords(records, weekStart, today);
-        var monthTotal = SumRecords(records, monthStart, today);
+        var totals = MainSummaryTotals.FromRecords(today, records);
+        var todayTotal = totals.TodaySeconds;
+        var yesterdayTotal = totals.YesterdaySeconds;
+        var weekTotal = totals.WeekSeconds;
+        var monthTotal = totals.MonthSeconds;
 
         if (_displayResetDate is not null && _displayResetDate != today)
         {
@@ -354,6 +377,7 @@ public sealed class MainForm : Form
         _yesterdayValue.Text = FormatDuration(yesterdayTotal);
         _weekValue.Text = FormatDuration(weekTotal);
         _monthValue.Text = FormatDuration(monthTotal);
+        UpdateReminderDisplay();
         _statusValue.Text = ConnectionStatusFormatter.Format(
             current.IsCounting ? "\u7edf\u8ba1\u4e2d" : "\u6682\u505c",
             _controller.IsPaired,
@@ -362,7 +386,7 @@ public sealed class MainForm : Form
         _statusDot.IsActive = current.IsCounting;
         if (_pairingButton is not null)
         {
-            _pairingButton.Text = _controller.IsPaired ? "\u65ad\u5f00\u8fde\u63a5" : "\u624b\u673a\u914d\u5bf9";
+            _pairingButton.Text = _controller.IsPaired ? "\u65ad\u5f00" : "\u624b\u673a\u914d\u5bf9";
         }
     }
 
@@ -382,6 +406,7 @@ public sealed class MainForm : Form
         using var dialog = new ReminderThresholdDialog(
             ReminderThreshold.ToMinutes(_controller.Settings.ReminderThresholdSeconds),
             _controller.Settings.RepeatReminder,
+            !_controller.IsPaired,
             Icon);
 
         if (dialog.ShowDialog(this) != DialogResult.OK)
@@ -403,20 +428,35 @@ public sealed class MainForm : Form
         _reminderValue.Text = ReminderThreshold.Format(_controller.Settings.ReminderThresholdSeconds);
     }
 
+    private void UpdateStartupSetting(bool enabled)
+    {
+        _controller.Settings = _controller.Settings with
+        {
+            StartWithWindows = enabled
+        };
+        _controller.SaveNow();
+
+        try
+        {
+            _startupManager.SetEnabled(enabled);
+        }
+        catch (Exception)
+        {
+        }
+    }
+
     private void ResetDisplayedStatistics()
     {
         var current = _controller.Current;
         var records = _controller.GetRecordsSnapshot();
         var today = current.Date;
-        var yesterday = today.AddDays(-1);
-        var weekStart = today.AddDays(-GetMondayOffset(today.DayOfWeek));
-        var monthStart = new DateOnly(today.Year, today.Month, 1);
+        var totals = MainSummaryTotals.FromRecords(today, records);
 
         _displayResetDate = today;
-        _todayDisplayBaseline = current.TotalSeconds;
-        _yesterdayDisplayBaseline = RecordSeconds(records, yesterday);
-        _weekDisplayBaseline = SumRecords(records, weekStart, today);
-        _monthDisplayBaseline = SumRecords(records, monthStart, today);
+        _todayDisplayBaseline = totals.TodaySeconds;
+        _yesterdayDisplayBaseline = totals.YesterdaySeconds;
+        _weekDisplayBaseline = totals.WeekSeconds;
+        _monthDisplayBaseline = totals.MonthSeconds;
 
         UpdateSummary(current);
     }
@@ -428,23 +468,6 @@ public sealed class MainForm : Form
         _yesterdayDisplayBaseline = 0;
         _weekDisplayBaseline = 0;
         _monthDisplayBaseline = 0;
-    }
-
-    private static int GetMondayOffset(DayOfWeek dayOfWeek)
-    {
-        return dayOfWeek == DayOfWeek.Sunday ? 6 : (int)dayOfWeek - (int)DayOfWeek.Monday;
-    }
-
-    private static long SumRecords(IEnumerable<DailyRecord> records, DateOnly start, DateOnly end)
-    {
-        return records
-            .Where(record => record.Date >= start && record.Date <= end)
-            .Sum(record => record.TotalSeconds);
-    }
-
-    private static long RecordSeconds(IEnumerable<DailyRecord> records, DateOnly date)
-    {
-        return records.FirstOrDefault(record => record.Date == date)?.TotalSeconds ?? 0;
     }
 
     private static void WireClick(Control control, EventHandler handler)
@@ -537,7 +560,7 @@ public sealed class MainForm : Form
         public RoundedButton()
         {
             Cursor = Cursors.Hand;
-            Font = new Font("Microsoft YaHei UI", 11F, FontStyle.Bold, GraphicsUnit.Point);
+            Font = AppFonts.Create(11F, FontStyle.Bold, GraphicsUnit.Point);
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
         }
 
@@ -740,14 +763,16 @@ public sealed class MainForm : Form
         private readonly FitTextLabel _hintLabel;
         private readonly ToggleSwitch _repeatSwitch;
         private readonly FitTextLabel _repeatLabel;
+        private readonly bool _canEdit;
 
         public int ReminderMinutes { get; private set; }
         public bool RepeatReminder { get; private set; }
 
-        public ReminderThresholdDialog(int currentMinutes, bool repeatReminder, Icon? icon)
+        public ReminderThresholdDialog(int currentMinutes, bool repeatReminder, bool canEdit, Icon? icon)
         {
             ReminderMinutes = Math.Clamp(currentMinutes, ReminderThreshold.MinMinutes, ReminderThreshold.MaxMinutes);
             RepeatReminder = repeatReminder;
+            _canEdit = canEdit;
             AutoScaleMode = AutoScaleMode.None;
             Text = "\u4fee\u6539\u63d0\u9192\u65f6\u95f4";
             if (icon is not null)
@@ -762,15 +787,15 @@ public sealed class MainForm : Form
             ShowInTaskbar = false;
             ClientSize = new Size(470, 340);
             BackColor = Color.White;
-            Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
+            Font = AppFonts.Create(9F, FontStyle.Regular, GraphicsUnit.Point);
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
 
             Controls.Add(new FitTextLabel
             {
                 Text = "\u63d0\u9192\u65f6\u95f4",
-                Bounds = new Rectangle(28, 20, 220, 48),
-                MaxFontSize = 20F,
-                MinFontSize = 18F,
+                Bounds = new Rectangle(28, 20, 240, 60),
+                MaxFontSize = 19F,
+                MinFontSize = 17F,
                 FontStyle = FontStyle.Bold,
                 ForeColor = TextPrimary,
                 BackColor = Color.Transparent,
@@ -779,7 +804,7 @@ public sealed class MainForm : Form
 
             var closeButton = new CloseIconButton
             {
-                Bounds = new Rectangle(404, 22, 38, 38)
+                Bounds = new Rectangle(404, 24, 38, 38)
             };
             closeButton.Click += (_, _) =>
             {
@@ -790,7 +815,7 @@ public sealed class MainForm : Form
 
             _hintLabel = new FitTextLabel
             {
-                Bounds = new Rectangle(28, 74, 390, 34),
+                Bounds = new Rectangle(28, 82, 414, 34),
                 MaxFontSize = 12F,
                 MinFontSize = 10F,
                 FontStyle = FontStyle.Regular,
@@ -802,7 +827,7 @@ public sealed class MainForm : Form
 
             var inputShell = new RoundedPanel
             {
-                Bounds = new Rectangle(28, 114, 414, 80),
+                Bounds = new Rectangle(28, 122, 414, 76),
                 FillColor = Color.FromArgb(249, 253, 251),
                 BorderColor = Color.FromArgb(206, 226, 218),
                 Radius = 18
@@ -811,9 +836,9 @@ public sealed class MainForm : Form
             _minutesInput = new TextBox
             {
                 Text = ReminderMinutes.ToString(),
-                Bounds = new Rectangle(22, 14, 160, 52),
+                Bounds = new Rectangle(24, 7, 150, 58),
                 BorderStyle = BorderStyle.None,
-                Font = new Font("Microsoft YaHei UI", 20F, FontStyle.Bold, GraphicsUnit.Point),
+                Font = AppFonts.Create(20F, FontStyle.Bold, GraphicsUnit.Point),
                 ForeColor = TextPrimary,
                 BackColor = Color.FromArgb(249, 253, 251),
                 MaxLength = 5,
@@ -828,19 +853,19 @@ public sealed class MainForm : Form
             inputShell.Controls.Add(new FitTextLabel
             {
                 Text = "\u5206\u949f",
-                Bounds = new Rectangle(184, 15, 92, 50),
-                MaxFontSize = 15F,
-                MinFontSize = 14F,
+                Bounds = new Rectangle(306, 8, 84, 58),
+                MaxFontSize = 14F,
+                MinFontSize = 13F,
                 FontStyle = FontStyle.Regular,
                 ForeColor = TextSecondary,
                 BackColor = Color.Transparent,
-                TextAlign = ContentAlignment.MiddleLeft
+                TextAlign = ContentAlignment.MiddleRight
             });
             Controls.Add(inputShell);
 
             _repeatSwitch = new ToggleSwitch
             {
-                Bounds = new Rectangle(30, 212, 48, 28),
+                Bounds = new Rectangle(30, 216, 48, 28),
                 Checked = RepeatReminder
             };
             _repeatSwitch.Click += (_, _) => RepeatReminder = _repeatSwitch.Checked;
@@ -848,9 +873,9 @@ public sealed class MainForm : Form
 
             _repeatLabel = new FitTextLabel
             {
-                Bounds = new Rectangle(88, 204, 348, 44),
-                MaxFontSize = 10.5F,
-                MinFontSize = 9.5F,
+                Bounds = new Rectangle(84, 203, 372, 52),
+                MaxFontSize = 8F,
+                MinFontSize = 7.2F,
                 FontStyle = FontStyle.Regular,
                 ForeColor = TextSecondary,
                 BackColor = Color.Transparent,
@@ -871,7 +896,7 @@ public sealed class MainForm : Form
                 HoverColor = Color.FromArgb(232, 236, 240),
                 PressedColor = Color.FromArgb(220, 226, 232),
                 TextColor = Color.FromArgb(52, 64, 84),
-                Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Bold, GraphicsUnit.Point)
+                Font = AppFonts.Create(13F, FontStyle.Bold, GraphicsUnit.Point)
             };
             cancelButton.Click += (_, _) =>
             {
@@ -882,16 +907,23 @@ public sealed class MainForm : Form
 
             var okButton = new RoundedButton
             {
-                Text = "\u4fdd\u5b58",
+                Text = _canEdit ? "\u4fdd\u5b58" : "\u77e5\u9053\u4e86",
                 Bounds = new Rectangle(238, 270, 204, 48),
                 ButtonColor = AccentGreen,
                 HoverColor = Color.FromArgb(19, 145, 111),
                 PressedColor = Color.FromArgb(17, 124, 96),
                 TextColor = Color.White,
-                Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Bold, GraphicsUnit.Point)
+                Font = AppFonts.Create(13F, FontStyle.Bold, GraphicsUnit.Point)
             };
             okButton.Click += (_, _) => SaveAndClose();
             Controls.Add(okButton);
+
+            if (!_canEdit)
+            {
+                _minutesInput.ReadOnly = true;
+                _minutesInput.ForeColor = TextSecondary;
+                _repeatSwitch.Enabled = false;
+            }
 
             UpdateHint();
         }
@@ -955,6 +987,13 @@ public sealed class MainForm : Form
                 return;
             }
 
+            if (!_canEdit)
+            {
+                DialogResult = DialogResult.Cancel;
+                Close();
+                return;
+            }
+
             ReminderMinutes = minutes;
             RepeatReminder = _repeatSwitch.Checked;
             DialogResult = DialogResult.OK;
@@ -966,9 +1005,11 @@ public sealed class MainForm : Form
             if (TryReadMinutes(out var minutes))
             {
                 _hintLabel.ForeColor = TextSecondary;
-                _hintLabel.Text = string.Format(
-                    "\u5355\u4f4d\uff1a\u5206\u949f{0}",
-                    ReminderThreshold.FormatEquivalent(ReminderThreshold.FromMinutes(minutes)));
+                _hintLabel.Text = _canEdit
+                    ? string.Format(
+                        "\u5355\u4f4d\uff1a\u5206\u949f{0}",
+                        ReminderThreshold.FormatEquivalent(ReminderThreshold.FromMinutes(minutes)))
+                    : "\u5df2\u8fde\u63a5\u624b\u673a\uff0c\u8bf7\u5728\u624b\u673a\u7aef\u4fee\u6539\u63d0\u9192";
                 _repeatLabel.Text = ReminderThreshold.FormatRepeatLabel(minutes);
                 return;
             }
@@ -1053,25 +1094,26 @@ public sealed class MainForm : Form
                 e.Graphics.Clear(BackColor);
             }
 
-            e.Graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
-            var bounds = ClientRectangle;
-            if (bounds.Width <= 0 || bounds.Height <= 0 || string.IsNullOrEmpty(Text))
+            if (ClientRectangle.Width <= 0 || ClientRectangle.Height <= 0 || string.IsNullOrEmpty(Text))
             {
                 return;
             }
 
-            using var font = CreateFittingFont(e.Graphics, bounds);
-            using var brush = new SolidBrush(ForeColor);
-            using var format = CreateStringFormat();
-            e.Graphics.DrawString(Text, font, brush, bounds, format);
+            using var font = CreateFittingFont(e.Graphics, ClientRectangle);
+            TextRenderer.DrawText(e.Graphics, Text, font, ClientRectangle, ForeColor, CreateTextFormatFlags());
         }
 
         private Font CreateFittingFont(Graphics graphics, Rectangle bounds)
         {
             for (var size = MaxFontSize; size >= MinFontSize; size -= 0.5F)
             {
-                var font = new Font("Microsoft YaHei UI", size, FontStyle, GraphicsUnit.Point);
-                var measured = graphics.MeasureString(Text, font, bounds.Width, StringFormat.GenericTypographic);
+                var font = AppFonts.Create(size, FontStyle, GraphicsUnit.Point);
+                var measured = TextRenderer.MeasureText(
+                    graphics,
+                    Text,
+                    font,
+                    new Size(bounds.Width, int.MaxValue),
+                    CreateMeasureTextFormatFlags());
                 if (measured.Width <= bounds.Width && measured.Height <= bounds.Height)
                 {
                     return font;
@@ -1080,25 +1122,31 @@ public sealed class MainForm : Form
                 font.Dispose();
             }
 
-            return new Font("Microsoft YaHei UI", MinFontSize, FontStyle, GraphicsUnit.Point);
+            return AppFonts.Create(MinFontSize, FontStyle, GraphicsUnit.Point);
         }
 
-        private StringFormat CreateStringFormat()
+        private TextFormatFlags CreateTextFormatFlags()
         {
-            var format = (StringFormat)StringFormat.GenericTypographic.Clone();
-            format.FormatFlags |= StringFormatFlags.NoClip;
-            format.Trimming = StringTrimming.None;
-            format.Alignment = TextAlign is ContentAlignment.TopRight or ContentAlignment.MiddleRight or ContentAlignment.BottomRight
-                ? StringAlignment.Far
+            var flags = TextFormatFlags.NoPadding | TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl;
+
+            flags |= TextAlign is ContentAlignment.TopRight or ContentAlignment.MiddleRight or ContentAlignment.BottomRight
+                ? TextFormatFlags.Right
                 : TextAlign is ContentAlignment.TopCenter or ContentAlignment.MiddleCenter or ContentAlignment.BottomCenter
-                    ? StringAlignment.Center
-                    : StringAlignment.Near;
-            format.LineAlignment = TextAlign is ContentAlignment.BottomLeft or ContentAlignment.BottomCenter or ContentAlignment.BottomRight
-                ? StringAlignment.Far
+                    ? TextFormatFlags.HorizontalCenter
+                    : TextFormatFlags.Left;
+
+            flags |= TextAlign is ContentAlignment.BottomLeft or ContentAlignment.BottomCenter or ContentAlignment.BottomRight
+                ? TextFormatFlags.Bottom
                 : TextAlign is ContentAlignment.TopLeft or ContentAlignment.TopCenter or ContentAlignment.TopRight
-                    ? StringAlignment.Near
-                    : StringAlignment.Center;
-            return format;
+                    ? TextFormatFlags.Top
+                    : TextFormatFlags.VerticalCenter;
+
+            return flags;
+        }
+
+        private static TextFormatFlags CreateMeasureTextFormatFlags()
+        {
+            return TextFormatFlags.NoPadding | TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl;
         }
     }
 

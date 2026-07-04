@@ -19,6 +19,7 @@ import android.os.Looper;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextWatcher;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -89,6 +90,7 @@ public final class MainActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        store.setMainActivityVisible(true);
         IntentFilter filter = new IntentFilter(EyeTimeService.ACTION_STATE_CHANGED);
         filter.addAction(EyeTimeService.ACTION_REMINDER);
         if (Build.VERSION.SDK_INT >= 33) {
@@ -103,6 +105,7 @@ public final class MainActivity extends Activity {
     }
 
     @Override protected void onPause() {
+        store.setMainActivityVisible(false);
         handler.removeCallbacks(refreshRunnable);
         if (receiverRegistered) {
             unregisterReceiver(receiver);
@@ -132,7 +135,7 @@ public final class MainActivity extends Activity {
         title.setText("用眼时间");
         title.setTextSize(30);
         title.setTextColor(COLOR_TEXT);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTypeface(AppFonts.bold(this));
         title.setIncludeFontPadding(false);
         header.addView(title, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
@@ -144,6 +147,7 @@ public final class MainActivity extends Activity {
         subtitle.setText("亮屏时计入统计");
         subtitle.setTextSize(14);
         subtitle.setTextColor(COLOR_MUTED);
+        AppFonts.apply(subtitle, false);
         subtitle.setLineSpacing(0f, 1.1f);
         LinearLayout.LayoutParams subtitleParams = matchWrap();
         subtitleParams.topMargin = dp(12);
@@ -153,7 +157,7 @@ public final class MainActivity extends Activity {
 
         todayValue = new TextView(this);
         todayValue.setTextSize(56);
-        todayValue.setTypeface(Typeface.DEFAULT_BOLD);
+        todayValue.setTypeface(AppFonts.bold(this));
         todayValue.setIncludeFontPadding(false);
         todayValue.setSingleLine(true);
         root.addView(todayValue, matchWrapTop(12));
@@ -174,20 +178,9 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams actionsParams = matchWrapTop(24);
         root.addView(actions, actionsParams);
 
-        pairingButton = actionButton("\u624b\u673a\u914d\u5bf9", false);
-        pairingButton.setOnClickListener(v -> {
-            if (store.getSyncSettings().isPaired) {
-                showDisconnectDialog();
-                return;
-            }
-
-            showPairingDialog();
-        });
-        actions.addView(pairingButton, weightedButtonParams(0, dp(6)));
-
-        TextView statsButton = actionButton("统计", true);
+        TextView statsButton = actionButton("统计页", true);
         statsButton.setOnClickListener(v -> startActivity(new Intent(this, StatsActivity.class)));
-        actions.addView(statsButton, weightedButtonParams(dp(6), 0));
+        actions.addView(statsButton, centeredButtonParams());
 
         root.addView(helpText("1. 将手机和电脑配对，共同统计注视两块屏幕的时间，有统计到重合时段的会删除重复统计，但可能会有部分误差；"), matchWrapTop(18));
         root.addView(helpText("2. 使用手机几秒内会自动开始统计，如果没有开始，点击右上角的“启动”。"), matchWrapTop(8));
@@ -203,6 +196,9 @@ public final class MainActivity extends Activity {
         label.setText("今天");
         label.setTextSize(18);
         label.setTextColor(COLOR_MUTED);
+        AppFonts.apply(label, false);
+        label.setSingleLine(true);
+        label.setIncludeFontPadding(false);
         row.addView(label, wrapWrap());
 
         statusDot = new View(this);
@@ -216,7 +212,23 @@ public final class MainActivity extends Activity {
         statusValue.setText("统计中");
         statusValue.setTextSize(18);
         statusValue.setTextColor(COLOR_MUTED);
-        row.addView(statusValue, wrapWrap());
+        AppFonts.apply(statusValue, false);
+        statusValue.setSingleLine(true);
+        statusValue.setIncludeFontPadding(false);
+        row.addView(statusValue, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        pairingButton = statusActionButton("\u624b\u673a\u914d\u5bf9");
+        pairingButton.setOnClickListener(v -> {
+            if (store.getSyncSettings().isPaired) {
+                showDisconnectDialog();
+                return;
+            }
+
+            showPairingDialog();
+        });
+        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(dp(104), dp(34));
+        buttonParams.leftMargin = dp(8);
+        row.addView(pairingButton, buttonParams);
         return row;
     }
 
@@ -225,6 +237,7 @@ public final class MainActivity extends Activity {
         text.setText(value);
         text.setTextSize(12);
         text.setTextColor(COLOR_MUTED);
+        AppFonts.apply(text, false);
         text.setLineSpacing(0f, 1.15f);
         return text;
     }
@@ -245,6 +258,9 @@ public final class MainActivity extends Activity {
         labelView.setText(label);
         labelView.setTextSize(16);
         labelView.setTextColor(COLOR_MUTED);
+        AppFonts.apply(labelView, false);
+        labelView.setSingleLine(true);
+        labelView.setIncludeFontPadding(false);
         card.addView(labelView, matchWrap());
 
         LinearLayout.LayoutParams valueParams = matchWrapTop(9);
@@ -256,9 +272,10 @@ public final class MainActivity extends Activity {
         TextView text = new TextView(this);
         text.setTextSize(24);
         text.setTextColor(COLOR_TEXT);
-        text.setTypeface(Typeface.DEFAULT_BOLD);
+        text.setTypeface(AppFonts.bold(this));
         text.setSingleLine(true);
         text.setIncludeFontPadding(false);
+        text.setAutoSizeTextTypeUniformWithConfiguration(18, 24, 1, TypedValue.COMPLEX_UNIT_SP);
         return text;
     }
 
@@ -266,11 +283,28 @@ public final class MainActivity extends Activity {
         TextView button = new TextView(this);
         button.setText(label);
         button.setTextSize(17);
-        button.setTypeface(Typeface.DEFAULT_BOLD);
+        button.setTypeface(AppFonts.bold(this));
         button.setGravity(Gravity.CENTER);
+        button.setIncludeFontPadding(false);
+        button.setPadding(0, 0, 0, 0);
         button.setMinHeight(dp(54));
         button.setTextColor(primary ? Color.WHITE : Color.rgb(52, 64, 84));
         button.setBackground(rounded(primary ? COLOR_GREEN : COLOR_BUTTON_SOFT, dp(999), Color.TRANSPARENT, 0));
+        button.setClickable(true);
+        button.setFocusable(true);
+        return button;
+    }
+
+    private TextView statusActionButton(String label) {
+        TextView button = new TextView(this);
+        button.setText(label);
+        button.setTextSize(16);
+        button.setTypeface(AppFonts.bold(this));
+        button.setGravity(Gravity.CENTER);
+        button.setIncludeFontPadding(false);
+        button.setPadding(0, 0, 0, 0);
+        button.setTextColor(Color.WHITE);
+        button.setBackground(rounded(COLOR_GREEN, dp(999), Color.TRANSPARENT, 0));
         button.setClickable(true);
         button.setFocusable(true);
         return button;
@@ -280,8 +314,10 @@ public final class MainActivity extends Activity {
         TextView button = new TextView(this);
         button.setText(label);
         button.setTextSize(15);
-        button.setTypeface(Typeface.DEFAULT_BOLD);
+        button.setTypeface(AppFonts.bold(this));
         button.setGravity(Gravity.CENTER);
+        button.setIncludeFontPadding(false);
+        button.setPadding(0, 0, 0, 0);
         button.setTextColor(COLOR_GREEN);
         button.setBackground(rounded(COLOR_SOFT, dp(999), COLOR_LINE, 1));
         button.setClickable(true);
@@ -304,14 +340,19 @@ public final class MainActivity extends Activity {
         long todaySeconds = store.displayTodaySeconds(today);
         todayValue.setText(DurationFormatter.format(todaySeconds));
         todayValue.setTextColor(colorForTone(TodayTone.fromSeconds(todaySeconds)));
-        yesterdayValue.setText(DurationFormatter.format(store.displayYesterdaySeconds(today)));
-        weekValue.setText(DurationFormatter.format(store.displayWeekSeconds(today)));
-        monthValue.setText(DurationFormatter.format(store.displayMonthSeconds(today)));
+        yesterdayValue.setText(DurationFormatter.formatMainCard(store.displayYesterdaySeconds(today)));
+        weekValue.setText(DurationFormatter.formatMainCard(store.displayWeekSeconds(today)));
+        monthValue.setText(DurationFormatter.formatMainCard(store.displayMonthSeconds(today)));
         reminderValue.setText(ReminderThreshold.format(store.getReminderMinutes()));
         SyncSettings syncSettings = store.getSyncSettings();
         statusValue.setText(ConnectionStatusText.format("统计中", syncSettings.isPaired, syncSettings.lastError == null || syncSettings.lastError.trim().isEmpty(), "电脑"));
         if (pairingButton != null) {
-            pairingButton.setText(syncSettings.isPaired ? "\u65ad\u5f00\u8fde\u63a5" : "\u624b\u673a\u914d\u5bf9");
+            pairingButton.setText(syncSettings.isPaired ? "\u65ad\u5f00" : "\u624b\u673a\u914d\u5bf9");
+            ViewGroup.LayoutParams buttonParams = pairingButton.getLayoutParams();
+            if (buttonParams != null) {
+                buttonParams.width = syncSettings.isPaired ? dp(68) : dp(104);
+                pairingButton.setLayoutParams(buttonParams);
+            }
         }
         statusDot.setBackground(oval(COLOR_GREEN));
         checkPcStillConnected(syncSettings);
@@ -342,12 +383,12 @@ public final class MainActivity extends Activity {
         Dialog dialog = new Dialog(this);
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(dp(22), dp(22), dp(22), dp(24));
+        panel.setPadding(dp(22), dp(22), dp(22), dp(22));
         panel.setBackground(rounded(Color.WHITE, dp(26), Color.rgb(229, 235, 232), 1));
 
         LinearLayout head = new LinearLayout(this);
         head.setOrientation(LinearLayout.HORIZONTAL);
-        head.setGravity(Gravity.CENTER_VERTICAL);
+        head.setGravity(Gravity.TOP);
         panel.addView(head, matchWrap());
 
         LinearLayout titleBlock = new LinearLayout(this);
@@ -358,37 +399,43 @@ public final class MainActivity extends Activity {
         title.setText("提醒时间");
         title.setTextSize(24);
         title.setTextColor(COLOR_TEXT);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTypeface(AppFonts.bold(this));
+        title.setIncludeFontPadding(false);
         titleBlock.addView(title, matchWrap());
 
         TextView hint = new TextView(this);
         hint.setText("单位：分钟（" + ReminderThreshold.formatEquivalent(store.getReminderMinutes()) + "）");
         hint.setTextSize(14);
         hint.setTextColor(COLOR_MUTED);
+        AppFonts.apply(hint, false);
+        hint.setIncludeFontPadding(false);
         titleBlock.addView(hint, matchWrapTop(6));
 
         TextView close = new TextView(this);
-        close.setText("×");
-        close.setTextSize(30);
+        close.setText("\u00d7");
+        close.setTextSize(24);
         close.setTextColor(COLOR_MUTED);
+        close.setTypeface(AppFonts.regular(this));
+        close.setIncludeFontPadding(false);
         close.setGravity(Gravity.CENTER);
         close.setBackground(oval(Color.rgb(242, 244, 247)));
         close.setOnClickListener(v -> dialog.dismiss());
-        head.addView(close, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        head.addView(close, new LinearLayout.LayoutParams(dp(42), dp(42)));
 
         LinearLayout field = new LinearLayout(this);
         field.setOrientation(LinearLayout.HORIZONTAL);
         field.setGravity(Gravity.CENTER_VERTICAL);
         field.setPadding(dp(18), 0, dp(18), 0);
-        field.setMinimumHeight(dp(86));
+        field.setMinimumHeight(dp(74));
         field.setBackground(rounded(Color.rgb(249, 253, 251), dp(18), Color.rgb(207, 228, 220), 1));
-        panel.addView(field, matchWrapTop(24));
+        panel.addView(field, matchWrapTop(18));
 
         EditText input = new EditText(this);
         input.setText(String.valueOf(store.getReminderMinutes()));
         input.setTextSize(42);
-        input.setTypeface(Typeface.DEFAULT_BOLD);
+        input.setTypeface(AppFonts.bold(this));
         input.setSingleLine(true);
+        input.setIncludeFontPadding(false);
         input.setSelectAllOnFocus(true);
         input.setInputType(InputType.TYPE_CLASS_NUMBER);
         input.setTextColor(COLOR_TEXT);
@@ -399,12 +446,14 @@ public final class MainActivity extends Activity {
         unit.setText("分钟");
         unit.setTextSize(22);
         unit.setTextColor(COLOR_MUTED);
+        AppFonts.apply(unit, false);
+        unit.setIncludeFontPadding(false);
         field.addView(unit, wrapWrap());
 
         LinearLayout repeatRow = new LinearLayout(this);
         repeatRow.setOrientation(LinearLayout.HORIZONTAL);
         repeatRow.setGravity(Gravity.CENTER_VERTICAL);
-        panel.addView(repeatRow, matchWrapTop(14));
+        panel.addView(repeatRow, matchWrapTop(12));
 
         Switch repeatSwitch = new Switch(this);
         repeatSwitch.setChecked(store.isRepeatReminderEnabled());
@@ -412,11 +461,15 @@ public final class MainActivity extends Activity {
 
         TextView repeatLabel = new TextView(this);
         repeatLabel.setText(ReminderThreshold.formatRepeatLabel(store.getReminderMinutes()));
-        repeatLabel.setTextSize(12);
+        repeatLabel.setTextSize(11);
         repeatLabel.setTextColor(COLOR_MUTED);
-        repeatLabel.setSingleLine(true);
+        AppFonts.apply(repeatLabel, false);
+        repeatLabel.setSingleLine(false);
+        repeatLabel.setMaxLines(2);
+        repeatLabel.setIncludeFontPadding(false);
+        repeatLabel.setLineSpacing(0f, 1.05f);
         LinearLayout.LayoutParams repeatTextParams = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        repeatTextParams.leftMargin = dp(8);
+        repeatTextParams.leftMargin = dp(10);
         repeatRow.addView(repeatLabel, repeatTextParams);
 
         input.addTextChangedListener(new TextWatcher() {
@@ -436,7 +489,7 @@ public final class MainActivity extends Activity {
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
         actions.setGravity(Gravity.CENTER);
-        panel.addView(actions, matchWrapTop(20));
+        panel.addView(actions, matchWrapTop(16));
 
         TextView cancel = actionButton("取消", false);
         cancel.setOnClickListener(v -> dialog.dismiss());
@@ -484,7 +537,7 @@ public final class MainActivity extends Activity {
         title.setText("\u624b\u673a\u914d\u5bf9");
         title.setTextSize(24);
         title.setTextColor(COLOR_TEXT);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTypeface(AppFonts.bold(this));
         title.setIncludeFontPadding(false);
         panel.addView(title, matchWrap());
 
@@ -498,7 +551,7 @@ public final class MainActivity extends Activity {
         TextView code = new TextView(this);
         code.setText(pairingCode);
         code.setTextSize(42);
-        code.setTypeface(Typeface.DEFAULT_BOLD);
+        code.setTypeface(AppFonts.bold(this));
         code.setGravity(Gravity.CENTER);
         code.setTextColor(COLOR_GREEN);
         code.setIncludeFontPadding(false);
@@ -624,7 +677,7 @@ public final class MainActivity extends Activity {
         title.setText("\u65ad\u5f00\u8fde\u63a5");
         title.setTextSize(24);
         title.setTextColor(COLOR_TEXT);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTypeface(AppFonts.bold(this));
         title.setIncludeFontPadding(false);
         panel.addView(title, matchWrap());
 
@@ -644,19 +697,16 @@ public final class MainActivity extends Activity {
         cancel.setOnClickListener(v -> dialog.dismiss());
         actions.addView(cancel, weightedButtonParams(0, dp(6)));
 
-        TextView disconnect = actionButton("\u65ad\u5f00\u8fde\u63a5", true);
+        TextView disconnect = actionButton("\u65ad\u5f00", true);
         disconnect.setOnClickListener(v -> {
             disconnect.setEnabled(false);
-            disconnect.setText("\u6b63\u5728\u65ad\u5f00");
+            SyncDisconnectPlan plan = SyncDisconnectPlan.create(store.getSyncSettings());
+            store.saveSyncSettings(plan.localSettings);
+            refresh();
+            Toast.makeText(this, "\u5df2\u65ad\u5f00\u7535\u8111", Toast.LENGTH_SHORT).show();
+            dialog.dismiss();
             new Thread(() -> {
-                SyncSettings settings = store.getSyncSettings();
-                new AndroidPairingClient().disconnect(settings, store.getDeviceId());
-                store.saveSyncSettings(SyncSettings.unpaired());
-                handler.post(() -> {
-                    refresh();
-                    Toast.makeText(this, "\u5df2\u65ad\u5f00\u7535\u8111", Toast.LENGTH_SHORT).show();
-                    dialog.dismiss();
-                });
+                new AndroidPairingClient().disconnect(plan.peerNotificationSettings, store.getDeviceId());
             }, "EyeTimeDisconnect").start();
         });
         actions.addView(disconnect, weightedButtonParams(dp(6), 0));
@@ -760,7 +810,7 @@ public final class MainActivity extends Activity {
         title.setText(ReminderAlert.title());
         title.setTextSize(26);
         title.setTextColor(COLOR_TEXT);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTypeface(AppFonts.bold(this));
         title.setIncludeFontPadding(false);
         content.addView(title, matchWrap());
 
@@ -880,6 +930,10 @@ public final class MainActivity extends Activity {
         params.leftMargin = leftMargin;
         params.rightMargin = rightMargin;
         return params;
+    }
+
+    private LinearLayout.LayoutParams centeredButtonParams() {
+        return new LinearLayout.LayoutParams(dp(260), dp(54));
     }
 
     private int dp(int value) {

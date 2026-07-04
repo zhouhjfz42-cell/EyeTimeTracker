@@ -11,6 +11,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -27,6 +28,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class StatsActivity extends Activity {
+    private static final String DIAG_TAG = "EyeTimeDiag";
     private static final int COLOR_BG = Color.rgb(248, 252, 250);
     private static final int COLOR_TEXT = Color.rgb(17, 24, 39);
     private static final int COLOR_MUTED = Color.rgb(101, 114, 137);
@@ -61,31 +63,47 @@ public final class StatsActivity extends Activity {
         SyncSettings settings = store.getSyncSettings();
         AndroidSyncTriggerPolicy policy = new AndroidSyncTriggerPolicy();
         if (!settings.isPaired || !policy.shouldSyncForStatsOpen()) {
+            Log.i(DIAG_TAG, "StatsActivity syncOnOpen skipped paired=" + settings.isPaired);
             return;
         }
 
         new Thread(() -> {
+            long startedAt = System.currentTimeMillis();
+            Log.i(DIAG_TAG, "StatsActivity syncOnOpen start " + store.diagnosticSnapshot());
             new AndroidSyncRunner(store).syncOnce();
-            runOnUiThread(() -> setContentView(buildUi()));
+            Log.i(DIAG_TAG, "StatsActivity syncOnOpen end ms=" + elapsed(startedAt) + " " + store.diagnosticSnapshot());
         }, "EyeTimeStatsSync").start();
     }
 
     private View buildUi() {
+        long totalStartedAt = System.currentTimeMillis();
+        long stepStartedAt = totalStartedAt;
+        Log.i(DIAG_TAG, "StatsActivity buildUi start day=" + selectedDay
+                + " week=" + selectedWeekStart
+                + " month=" + selectedMonthStart
+                + " range=" + rangeStart + ".." + rangeEnd
+                + " " + store.diagnosticSnapshot());
         LocalDate today = LocalDate.now();
         DailySummary todaySummary = store.getDay(selectedDay);
+        stepStartedAt = logStep("StatsActivity get selected day", stepStartedAt);
         DeviceUsageBreakdown deviceBreakdown = store.getDeviceBreakdown(selectedDay);
+        stepStartedAt = logStep("StatsActivity get selected device breakdown", stepStartedAt);
         List<DailySummary> week = store.getDays(selectedWeekStart, selectedWeekStart.plusDays(6));
+        stepStartedAt = logStep("StatsActivity get week summaries", stepStartedAt);
         List<DeviceUsageBreakdown> weekBreakdowns = new ArrayList<>();
         for (int i = 0; i < 7; i++) {
             weekBreakdowns.add(store.getDeviceBreakdown(selectedWeekStart.plusDays(i)));
         }
+        stepStartedAt = logStep("StatsActivity get week breakdowns", stepStartedAt);
         LocalDate monthEnd = selectedMonthStart.getYear() == today.getYear() && selectedMonthStart.getMonthValue() == today.getMonthValue()
                 ? today
                 : selectedMonthStart.plusMonths(1).minusDays(1);
         List<DailySummary> month = store.getDays(selectedMonthStart, monthEnd);
+        stepStartedAt = logStep("StatsActivity get month summaries", stepStartedAt);
         LocalDate firstRange = rangeStart.isAfter(rangeEnd) ? rangeEnd : rangeStart;
         LocalDate lastRange = rangeStart.isAfter(rangeEnd) ? rangeStart : rangeEnd;
         List<Long> sessions = collectSessions(store.getDays(firstRange, lastRange));
+        stepStartedAt = logStep("StatsActivity get range sessions", stepStartedAt);
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
@@ -108,7 +126,7 @@ public final class StatsActivity extends Activity {
         dayPill.setOnClickListener(v -> showDateSheet(DatePickMode.DAY));
         GridLayout metrics = new GridLayout(this);
         metrics.setColumnCount(2);
-        dayPanel.addView(metrics, matchWrapTop(16));
+        dayPanel.addView(metrics, matchWrapTop(12));
         addCard(metrics, metricCard("今日用眼", DurationFormatter.format(todaySummary.totalSeconds), colorForToday(todaySummary.totalSeconds)), 0, 0);
         addCard(metrics, metricCard("最长连续", DurationFormatter.format(longestSession(todaySummary)), COLOR_YELLOW), 0, 1);
         addCard(metrics, metricCard("电脑 / 手机", deviceBreakdown.pcPercent() + "%/" + deviceBreakdown.phonePercent() + "%", COLOR_TEXT), 1, 0);
@@ -120,22 +138,21 @@ public final class StatsActivity extends Activity {
                         store.isRepeatReminderEnabled()) + "次",
                 COLOR_TEXT), 1, 1);
 
-        dayPanel.addView(deviceLegend(), matchWrapTop(12));
+        dayPanel.addView(deviceLegend(), matchWrapTop(8));
 
         HourlyHeatView heatView = new HourlyHeatView(this);
         heatView.setHourlySeconds(todaySummary.hourlySeconds);
         heatView.setSourceHourlySeconds(deviceBreakdown.pcHourlySeconds, deviceBreakdown.phoneHourlySeconds);
-        LinearLayout.LayoutParams heatParams = new LinearLayout.LayoutParams(dp(250), dp(250));
+        LinearLayout.LayoutParams heatParams = new LinearLayout.LayoutParams(dp(226), dp(226));
         heatParams.gravity = Gravity.CENTER_HORIZONTAL;
-        heatParams.topMargin = dp(18);
+        heatParams.topMargin = dp(2);
         dayPanel.addView(heatView, heatParams);
 
         LinearLayout insightRow = new LinearLayout(this);
         insightRow.setOrientation(LinearLayout.HORIZONTAL);
-        dayPanel.addView(insightRow, matchWrapTop(14));
+        dayPanel.addView(insightRow, matchWrapTop(8));
         addInsightCard(insightRow, insightInfoCard("最集中", peakHour(todaySummary.hourlySeconds)), 0);
-        addInsightCard(insightRow, insightInfoCard("夜间", DurationFormatter.format(nightSeconds(todaySummary.hourlySeconds))), 1);
-        addInsightCard(insightRow, insightInfoCard("最长连续", DurationFormatter.format(longestSession(todaySummary))), 2);
+        addInsightCard(insightRow, insightInfoCard("夜间（22-6点）", DurationFormatter.format(nightSeconds(todaySummary.hourlySeconds))), 1);
 
         LinearLayout weekPanel = panel();
         root.addView(weekPanel, matchWrapTop(18));
@@ -158,7 +175,7 @@ public final class StatsActivity extends Activity {
 
         LinearLayout sessionsPanel = panel();
         root.addView(sessionsPanel, matchWrapTop(18));
-        TextView rangePill = addPanelHead(sessionsPanel, "连续使用分析", compactDate(rangeStart) + " 至 " + compactDate(rangeEnd) + " ▾");
+        TextView rangePill = addPanelHead(sessionsPanel, "连续使用分析", compactDate(rangeStart) + " ▾ " + compactDate(rangeEnd) + " ▾");
         rangePill.setOnClickListener(v -> showDateSheet(DatePickMode.RANGE));
         ContinuousBandsView bandsView = new ContinuousBandsView(this);
         bandsView.setSessions(sessions);
@@ -167,7 +184,18 @@ public final class StatsActivity extends Activity {
                 ? "暂无连续使用片段。"
                 : "最长连续 " + DurationFormatter.format(max(sessions)) + "，建议减少 45 分钟以上的连续使用。"), matchWrapTop(8));
 
+        Log.i(DIAG_TAG, "StatsActivity buildUi end totalMs=" + elapsed(totalStartedAt));
         return scroll;
+    }
+
+    private long logStep(String label, long startedAt) {
+        long now = System.currentTimeMillis();
+        Log.i(DIAG_TAG, label + " ms=" + (now - startedAt));
+        return now;
+    }
+
+    private static long elapsed(long startedAt) {
+        return System.currentTimeMillis() - startedAt;
     }
 
     private TextView addPanelHead(LinearLayout parent, String title, String pillText) {
@@ -427,7 +455,7 @@ public final class StatsActivity extends Activity {
     private LinearLayout panel() {
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(dp(18), dp(18), dp(18), dp(18));
+        panel.setPadding(dp(16), dp(16), dp(16), dp(16));
         panel.setBackground(rounded(Color.rgb(252, 254, 253), dp(22), COLOR_LINE, 1));
         return panel;
     }
@@ -441,28 +469,28 @@ public final class StatsActivity extends Activity {
     private LinearLayout smallInfoCard(String label, String value) {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(12), dp(12), dp(12), dp(10));
-        card.setMinimumHeight(dp(86));
+        card.setPadding(dp(10), dp(8), dp(10), dp(8));
+        card.setMinimumHeight(dp(74));
         card.setBackground(rounded(COLOR_SOFT, dp(16), COLOR_LINE, 1));
         card.addView(text(label, 14, COLOR_MUTED, false), matchWrap());
         TextView valueText = text(value, 22, COLOR_TEXT, true);
         valueText.setSingleLine(true);
-        card.addView(valueText, matchWrapTop(8));
+        card.addView(valueText, matchWrapTop(5));
         return card;
     }
 
     private LinearLayout insightInfoCard(String label, String value) {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(10), dp(12), dp(8), dp(10));
-        card.setMinimumHeight(dp(78));
+        card.setPadding(dp(8), dp(8), dp(8), dp(8));
+        card.setMinimumHeight(dp(66));
         card.setBackground(rounded(COLOR_SOFT, dp(16), COLOR_LINE, 1));
         card.addView(text(label, 14, COLOR_MUTED, false), matchWrap());
         TextView valueText = text(value, 19, COLOR_TEXT, false);
         valueText.setSingleLine(true);
         valueText.setIncludeFontPadding(false);
         valueText.setAutoSizeTextTypeUniformWithConfiguration(15, 19, 1, TypedValue.COMPLEX_UNIT_SP);
-        card.addView(valueText, matchWrapTop(12));
+        card.addView(valueText, matchWrapTop(8));
         return card;
     }
 
@@ -494,7 +522,7 @@ public final class StatsActivity extends Activity {
     private void addInsightCard(LinearLayout row, View card, int column) {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         int horizontalGap = dp(4);
-        params.setMargins(column == 0 ? 0 : horizontalGap, 0, column == 2 ? 0 : horizontalGap, 0);
+        params.setMargins(column == 0 ? 0 : horizontalGap, 0, column == 1 ? 0 : horizontalGap, 0);
         row.addView(card, params);
     }
 
@@ -513,9 +541,8 @@ public final class StatsActivity extends Activity {
         text.setText(value);
         text.setTextSize(sp);
         text.setTextColor(color);
-        if (bold) {
-            text.setTypeface(Typeface.DEFAULT_BOLD);
-        }
+        AppFonts.apply(text, bold);
+        text.setIncludeFontPadding(false);
         return text;
     }
 
@@ -652,12 +679,12 @@ public final class StatsActivity extends Activity {
         }
     }
 
-    private static void drawChartTip(Canvas canvas, Paint paint, String text, float x, float y, float density, int viewWidth) {
+    private static void drawChartTip(Canvas canvas, Paint paint, String text, float x, float y, float density, int viewWidth, Typeface typeface) {
         if (text == null || text.isEmpty()) {
             return;
         }
 
-        paint.setTypeface(Typeface.DEFAULT_BOLD);
+        paint.setTypeface(typeface);
         paint.setTextSize(13f * density);
         paint.setTextAlign(Paint.Align.LEFT);
         float paddingX = 10f * density;
@@ -710,8 +737,8 @@ public final class StatsActivity extends Activity {
             super.onDraw(canvas);
             hits.clear();
             float cx = getWidth() / 2f;
-            float cy = getHeight() / 2f;
-            float outer = Math.min(getWidth(), getHeight()) / 2f - 30f;
+            float cy = getHeight() / 2f - dpLocal(8);
+            float outer = Math.min(getWidth(), getHeight()) / 2f - dpLocal(34);
             float inner = 42f * getResources().getDisplayMetrics().density;
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(dpLocal(2));
@@ -744,11 +771,11 @@ public final class StatsActivity extends Activity {
             canvas.drawCircle(cx, cy, inner, paint);
             paint.setStyle(Paint.Style.FILL);
             paint.setTextAlign(Paint.Align.CENTER);
-            paint.setTypeface(Typeface.DEFAULT_BOLD);
+            paint.setTypeface(AppFonts.bold(getContext()));
             paint.setTextSize(dpLocal(22));
             paint.setColor(COLOR_TEXT);
             canvas.drawText("24H", cx, cy + dpLocal(8), paint);
-            drawChartTip(canvas, paint, tipText, tipX, tipY, getResources().getDisplayMetrics().density, getWidth());
+            drawChartTip(canvas, paint, tipText, tipX, tipY, getResources().getDisplayMetrics().density, getWidth(), AppFonts.bold(getContext()));
         }
 
         @Override public boolean onTouchEvent(MotionEvent event) {
@@ -850,7 +877,7 @@ public final class StatsActivity extends Activity {
         private void drawHourLabels(Canvas canvas, float cx, float cy, float outer) {
             paint.setStyle(Paint.Style.FILL);
             paint.setColor(COLOR_MUTED);
-            paint.setTypeface(Typeface.DEFAULT);
+            paint.setTypeface(AppFonts.regular(getContext()));
             paint.setTextSize(dpLocal(11));
             paint.setTextAlign(Paint.Align.CENTER);
             Paint.FontMetrics metrics = paint.getFontMetrics();
@@ -858,7 +885,7 @@ public final class StatsActivity extends Activity {
             int[] hours = { 0, 6, 12, 18 };
             for (int hour : hours) {
                 double angle = Math.toRadians(-90f + hour * 15f);
-                float radius = outer + dpLocal(14);
+                float radius = outer + dpLocal(8);
                 float x = cx + (float) Math.cos(angle) * radius;
                 float y = cy + (float) Math.sin(angle) * radius + baselineOffset;
                 canvas.drawText(String.valueOf(hour), x, y, paint);
@@ -919,6 +946,7 @@ public final class StatsActivity extends Activity {
             float slot = getWidth() / 7f;
             float maxHeight = getHeight() - dpLocal(34);
             paint.setTextAlign(Paint.Align.CENTER);
+            paint.setTypeface(AppFonts.regular(getContext()));
             paint.setTextSize(dpLocal(12));
             for (int i = 0; i < 7; i++) {
                 long seconds = i < summaries.size() ? summaries.get(i).totalSeconds : 0L;
@@ -945,7 +973,7 @@ public final class StatsActivity extends Activity {
                 paint.setColor(COLOR_MUTED);
                 canvas.drawText(labels[i], i * slot + slot / 2f, getHeight() - dpLocal(4), paint);
             }
-            drawChartTip(canvas, paint, tipText, tipX, tipY, getResources().getDisplayMetrics().density, getWidth());
+            drawChartTip(canvas, paint, tipText, tipX, tipY, getResources().getDisplayMetrics().density, getWidth(), AppFonts.bold(getContext()));
         }
 
         @Override public boolean onTouchEvent(MotionEvent event) {
@@ -1032,7 +1060,7 @@ public final class StatsActivity extends Activity {
                 RectF hit = new RectF(x - dpLocal(12), y - dpLocal(12), x + dpLocal(12), y + dpLocal(12));
                 hits.add(new ChartHit(hit, DurationFormatter.formatTooltipHours(summaries.get(i).totalSeconds), x, y));
             }
-            drawChartTip(canvas, paint, tipText, tipX, tipY, getResources().getDisplayMetrics().density, getWidth());
+            drawChartTip(canvas, paint, tipText, tipX, tipY, getResources().getDisplayMetrics().density, getWidth(), AppFonts.bold(getContext()));
         }
 
         @Override public boolean onTouchEvent(MotionEvent event) {
@@ -1091,7 +1119,9 @@ public final class StatsActivity extends Activity {
             int max = Math.max(1, Math.max(counts[0], Math.max(counts[1], counts[2])));
             String[] labels = { "0-30分", "30-45分", "45分以上" };
             int[] colors = { COLOR_GREEN, COLOR_YELLOW, COLOR_RED };
+            paint.setTypeface(AppFonts.regular(getContext()));
             paint.setTextSize(dpLocal(12));
+            paint.setTextAlign(Paint.Align.LEFT);
             for (int i = 0; i < 3; i++) {
                 float y = dpLocal(18) + i * dpLocal(42);
                 paint.setStyle(Paint.Style.FILL);
@@ -1099,13 +1129,13 @@ public final class StatsActivity extends Activity {
                 canvas.drawText(labels[i], 0, y, paint);
                 float left = dpLocal(82);
                 float top = y - dpLocal(12);
-                float width = getWidth() - dpLocal(124);
+                float width = Math.max(dpLocal(20), getWidth() - dpLocal(154));
                 paint.setColor(Color.rgb(232, 243, 239));
                 canvas.drawRect(left, top, left + width, top + dpLocal(12), paint);
                 paint.setColor(colors[i]);
                 canvas.drawRect(left, top, left + width * counts[i] / max, top + dpLocal(12), paint);
                 paint.setColor(COLOR_TEXT);
-                canvas.drawText(counts[i] + "次", getWidth() - dpLocal(32), y, paint);
+                canvas.drawText(counts[i] + "次", getWidth() - dpLocal(60), y, paint);
             }
         }
 

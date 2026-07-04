@@ -49,7 +49,7 @@ public final class ReminderActivity extends Activity {
         title.setText(ReminderAlert.title());
         title.setTextSize(28);
         title.setTextColor(COLOR_TEXT);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTypeface(AppFonts.bold(this));
         title.setIncludeFontPadding(false);
         card.addView(title, matchWrap());
 
@@ -65,7 +65,7 @@ public final class ReminderActivity extends Activity {
         TextView okButton = new TextView(this);
         okButton.setText("\u6211\u77e5\u9053\u4e86");
         okButton.setTextSize(18);
-        okButton.setTypeface(Typeface.DEFAULT_BOLD);
+        okButton.setTypeface(AppFonts.bold(this));
         okButton.setGravity(Gravity.CENTER);
         okButton.setTextColor(Color.WHITE);
         okButton.setMinHeight(dp(56));

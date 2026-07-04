@@ -31,14 +31,14 @@ public sealed class PcPairingDialog : Form
         ShowInTaskbar = false;
         ClientSize = new Size(470, 344);
         BackColor = Color.White;
-        Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
+        Font = AppFonts.Create(9F, FontStyle.Regular, GraphicsUnit.Point);
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
 
         Controls.Add(new StaticText
         {
             Text = "\u624b\u673a\u914d\u5bf9",
             Bounds = new Rectangle(28, 24, 300, 58),
-            Font = new Font("Microsoft YaHei UI", 19F, FontStyle.Bold, GraphicsUnit.Point),
+            Font = AppFonts.Create(19F, FontStyle.Bold, GraphicsUnit.Point),
             ForeColor = TextPrimary,
             BackColor = Color.Transparent,
             TextAlign = ContentAlignment.MiddleLeft
@@ -59,7 +59,7 @@ public sealed class PcPairingDialog : Form
         {
             Text = "\u8f93\u5165\u624b\u673a\u4e0a\u663e\u793a\u7684\u914d\u5bf9\u7801",
             Bounds = new Rectangle(28, 92, 414, 42),
-            Font = new Font("Microsoft YaHei UI", 11F, FontStyle.Regular, GraphicsUnit.Point),
+            Font = AppFonts.Create(11F, FontStyle.Regular, GraphicsUnit.Point),
             ForeColor = TextSecondary,
             BackColor = Color.Transparent
         });
@@ -67,7 +67,7 @@ public sealed class PcPairingDialog : Form
         _codeInput = new PairingCodeInput
         {
             Bounds = new Rectangle(28, 154, 414, 76),
-            Font = new Font("Microsoft YaHei UI", 22F, FontStyle.Bold, GraphicsUnit.Point),
+            Font = AppFonts.Create(22F, FontStyle.Bold, GraphicsUnit.Point),
             ForeColor = TextPrimary,
             FillColor = InputFill,
             BorderColor = Color.FromArgb(206, 226, 218)
@@ -78,7 +78,7 @@ public sealed class PcPairingDialog : Form
         _hintLabel = new Label
         {
             Bounds = new Rectangle(28, 240, 414, 26),
-            Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Regular, GraphicsUnit.Point),
+            Font = AppFonts.Create(10F, FontStyle.Regular, GraphicsUnit.Point),
             ForeColor = Color.FromArgb(190, 80, 68),
             BackColor = Color.Transparent
         };
@@ -233,7 +233,7 @@ public sealed class PcPairingDialog : Form
         public RoundedButton()
         {
             Cursor = Cursors.Hand;
-            Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Bold, GraphicsUnit.Point);
+            Font = AppFonts.Create(13F, FontStyle.Bold, GraphicsUnit.Point);
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
         }
 

@@ -7,7 +7,15 @@ public static class DailyRecordReconciler
     public static DailyRecord UseSegmentRecordForSyncedDay(DailyRecord? legacy, DailyRecord segmented)
     {
         ArgumentNullException.ThrowIfNull(segmented);
-        return Clone(segmented);
+        var result = Clone(segmented);
+        if (legacy is not null)
+        {
+            AppState.NormalizeRecord(legacy);
+            result.ReminderShown = legacy.ReminderShown;
+            result.LastReminderStep = legacy.LastReminderStep;
+        }
+
+        return result;
     }
 
     private static DailyRecord Clone(DailyRecord record)

@@ -49,6 +49,14 @@ public final class AndroidSyncResponseReader {
         return "PC is not paired.".equals(error) || error.toLowerCase(java.util.Locale.ROOT).contains("not paired");
     }
 
+    public static long readTimestampUnixSeconds(String responseJson) {
+        String json = safe(responseJson);
+        if (json.isEmpty() || !isAccepted(json)) {
+            return 0L;
+        }
+        return readLong(json, "TimestampUnixSeconds", "timestampUnixSeconds");
+    }
+
     private static UsageSegment readSegment(String json) {
         return new UsageSegment(
                 readString(json, "SegmentId", "segmentId"),

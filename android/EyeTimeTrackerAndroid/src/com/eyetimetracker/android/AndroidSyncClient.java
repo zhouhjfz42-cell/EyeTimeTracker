@@ -41,7 +41,6 @@ public final class AndroidSyncClient {
                 writer.flush();
 
                 String response = reader.readLine();
-                settings.lastSyncUnixSeconds = System.currentTimeMillis() / 1000L;
                 settings.lastError = "";
                 return response == null ? "" : response;
             }

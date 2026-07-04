@@ -137,7 +137,7 @@ public sealed class TrackingController : IDisposable
         lock (_gate)
         {
             PersistAccumulatorLocked();
-            return UsageDeviceBreakdown.Build(date, _state.Segments);
+            return UsageDeviceBreakdown.Build(date, CreateEffectiveSegmentsLocked());
         }
     }
 
@@ -393,13 +393,14 @@ public sealed class TrackingController : IDisposable
         var recordsByDate = _state.Records
             .Select(CloneRecord)
             .ToDictionary(record => record.Date);
+        var effectiveSegments = CreateEffectiveSegmentsLocked();
 
-        foreach (var date in _state.Segments
+        foreach (var date in effectiveSegments
             .Where(segment => segment.LocalDate != default)
             .Select(segment => segment.LocalDate)
             .Distinct())
         {
-            var segmentRecord = UsageSegmentMerger.BuildDailyRecord(date, _state.Segments);
+            var segmentRecord = UsageSegmentMerger.BuildDailyRecord(date, effectiveSegments);
             recordsByDate.TryGetValue(date, out var existing);
             recordsByDate[date] = DailyRecordReconciler.UseSegmentRecordForSyncedDay(existing, segmentRecord);
         }
@@ -407,6 +408,15 @@ public sealed class TrackingController : IDisposable
         return recordsByDate.Values
             .OrderBy(record => record.Date)
             .ToList();
+    }
+
+    private List<UsageSegment> CreateEffectiveSegmentsLocked()
+    {
+        return LegacyUsageSegments.NormalizeEffectiveSegments(
+            _state.Segments,
+            _state.Records,
+            _state.DeviceId,
+            _state.Platform);
     }
 
     private static DailyRecord CloneRecord(DailyRecord record)

@@ -26,7 +26,17 @@ public final class DailySummaryReconciler {
 
     public static DailySummary useSegmentSummaryForSyncedDay(DailySummary legacy, DailySummary segmented) {
         if (segmented != null) {
-            return segmented;
+            if (legacy == null) {
+                return segmented;
+            }
+            return new DailySummary(
+                    segmented.date,
+                    segmented.totalSeconds,
+                    segmented.hourlySeconds,
+                    segmented.sessionSeconds,
+                    segmented.currentSessionSeconds,
+                    legacy.reminderShown,
+                    legacy.lastReminderStep);
         }
         return legacy == null
                 ? new DailySummary("", 0L, false, 0)

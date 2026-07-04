@@ -31,6 +31,7 @@ public final class AndroidPairingClient {
         settings.peerDeviceId = readString(responseJson, "DeviceId", "deviceId");
         settings.peerPlatform = readString(responseJson, "Platform", "platform");
         settings.sharedSecret = readString(responseJson, "SharedSecret", "sharedSecret");
+        settings.lastSyncUnixSeconds = 0L;
         settings.lastError = "";
         return !settings.peerDeviceId.isEmpty() && !settings.sharedSecret.isEmpty();
     }

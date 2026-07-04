@@ -15,6 +15,21 @@ public final class DurationFormatter {
         return String.format("%d分钟", minutes);
     }
 
+    public static String formatMainCard(long totalSeconds) {
+        long safeSeconds = Math.max(0L, totalSeconds);
+        long totalMinutes = safeSeconds / 60L;
+        if (totalMinutes <= 10L * 60L) {
+            return format(safeSeconds);
+        }
+
+        long hours = totalMinutes / 60L;
+        long minutes = totalMinutes % 60L;
+        if (minutes > 30L) {
+            hours++;
+        }
+        return String.format("约%d小时", hours);
+    }
+
     public static String formatTooltipMinutes(long totalSeconds) {
         long minutes = Math.max(0L, totalSeconds) / 60L;
         return String.format("%d分钟", minutes);

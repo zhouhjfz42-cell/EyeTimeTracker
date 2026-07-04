@@ -1,0 +1,183 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760">
+  <defs>
+    <style>
+      .ui { font-family: "Noto Sans SC", "Noto Sans CJK SC", "Segoe UI", sans-serif; }
+      .ink { fill: #07152f; }
+      .muted { fill: #71809b; }
+      .green { fill: #1fad86; }
+      .green2 { fill: #2cc9b7; }
+      .blue { fill: #5657e8; }
+      .yellow { fill: #f3b82e; }
+      .red { fill: #e95656; }
+      .panel { fill: #fbfffd; stroke: #d8f1e9; stroke-width: 2; }
+      .card { fill: #f4fffb; stroke: #d9f0e8; stroke-width: 1.5; }
+      .button { fill: #1fad86; }
+      .softButton { fill: #eef3f2; }
+      .hair { stroke: #d3efe6; stroke-width: 2; }
+      .shadow { filter: drop-shadow(0 16px 28px rgba(4, 32, 29, .12)); }
+    </style>
+  </defs>
+
+  <rect width="1280" height="760" fill="#f5faf8"/>
+
+  <g class="ui">
+    <text x="42" y="64" class="ink" font-size="34" font-weight="800">Noto Sans SC 界面预览</text>
+    <text x="42" y="102" class="muted" font-size="19" font-weight="400">用于观察商用开源字体在 PC、统计页、安卓版中的统一观感</text>
+
+    <!-- PC main window -->
+    <g transform="translate(42 138)" class="shadow">
+      <rect x="0" y="0" width="375" height="552" rx="20" fill="#ffffff" stroke="#d9e4df"/>
+      <rect x="0" y="0" width="375" height="52" rx="20" fill="#f3f0ec"/>
+      <rect x="0" y="38" width="375" height="16" fill="#f3f0ec"/>
+      <circle cx="30" cy="26" r="14" fill="#d7fff0"/>
+      <path d="M21 22 h13 a4 4 0 0 1 4 4 v9 h-17z" fill="none" stroke="#20b595" stroke-width="2.2"/>
+      <path d="M33 19 h10 a3.5 3.5 0 0 1 3.5 3.5 v17 a3.5 3.5 0 0 1-3.5 3.5 h-10 a3.5 3.5 0 0 1-3.5-3.5 v-17 a3.5 3.5 0 0 1 3.5-3.5z" fill="#effff9" stroke="#20b595" stroke-width="2.2"/>
+      <text x="58" y="34" class="ink" font-size="19" font-weight="600">用眼时间记录</text>
+
+      <text x="34" y="114" class="ink" font-size="42" font-weight="900">用眼时间</text>
+      <text x="34" y="151" class="muted" font-size="20" font-weight="400">键鼠动作、媒体播放时计入统计</text>
+
+      <text x="34" y="207" class="muted" font-size="24" font-weight="400">今天</text>
+      <circle cx="112" cy="197" r="6.5" class="green"/>
+      <text x="128" y="207" class="muted" font-size="24" font-weight="500">统计中</text>
+      <text x="220" y="207" class="muted" font-size="22" font-weight="400">（已连手机）</text>
+      <rect x="298" y="177" width="54" height="30" rx="15" class="button"/>
+      <text x="325" y="199" text-anchor="middle" fill="#ffffff" font-size="17" font-weight="700">断开</text>
+
+      <text x="34" y="299" class="green" font-size="58" font-weight="900">4小时26分</text>
+
+      <g transform="translate(34 337)">
+        <rect width="136" height="78" rx="15" class="card"/>
+        <text x="22" y="31" class="muted" font-size="20" font-weight="400">昨天</text>
+        <text x="22" y="64" class="ink" font-size="31" font-weight="800">3小时51分</text>
+      </g>
+      <g transform="translate(195 337)">
+        <rect width="136" height="78" rx="15" class="card"/>
+        <text x="22" y="31" class="muted" font-size="20" font-weight="400">本周</text>
+        <text x="22" y="64" class="ink" font-size="31" font-weight="800">23小时</text>
+      </g>
+      <g transform="translate(34 436)">
+        <rect width="136" height="78" rx="15" class="card"/>
+        <text x="22" y="31" class="muted" font-size="20" font-weight="400">本月</text>
+        <text x="22" y="64" class="ink" font-size="31" font-weight="800">12小时</text>
+      </g>
+      <g transform="translate(195 436)">
+        <rect width="136" height="78" rx="15" class="card"/>
+        <text x="22" y="31" class="muted" font-size="20" font-weight="400">提醒（点击修改）</text>
+        <text x="22" y="64" class="ink" font-size="31" font-weight="800">1小时</text>
+      </g>
+    </g>
+
+    <!-- PC stats window -->
+    <g transform="translate(450 138)" class="shadow">
+      <rect x="0" y="0" width="488" height="552" rx="20" fill="#ffffff" stroke="#d9e4df"/>
+      <text x="28" y="67" class="ink" font-size="43" font-weight="900">统计</text>
+      <text x="144" y="63" class="muted" font-size="21" font-weight="400">看趋势、分布和连续使用情况</text>
+
+      <rect x="28" y="100" width="432" height="222" rx="18" class="panel"/>
+      <text x="52" y="144" class="ink" font-size="25" font-weight="800">单日情况</text>
+      <g transform="translate(194 113)">
+        <rect width="78" height="32" rx="16" fill="#eefaf6" stroke="#d8f1e9"/>
+        <text x="39" y="23" text-anchor="middle" class="ink" font-size="18" font-weight="700">今天</text>
+      </g>
+      <circle cx="306" cy="129" r="6" class="green"/>
+      <text x="319" y="136" class="muted" font-size="17" font-weight="400">电脑</text>
+      <circle cx="367" cy="129" r="6" class="blue"/>
+      <text x="380" y="136" class="muted" font-size="17" font-weight="400">手机</text>
+
+      <g transform="translate(52 166)">
+        <rect width="105" height="58" rx="12" class="card"/>
+        <text x="18" y="25" class="muted" font-size="16">今日用眼</text>
+        <text x="18" y="49" class="green" font-size="22" font-weight="800">4小时26分</text>
+      </g>
+      <g transform="translate(52 240)">
+        <rect width="105" height="58" rx="12" class="card"/>
+        <text x="18" y="25" class="muted" font-size="16">电脑 / 手机</text>
+        <text x="18" y="49" class="ink" font-size="22" font-weight="800">39%/61%</text>
+      </g>
+
+      <g transform="translate(205 170)">
+        <circle cx="67" cy="67" r="65" fill="#fafffd" stroke="#dff4ed" stroke-width="2"/>
+        <circle cx="67" cy="67" r="34" fill="#ffffff" stroke="#dff4ed" stroke-width="2"/>
+        <text x="67" y="78" text-anchor="middle" class="ink" font-size="31" font-weight="900">24H</text>
+        <text x="67" y="-6" text-anchor="middle" class="muted" font-size="16">0</text>
+        <text x="142" y="72" text-anchor="middle" class="muted" font-size="16">6</text>
+        <text x="67" y="150" text-anchor="middle" class="muted" font-size="16">12</text>
+        <text x="-8" y="72" text-anchor="middle" class="muted" font-size="16">18</text>
+        <rect x="39" y="23" width="11" height="46" rx="2" class="green" transform="rotate(-67 44.5 69)"/>
+        <rect x="50" y="16" width="11" height="53" rx="2" class="blue" transform="rotate(-55 55.5 69)"/>
+        <rect x="29" y="32" width="11" height="37" rx="2" class="green" transform="rotate(-80 34.5 69)"/>
+        <rect x="60" y="10" width="11" height="59" rx="2" class="blue" transform="rotate(-43 65.5 69)"/>
+      </g>
+
+      <g transform="translate(346 170)">
+        <text x="0" y="0" class="ink" font-size="22" font-weight="800">当日摘要</text>
+        <text x="0" y="42" class="muted" font-size="18">主要集中在 20:00-21:00</text>
+        <text x="0" y="82" class="muted" font-size="18">最长连续 1小时05分</text>
+        <text x="0" y="122" class="muted" font-size="18">手机占比 61%</text>
+      </g>
+
+      <g transform="translate(28 348)">
+        <rect width="134" height="150" rx="18" class="panel"/>
+        <text x="22" y="42" class="ink" font-size="23" font-weight="800">本周用眼</text>
+        <rect x="25" y="86" width="15" height="40" class="green"/>
+        <rect x="54" y="62" width="15" height="64" class="green"/>
+        <rect x="83" y="76" width="15" height="50" class="green"/>
+        <rect x="112" y="98" width="15" height="28" class="blue"/>
+      </g>
+      <g transform="translate(178 348)">
+        <rect width="134" height="150" rx="18" class="panel"/>
+        <text x="22" y="42" class="ink" font-size="23" font-weight="800">月度趋势</text>
+        <path d="M28 88 L108 120" fill="none" stroke="#1fad86" stroke-width="4" stroke-linecap="round"/>
+        <path d="M28 104 L108 104" fill="none" stroke="#f3b82e" stroke-width="2" stroke-dasharray="6 7"/>
+      </g>
+      <g transform="translate(328 348)">
+        <rect width="132" height="150" rx="18" class="panel"/>
+        <text x="20" y="42" class="ink" font-size="23" font-weight="800">连续使用分</text>
+        <rect x="22" y="76" width="82" height="10" class="green"/>
+        <rect x="22" y="106" width="46" height="10" class="yellow"/>
+        <rect x="22" y="136" width="34" height="10" class="red"/>
+      </g>
+    </g>
+
+    <!-- Android main screen -->
+    <g transform="translate(974 138)" class="shadow">
+      <rect x="0" y="0" width="254" height="552" rx="30" fill="#101820"/>
+      <rect x="13" y="18" width="228" height="516" rx="24" fill="#fbfffd"/>
+      <text x="38" y="82" class="ink" font-size="34" font-weight="900">用眼时间</text>
+      <text x="38" y="113" class="muted" font-size="17" font-weight="400">手机与电脑共同统计</text>
+
+      <text x="38" y="158" class="muted" font-size="20">今天</text>
+      <circle cx="96" cy="150" r="5.5" class="green"/>
+      <text x="110" y="158" class="muted" font-size="20" font-weight="500">统计中</text>
+      <text x="38" y="226" class="green" font-size="42" font-weight="900">4小时26分</text>
+
+      <g transform="translate(37 264)">
+        <rect width="82" height="69" rx="14" class="card"/>
+        <text x="14" y="28" class="muted" font-size="16">昨天</text>
+        <text x="14" y="55" class="ink" font-size="24" font-weight="800">3小时</text>
+      </g>
+      <g transform="translate(136 264)">
+        <rect width="82" height="69" rx="14" class="card"/>
+        <text x="14" y="28" class="muted" font-size="16">本周</text>
+        <text x="14" y="55" class="ink" font-size="24" font-weight="800">23小时</text>
+      </g>
+      <g transform="translate(37 350)">
+        <rect width="82" height="69" rx="14" class="card"/>
+        <text x="14" y="28" class="muted" font-size="16">本月</text>
+        <text x="14" y="55" class="ink" font-size="24" font-weight="800">12小时</text>
+      </g>
+      <g transform="translate(136 350)">
+        <rect width="82" height="69" rx="14" class="card"/>
+        <text x="14" y="28" class="muted" font-size="16">提醒</text>
+        <text x="14" y="55" class="ink" font-size="24" font-weight="800">1小时</text>
+      </g>
+      <rect x="50" y="458" width="154" height="42" rx="21" class="button"/>
+      <text x="127" y="486" text-anchor="middle" fill="#ffffff" font-size="22" font-weight="800">统计页</text>
+    </g>
+
+    <g transform="translate(42 718)">
+      <text class="muted" font-size="17" font-weight="400">观察点：Noto Sans SC 的中文更干净、商业感更强；大数字建议继续用 800-900 字重，说明文字用 400-500 字重。</text>
+    </g>
+  </g>
+</svg>

@@ -29,7 +29,7 @@ public final class EyeTimeService extends Service implements SensorEventListener
     public static final String EXTRA_REMINDER_STEP = "reminder_step";
 
     private static final String CHANNEL_ID = "eye_time_tracker";
-    private static final String REMINDER_CHANNEL_ID = "eye_time_tracker_reminders";
+    private static final String REMINDER_CHANNEL_ID = ReminderNotificationProfile.CHANNEL_ID;
     private static final int FOREGROUND_ID = 1001;
     private static final int REMINDER_ID = 1002;
     private static final long TICK_MS = 10_000L;
@@ -199,8 +199,11 @@ public final class EyeTimeService extends Service implements SensorEventListener
             NotificationChannel reminderChannel = new NotificationChannel(
                     REMINDER_CHANNEL_ID,
                     "\u7528\u773c\u63d0\u9192",
-                    NotificationManager.IMPORTANCE_HIGH);
+                    ReminderNotificationProfile.CHANNEL_IMPORTANCE);
             reminderChannel.setDescription("\u5230\u8fbe\u8bbe\u5b9a\u7528\u773c\u65f6\u957f\u65f6\u63d0\u9192\u4f11\u606f");
+            reminderChannel.enableVibration(true);
+            reminderChannel.setVibrationPattern(ReminderNotificationProfile.VIBRATION_PATTERN);
+            reminderChannel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
             manager.createNotificationChannel(reminderChannel);
         }
     }
@@ -234,6 +237,10 @@ public final class EyeTimeService extends Service implements SensorEventListener
                 .putExtra(EXTRA_REMINDER_MINUTES, reminderMinutes)
                 .putExtra(EXTRA_REMINDER_REPEAT, repeatReminder)
                 .putExtra(EXTRA_REMINDER_STEP, reminderStep));
+        if (store.isMainActivityVisible()) {
+            return;
+        }
+
         Intent alertIntent = new Intent(this, ReminderActivity.class)
                 .putExtra(ReminderActivity.EXTRA_REMINDER_MINUTES, reminderMinutes)
                 .putExtra(ReminderActivity.EXTRA_REMINDER_REPEAT, repeatReminder)
@@ -254,8 +261,9 @@ public final class EyeTimeService extends Service implements SensorEventListener
                 .setSmallIcon(R.drawable.ic_launcher)
                 .setContentIntent(alertPendingIntent)
                 .setAutoCancel(true)
-                .setPriority(Notification.PRIORITY_HIGH)
+                .setPriority(ReminderNotificationProfile.NOTIFICATION_PRIORITY)
                 .setCategory(Notification.CATEGORY_REMINDER)
+                .setVisibility(Notification.VISIBILITY_PUBLIC)
                 .setDefaults(Notification.DEFAULT_ALL)
                 .build();
         NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);

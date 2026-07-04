@@ -8,7 +8,7 @@ public final class ConnectionStatusText {
         if (!isConnected || peerName == null || peerName.trim().isEmpty()) {
             return baseStatus;
         }
-        return baseStatus + "（已连接" + peerName + "）";
+        return baseStatus + "（已连" + peerName + "）";
     }
 
     public static String format(String baseStatus, boolean isPaired, boolean isOnline, String peerName) {
@@ -16,8 +16,8 @@ public final class ConnectionStatusText {
             return baseStatus;
         }
         if (!isOnline) {
-            return baseStatus + "（" + peerName + "暂时离线）";
+            return baseStatus + "（" + peerName + "离线）";
         }
-        return baseStatus + "（已连接" + peerName + "）";
+        return baseStatus + "（已连" + peerName + "）";
     }
 }

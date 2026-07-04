@@ -48,6 +48,8 @@ public sealed class UsageDeviceBreakdown
             }
         }
 
+        pcBuckets.ExceptWith(phoneBuckets);
+
         return new UsageDeviceBreakdown(
             pcBuckets.Count * 10L,
             phoneBuckets.Count * 10L,

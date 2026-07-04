@@ -70,7 +70,7 @@ public sealed class StatsForm : Form
         MinimizeBox = true;
         ClientSize = new Size(1180, 760);
         BackColor = PageBackground;
-        Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
+        Font = AppFonts.Create(9F, FontStyle.Regular, GraphicsUnit.Point);
 
         var root = new Panel
         {
@@ -103,9 +103,9 @@ public sealed class StatsForm : Form
 
         var dayPanel = CreatePanel(new Rectangle(30, 98, 1120, 290));
         root.Controls.Add(dayPanel);
-        AddPanelTitle(dayPanel, "单日情况", new Rectangle(24, 18, 180, 36));
-        _daySelectorText = AddPill(dayPanel, "今天 ▾", new Rectangle(170, 22, 96, 30), ShowDayMenu);
-        AddLegend(dayPanel, new Point(292, 27));
+        AddPanelTitle(dayPanel, "单日情况", new Rectangle(24, 18, 132, 36));
+        _daySelectorText = AddPill(dayPanel, "今天 ▾", new Rectangle(170, 22, 112, 30), ShowDayMenu);
+        AddLegend(dayPanel, new Point(314, 27));
 
         dayPanel.Controls.Add(BuildSmallMetric("今日用眼", out _dayTotalValue, new Rectangle(24, 70, 155, 78), AccentGreen));
         dayPanel.Controls.Add(BuildSmallMetric("最长连续", out _longestSessionValue, new Rectangle(194, 70, 155, 78), AccentYellow));
@@ -119,7 +119,7 @@ public sealed class StatsForm : Form
         };
         dayPanel.Controls.Add(_hourlyChart);
 
-        _summaryTitle = AddSummaryLabel(dayPanel, "今日摘要", new Rectangle(690, 18, 180, 36), 13.5F, 12F, TextPrimary, FontStyle.Bold);
+        _summaryTitle = AddSummaryLabel(dayPanel, "昨日摘要", new Rectangle(690, 18, 180, 36), 13.5F, 12F, TextPrimary, FontStyle.Bold);
         _summaryLineOne = AddSummaryLabel(dayPanel, "", new Rectangle(692, 66, 380, 34), 10.5F, 9F, TextSecondary, FontStyle.Regular);
         _summaryLineTwo = AddSummaryLabel(dayPanel, "", new Rectangle(692, 112, 380, 34), 10.5F, 9F, TextSecondary, FontStyle.Regular);
         _summaryLineThree = AddSummaryLabel(dayPanel, "", new Rectangle(692, 158, 380, 34), 10.5F, 9F, TextSecondary, FontStyle.Regular);
@@ -200,6 +200,13 @@ public sealed class StatsForm : Form
         var sessions = SessionValues(todayRecord).ToList();
         var longest = sessions.Count == 0 ? todayRecord.CurrentSessionSeconds : sessions.Max();
         var deviceBreakdown = _controller.GetDeviceBreakdown(_selectedDay);
+        var isShowingToday = _selectedDay == actualToday;
+        var summaryDate = isShowingToday ? actualToday.AddDays(-1) : _selectedDay;
+        var summaryRecord = records.FirstOrDefault(record => record.Date == summaryDate) ?? new DailyRecord(summaryDate);
+        AppState.NormalizeRecord(summaryRecord);
+        var summarySessions = SessionValues(summaryRecord).ToList();
+        var summaryLongest = summarySessions.Count == 0 ? summaryRecord.CurrentSessionSeconds : summarySessions.Max();
+        var summaryDeviceBreakdown = _controller.GetDeviceBreakdown(summaryDate);
         var weekBreakdowns = Enumerable.Range(0, 7)
             .Select(offset => _controller.GetDeviceBreakdown(_selectedWeekStart.AddDays(offset)))
             .ToList();
@@ -212,9 +219,10 @@ public sealed class StatsForm : Form
         _hourlyChart.HourlySeconds = todayRecord.HourlySeconds;
         _hourlyChart.SetSourceHourlySeconds(deviceBreakdown.PcHourlySeconds, deviceBreakdown.PhoneHourlySeconds);
 
-        _summaryLineOne.Text = $"主要集中在 {PeakHourText(todayRecord.HourlySeconds)}";
-        _summaryLineTwo.Text = $"最长连续 {FormatDuration(longest)}";
-        _summaryLineThree.Text = SummarySourceText(deviceBreakdown);
+        _summaryTitle.Text = isShowingToday ? "昨日摘要" : "当日摘要";
+        _summaryLineOne.Text = $"主要集中在 {PeakHourText(summaryRecord.HourlySeconds)}";
+        _summaryLineTwo.Text = $"最长连续 {FormatDuration(summaryLongest)}";
+        _summaryLineThree.Text = SummarySourceText(summaryDeviceBreakdown);
 
         _weekChart.Records = weekRecords;
         _weekChart.DeviceBreakdowns = weekBreakdowns;
@@ -665,6 +673,7 @@ public sealed class StatsForm : Form
         private readonly FitTextLabel _leftTitle;
         private readonly FitTextLabel? _rightTitle;
         private DateOnly _leftMonthStart;
+        private DateOnly _selectedDate;
         private DateOnly _rangeStart;
         private DateOnly _rangeEnd;
         private bool _pickingRangeEnd = true;
@@ -676,6 +685,7 @@ public sealed class StatsForm : Form
         {
             _mode = mode;
             _leftMonthStart = new DateOnly(initialDate.Year, initialDate.Month, 1);
+            _selectedDate = initialDate;
             _rangeStart = rangeStart <= rangeEnd ? rangeStart : rangeEnd;
             _rangeEnd = rangeStart <= rangeEnd ? rangeEnd : rangeStart;
 
@@ -683,7 +693,7 @@ public sealed class StatsForm : Form
             FormBorderStyle = FormBorderStyle.None;
             ShowInTaskbar = false;
             BackColor = PanelBackground;
-            Font = new Font("Microsoft YaHei UI", 9F);
+            Font = AppFonts.Create(9F);
             Size = mode == CalendarSelectionMode.Range ? new Size(720, 418) : new Size(368, 390);
 
             var root = new RoundedPanel
@@ -762,7 +772,7 @@ public sealed class StatsForm : Form
             {
                 Bounds = bounds,
                 Mode = _mode,
-                SelectedDate = _leftMonthStart,
+                SelectedDate = _selectedDate,
                 RangeStart = _rangeStart,
                 RangeEnd = _rangeEnd,
                 BackColor = Color.Transparent
@@ -858,6 +868,7 @@ public sealed class StatsForm : Form
         {
             _leftTitle.Text = $"{_leftMonthStart.Year}年 {_leftMonthStart.Month}月";
             _leftMonth.DisplayMonth = _leftMonthStart;
+            _leftMonth.SelectedDate = _selectedDate;
             _leftMonth.RangeStart = _rangeStart;
             _leftMonth.RangeEnd = _rangeEnd;
             _leftMonth.Invalidate();
@@ -867,6 +878,7 @@ public sealed class StatsForm : Form
                 var rightStart = _leftMonthStart.AddMonths(1);
                 _rightTitle.Text = $"{rightStart.Year}年 {rightStart.Month}月";
                 _rightMonth.DisplayMonth = rightStart;
+                _rightMonth.SelectedDate = _selectedDate;
                 _rightMonth.RangeStart = _rangeStart;
                 _rightMonth.RangeEnd = _rangeEnd;
                 _rightMonth.Invalidate();
@@ -927,9 +939,9 @@ public sealed class StatsForm : Form
             var cellWidth = Width / 7F;
             var weekdayHeight = 28F;
             var cellHeight = (Height - weekdayHeight) / 6F;
-            using var weekdayFont = new Font("Microsoft YaHei UI", 9F);
-            using var dayFont = new Font("Microsoft YaHei UI", 10F);
-            using var selectedFont = new Font("Microsoft YaHei UI", 10F, FontStyle.Bold);
+            using var weekdayFont = AppFonts.Create(9F);
+            using var dayFont = AppFonts.Create(10F);
+            using var selectedFont = AppFonts.Create(10F, FontStyle.Bold);
             using var weekdayBrush = new SolidBrush(TextSecondary);
             using var normalBrush = new SolidBrush(TextPrimary);
             using var mutedBrush = new SolidBrush(Color.FromArgb(174, 184, 194));
@@ -1133,7 +1145,7 @@ public sealed class StatsForm : Form
             e.Graphics.FillEllipse(centerFill, center.X - innerRadius, center.Y - innerRadius, innerRadius * 2F, innerRadius * 2F);
             e.Graphics.DrawEllipse(border, center.X - innerRadius, center.Y - innerRadius, innerRadius * 2F, innerRadius * 2F);
 
-            using var titleFont = new Font("Microsoft YaHei UI", 16F, FontStyle.Bold);
+            using var titleFont = AppFonts.Create(16F, FontStyle.Bold);
             using var titleBrush = new SolidBrush(TextPrimary);
             using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
             e.Graphics.DrawString("24H", titleFont, titleBrush, new RectangleF(center.X - 48F, center.Y - 18F, 96F, 36F), format);
@@ -1266,16 +1278,16 @@ public sealed class StatsForm : Form
 
         private static void DrawHourLabels(Graphics graphics, PointF center, float outerRadius)
         {
-            using var font = new Font("Microsoft YaHei UI", 8F, FontStyle.Regular);
+            using var font = AppFonts.Create(8.5F, FontStyle.Regular);
             using var brush = new SolidBrush(TextSecondary);
             using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
             foreach (var hour in new[] { 0, 6, 12, 18 })
             {
                 var angle = (-90F + hour * 15F) * Math.PI / 180D;
-                var radius = outerRadius + 14F;
+                var radius = outerRadius + 18F;
                 var x = center.X + (float)Math.Cos(angle) * radius;
                 var y = center.Y + (float)Math.Sin(angle) * radius;
-                graphics.DrawString(hour.ToString(), font, brush, new RectangleF(x - 14F, y - 9F, 28F, 18F), format);
+                graphics.DrawString(hour.ToString(), font, brush, new RectangleF(x - 24F, y - 11F, 48F, 22F), format);
             }
         }
     }
@@ -1324,7 +1336,13 @@ public sealed class StatsForm : Form
             var maxSeconds = Math.Max(1L, records.Max(record => record.TotalSeconds));
             var labels = new[] { "一", "二", "三", "四", "五", "六", "日" };
             using var textBrush = new SolidBrush(TextSecondary);
-            using var font = new Font("Microsoft YaHei UI", 8F);
+            using var font = AppFonts.Create(7.5F);
+            using var labelFormat = new StringFormat
+            {
+                Alignment = StringAlignment.Center,
+                LineAlignment = StringAlignment.Center,
+                Trimming = StringTrimming.None
+            };
 
             for (var i = 0; i < 7; i++)
             {
@@ -1351,7 +1369,7 @@ public sealed class StatsForm : Form
 
                 var bounds = new RectangleF(x - 6, y - 6, width + 12, barHeight + 12);
                 _hits.Add(new ChartHit(bounds, ChartValueFormatter.FormatCompactHours(records[i].TotalSeconds)));
-                e.Graphics.DrawString(labels[i], font, textBrush, x + 6, Height - 18);
+                e.Graphics.DrawString(labels[i], font, textBrush, new RectangleF(x - 8, Height - 22, width + 16, 20), labelFormat);
             }
         }
 
@@ -1550,19 +1568,23 @@ public sealed class StatsForm : Form
             var colors = new[] { AccentGreen, AccentYellow, AccentRed };
             var max = Math.Max(1, counts.Max());
 
-            using var labelFont = new Font("Microsoft YaHei UI", 8F);
-            using var valueFont = new Font("Microsoft YaHei UI", 8F, FontStyle.Bold);
+            using var labelFont = AppFonts.Create(7.5F);
+            using var valueFont = AppFonts.Create(7.5F, FontStyle.Bold);
             using var textBrush = new SolidBrush(TextSecondary);
-            using var labelFormat = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Near };
-            var labelBounds = new RectangleF(0, 0, 84, 20);
+            using var labelFormat = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center };
+            using var valueFormat = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center };
+            var labelBounds = new RectangleF(0, 0, 86, 22);
+            var valueBounds = new RectangleF(Width - 72, 0, 70, 22);
             var trackLeft = 104;
+            var trackWidth = Math.Max(20, Width - trackLeft - 92);
 
             for (var i = 0; i < 3; i++)
             {
                 var y = 8 + i * 45;
                 labelBounds.Y = y;
+                valueBounds.Y = y;
                 e.Graphics.DrawString(labels[i], labelFont, textBrush, labelBounds, labelFormat);
-                var track = new Rectangle(trackLeft, y + 2, Width - trackLeft - 40, 12);
+                var track = new Rectangle(trackLeft, y + 2, trackWidth, 12);
                 using (var trackBrush = new SolidBrush(Color.FromArgb(232, 243, 239)))
                 {
                     e.Graphics.FillRectangle(trackBrush, track);
@@ -1575,7 +1597,7 @@ public sealed class StatsForm : Form
                 }
 
                 using var valueBrush = new SolidBrush(TextPrimary);
-                e.Graphics.DrawString($"{counts[i]}次", valueFont, valueBrush, Width - 34, y);
+                e.Graphics.DrawString($"{counts[i]}次", valueFont, valueBrush, valueBounds, valueFormat);
             }
         }
     }
@@ -1600,7 +1622,7 @@ public sealed class StatsForm : Form
         protected override void OnPaint(PaintEventArgs e)
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            using var titleFont = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold);
+            using var titleFont = AppFonts.Create(9F, FontStyle.Bold);
             TextRenderer.DrawText(
                 e.Graphics,
                 "设备来源",
@@ -1624,7 +1646,7 @@ public sealed class StatsForm : Form
             graphics.FillRectangle(fillBrush, track.X, track.Y, (int)(track.Width * percent), track.Height);
 
             var text = $"{label} {(int)Math.Round(percent * 100)}%";
-            using var rowFont = new Font("Microsoft YaHei UI", 9.25F, FontStyle.Regular);
+            using var rowFont = AppFonts.Create(9.25F, FontStyle.Regular);
             TextRenderer.DrawText(
                 graphics,
                 text,
@@ -1711,7 +1733,7 @@ public sealed class StatsForm : Form
         {
             for (var size = MaxFontSize; size >= MinFontSize; size -= 0.5F)
             {
-                var font = new Font("Microsoft YaHei UI", size, FontStyle, GraphicsUnit.Point);
+                var font = AppFonts.Create(size, FontStyle, GraphicsUnit.Point);
                 var measured = TextRenderer.MeasureText(
                     graphics,
                     Text,
@@ -1726,7 +1748,7 @@ public sealed class StatsForm : Form
                 font.Dispose();
             }
 
-            return new Font("Microsoft YaHei UI", MinFontSize, FontStyle, GraphicsUnit.Point);
+            return AppFonts.Create(MinFontSize, FontStyle, GraphicsUnit.Point);
         }
 
         private TextFormatFlags CreateTextFormatFlags()

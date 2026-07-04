@@ -3,42 +3,84 @@ package com.eyetimetracker.android;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import android.util.Log;
 import java.time.LocalDate;
 import java.util.List;
 
 public final class AndroidSyncRunner {
+    private static final String DIAG_TAG = "EyeTimeDiag";
+    private static final Object SYNC_LOCK = new Object();
+    private static boolean syncRunning;
     private final EyeTimeStore store;
     private final AndroidSyncClient client;
+    private final AndroidPcDiscoveryClient discoveryClient;
 
     public AndroidSyncRunner(EyeTimeStore store) {
-        this(store, new AndroidSyncClient());
+        this(store, new AndroidSyncClient(), new AndroidPcDiscoveryClient());
     }
 
     public AndroidSyncRunner(EyeTimeStore store, AndroidSyncClient client) {
+        this(store, client, new AndroidPcDiscoveryClient());
+    }
+
+    public AndroidSyncRunner(EyeTimeStore store, AndroidSyncClient client, AndroidPcDiscoveryClient discoveryClient) {
         this.store = store;
         this.client = client;
+        this.discoveryClient = discoveryClient;
     }
 
     public void syncOnce() {
+        if (!tryEnterSync()) {
+            Log.i(DIAG_TAG, "AndroidSyncRunner syncOnce skipped reason=already-running");
+            return;
+        }
+        try {
+            syncOnceCore();
+        } finally {
+            exitSync();
+        }
+    }
+
+    private void syncOnceCore() {
+        long startedAt = System.currentTimeMillis();
         SyncSettings settings = store.getSyncSettings();
+        Log.i(DIAG_TAG, "AndroidSyncRunner syncOnce start paired=" + settings.isPaired
+                + " host=" + settings.peerHost
+                + " port=" + settings.peerPort
+                + " lastSync=" + settings.lastSyncUnixSeconds);
         String requestJson = buildSyncRequestJson(settings);
         if (requestJson.isEmpty()) {
             settings.lastError = "Sync settings are incomplete.";
             store.saveSyncResult(settings);
+            Log.i(DIAG_TAG, "AndroidSyncRunner syncOnce skipped reason=incomplete ms=" + elapsed(startedAt));
             return;
         }
 
+        long sendStartedAt = System.currentTimeMillis();
         String responseJson = client.sendJson(settings, requestJson);
+        Log.i(DIAG_TAG, "AndroidSyncRunner direct send responseEmpty=" + responseJson.isEmpty()
+                + " lastError=" + settings.lastError
+                + " ms=" + elapsed(sendStartedAt));
         if (SyncConnectionState.shouldClearPairingAfterSync(responseJson, settings.lastError)) {
-            store.saveSyncSettings(SyncSettings.unpaired());
-            return;
+            String recoveredResponse = tryReconnectWithDiscovery(settings, requestJson);
+            if (recoveredResponse.isEmpty()) {
+                store.saveSyncSettings(SyncSettings.unpaired());
+                Log.i(DIAG_TAG, "AndroidSyncRunner syncOnce unpaired after failed recovery ms=" + elapsed(startedAt));
+                return;
+            }
+            responseJson = recoveredResponse;
+        } else if (responseJson.isEmpty()) {
+            responseJson = tryReconnectWithDiscovery(settings, requestJson);
         }
 
         if (!responseJson.isEmpty()) {
             String error = AndroidSyncResponseReader.readError(responseJson);
             if (error.isEmpty()) {
-                for (UsageSegment segment : AndroidSyncResponseReader.readSegments(responseJson)) {
-                    store.addSegment(segment);
+                int changed = store.addSegments(AndroidSyncResponseReader.readSegments(responseJson));
+                Log.i(DIAG_TAG, "AndroidSyncRunner merged segments changed=" + changed);
+                long responseTimestamp = AndroidSyncResponseReader.readTimestampUnixSeconds(responseJson);
+                if (responseTimestamp > 0L) {
+                    settings.lastSyncUnixSeconds = responseTimestamp;
                 }
                 settings.lastError = "";
             } else {
@@ -46,6 +88,25 @@ public final class AndroidSyncRunner {
             }
         }
         store.saveSyncResult(settings);
+        Log.i(DIAG_TAG, "AndroidSyncRunner syncOnce end responseEmpty=" + responseJson.isEmpty()
+                + " lastError=" + settings.lastError
+                + " ms=" + elapsed(startedAt));
+    }
+
+    private static boolean tryEnterSync() {
+        synchronized (SYNC_LOCK) {
+            if (syncRunning) {
+                return false;
+            }
+            syncRunning = true;
+            return true;
+        }
+    }
+
+    private static void exitSync() {
+        synchronized (SYNC_LOCK) {
+            syncRunning = false;
+        }
     }
 
     private String buildSyncRequestJson(SyncSettings settings) {
@@ -63,7 +124,11 @@ public final class AndroidSyncRunner {
             request.put("Settings", settingsToJson());
             request.put("SinceUnixSeconds", settings.lastSyncUnixSeconds);
             request.put("TimestampUnixSeconds", nowSeconds);
-            request.put("Signature", "");
+            request.put("Signature", SyncMessageSigner.sign(
+                    SyncMessages.SYNC_REQUEST,
+                    nowSeconds,
+                    SyncSignatureBody.forSyncRequest(store.getDeviceId(), "android", settings.lastSyncUnixSeconds),
+                    settings.sharedSecret));
             return request.toString();
         } catch (JSONException ex) {
             settings.lastError = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
@@ -79,6 +144,38 @@ public final class AndroidSyncRunner {
         json.put("StartWithWindows", false);
         json.put("RepeatReminder", store.isRepeatReminderEnabled());
         return json;
+    }
+
+    private String tryReconnectWithDiscovery(SyncSettings settings, String requestJson) {
+        long startedAt = System.currentTimeMillis();
+        if (settings == null || requestJson == null || requestJson.isEmpty()) {
+            Log.i(DIAG_TAG, "AndroidSyncRunner discovery skipped reason=empty ms=" + elapsed(startedAt));
+            return "";
+        }
+
+        AndroidPcDiscoveryClient.DiscoveryResult discovery = discoveryClient.discover();
+        Log.i(DIAG_TAG, "AndroidSyncRunner discovery found=" + discovery.found
+                + " host=" + discovery.host
+                + " port=" + discovery.port
+                + " device=" + discovery.deviceId
+                + " ms=" + elapsed(startedAt));
+        if (!AndroidSyncEndpointResolver.applyDiscoveredPeer(settings, discovery)) {
+            return "";
+        }
+
+        long sendStartedAt = System.currentTimeMillis();
+        String responseJson = client.sendJson(settings, requestJson);
+        Log.i(DIAG_TAG, "AndroidSyncRunner recovered send responseEmpty=" + responseJson.isEmpty()
+                + " lastError=" + settings.lastError
+                + " ms=" + elapsed(sendStartedAt));
+        if (!responseJson.isEmpty() && AndroidSyncResponseReader.readError(responseJson).isEmpty()) {
+            store.saveSyncSettings(settings);
+        }
+        return responseJson;
+    }
+
+    private static long elapsed(long startedAt) {
+        return System.currentTimeMillis() - startedAt;
     }
 
     private static JSONArray segmentsToJson(List<UsageSegment> segments) throws JSONException {

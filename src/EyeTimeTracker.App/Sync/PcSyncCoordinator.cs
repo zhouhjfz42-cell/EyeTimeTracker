@@ -44,7 +44,7 @@ public sealed class PcSyncCoordinator
             Accepted = true,
             DeviceId = state.DeviceId,
             Platform = state.Platform,
-            Segments = GetLocalSegmentsSince(state, request.SinceUnixSeconds),
+            Segments = GetLocalSegments(state),
             TimestampUnixSeconds = state.Sync.LastSyncUnixSeconds
         };
     }
@@ -146,7 +146,7 @@ public sealed class PcSyncCoordinator
         };
     }
 
-    private static bool CanAcceptSync(AppState state, SyncRequest request, out string error)
+    private bool CanAcceptSync(AppState state, SyncRequest request, out string error)
     {
         if (!state.Sync.IsPaired || string.IsNullOrWhiteSpace(state.Sync.SharedSecret))
         {
@@ -158,6 +158,18 @@ public sealed class PcSyncCoordinator
             && !string.Equals(state.Sync.PeerDeviceId, request.DeviceId, StringComparison.Ordinal))
         {
             error = "Sync request came from an unknown device.";
+            return false;
+        }
+
+        if (!SyncMessageSigner.Verify(
+                SyncMessageTypes.SyncRequest,
+                request.TimestampUnixSeconds,
+                SyncSignatureBody.ForSyncRequest(request),
+                state.Sync.SharedSecret,
+                request.Signature,
+                _unixClock()))
+        {
+            error = "Sync request signature is invalid.";
             return false;
         }
 
@@ -204,11 +216,14 @@ public sealed class PcSyncCoordinator
             && segment.EndUnixSeconds > segment.StartUnixSeconds;
     }
 
-    private static List<UsageSegment> GetLocalSegmentsSince(AppState state, long sinceUnixSeconds)
+    private static List<UsageSegment> GetLocalSegments(AppState state)
     {
-        return state.Segments
+        return LegacyUsageSegments.NormalizeEffectiveSegments(
+                state.Segments,
+                state.Records,
+                state.DeviceId,
+                state.Platform)
             .Where(segment => string.Equals(segment.DeviceId, state.DeviceId, StringComparison.Ordinal))
-            .Where(segment => sinceUnixSeconds <= 0 || segment.UpdatedAtUnixSeconds > sinceUnixSeconds)
             .Select(CloneSegment)
             .ToList();
     }

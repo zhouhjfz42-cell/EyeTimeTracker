@@ -11,13 +11,21 @@ public final class CoreLogicTest {
         shouldClassifyTodayToneByFixedHealthyThresholds();
         shouldFormatReminderThresholds();
         shouldFormatReminderAlertText();
+        shouldUseFreshHeadsUpReminderNotificationProfile();
         shouldFormatConnectionStatus();
         shouldNotifyOnceOrAtRepeatMultiples();
         shouldDisplayReminderCountFromVisibleTotal();
         shouldCreateStableUsageSegmentIds();
         shouldMergeOverlappingSegmentsOnlyOnce();
+        shouldUseFixedTenSecondBucketsForArbitraryStartSeconds();
+        shouldSplitFixedBucketsAcrossHours();
         shouldComputeDeviceBreakdown();
-        shouldCapHourlySourceStackAtOneHour();
+        shouldDeDuplicateOverlappingSources();
+        shouldCreateSyncSegmentsFromLegacySummaries();
+        shouldKeepLegacySummariesWhenDateHasModernSegment();
+        shouldSkipLegacySummariesAlreadyStoredAsLegacySegments();
+        shouldSubtractModernSegmentsFromLegacyBackfill();
+        shouldIgnoreStoredOwnLegacyWhenNormalizingEffectiveSegments();
         shouldBreakContinuousSegmentsAfterThreeMinutes();
         shouldUseSegmentSummaryWhenSegmentsExist();
         shouldSignSyncMessages();
@@ -26,10 +34,15 @@ public final class CoreLogicTest {
         shouldSendOneJsonRequestAndReadOneJsonResponse();
         shouldStoreSyncClientNetworkErrors();
         shouldReadPcSegmentsFromSyncResponse();
+        shouldReadSyncResponseTimestamp();
         shouldReadSyncResponseError();
+        shouldMergeSyncSegmentsInOnePass();
         shouldRecognizePcUnpairedResponse();
         shouldClearPairingWhenPcDoesNotAnswer();
+        shouldPrepareLocalFirstDisconnect();
         shouldPairWithPcAndSavePairingInfo();
+        shouldApplyDiscoveredAddressOnlyForPairedPc();
+        shouldRejectDiscoveredAddressForDifferentPc();
         shouldGenerateSixDigitPairingCode();
         shouldDiscoverPcAndStoreHostAndPort();
         shouldReturnEmptyDiscoveryWhenPcDoesNotAnswer();
@@ -63,6 +76,10 @@ public final class CoreLogicTest {
         assertEquals("0分钟", DurationFormatter.format(59), "under one minute floors to zero");
         assertEquals("4分钟", DurationFormatter.format(299), "minutes only");
         assertEquals("1小时05分", DurationFormatter.format(3900), "hours and minutes");
+        assertEquals("10小时00分", DurationFormatter.formatMainCard(10L * 3600L), "main card keeps ten hours precise");
+        assertEquals("约10小时", DurationFormatter.formatMainCard(10L * 3600L + 30L * 60L), "main card compacts over ten hours without rounding at thirty minutes");
+        assertEquals("约10小时", DurationFormatter.formatMainCard(10L * 3600L + 17L * 60L), "main card compacts over ten hours");
+        assertEquals("约13小时", DurationFormatter.formatMainCard(12L * 3600L + 31L * 60L), "main card rounds compact duration over thirty minutes");
     }
 
     private static void shouldFormatChartTooltips() {
@@ -84,7 +101,7 @@ public final class CoreLogicTest {
         assertEquals(1, ReminderThreshold.clampMinutes(-5), "clamps reminder lower bound");
         assertEquals("5小时30分", ReminderThreshold.format(330), "formats reminder value");
         assertEquals("即5小时30分", ReminderThreshold.formatEquivalent(330), "formats equivalent hint");
-        assertEquals("反复提醒（当天内每330分钟提醒一次）", ReminderThreshold.formatRepeatLabel(330), "formats repeat label");
+        assertEquals("反复提醒（每达到时间就提醒一次，一天\n内可能出现多次提醒）", ReminderThreshold.formatRepeatLabel(330), "formats repeat label");
     }
 
     private static void shouldFormatReminderAlertText() {
@@ -96,8 +113,14 @@ public final class CoreLogicTest {
 
     private static void shouldFormatConnectionStatus() {
         assertEquals("统计中", ConnectionStatusText.format("统计中", false, "电脑"), "formats disconnected status");
-        assertEquals("统计中（已连接电脑）", ConnectionStatusText.format("统计中", true, "电脑"), "formats connected status");
-        assertEquals("统计中（电脑暂时离线）", ConnectionStatusText.format("统计中", true, false, "电脑"), "formats temporarily offline status");
+        assertEquals("统计中（已连电脑）", ConnectionStatusText.format("统计中", true, "电脑"), "formats connected status");
+        assertEquals("统计中（电脑离线）", ConnectionStatusText.format("统计中", true, false, "电脑"), "formats offline status");
+    }
+
+    private static void shouldUseFreshHeadsUpReminderNotificationProfile() {
+        assertEquals("eye_time_tracker_reminders_v2", ReminderNotificationProfile.CHANNEL_ID, "uses fresh reminder channel");
+        assertEquals(4, ReminderNotificationProfile.CHANNEL_IMPORTANCE, "uses high importance reminder channel");
+        assertEquals(2, ReminderNotificationProfile.NOTIFICATION_PRIORITY, "uses max priority reminder notification");
     }
 
     private static void shouldNotifyOnceOrAtRepeatMultiples() {
@@ -150,6 +173,32 @@ public final class CoreLogicTest {
         assertEquals(30L, summary.totalSeconds, "overlapping device segments count once");
     }
 
+    private static void shouldUseFixedTenSecondBucketsForArbitraryStartSeconds() {
+        long t0 = java.time.ZonedDateTime.of(2026, 7, 2, 8, 9, 18, 0, java.time.ZoneId.systemDefault())
+                .toEpochSecond();
+        java.util.List<UsageSegment> segments = new java.util.ArrayList<>();
+        segments.add(segment("pc", "windows", "pc-input", t0, 1));
+        segments.add(segment("phone", "android", "android-screen", t0 + 1L, 1));
+
+        DailySummary summary = UsageSegmentMerger.buildDailySummary("2026-07-02", segments);
+
+        assertEquals(10L, summary.totalSeconds, "arbitrary second starts share one fixed bucket");
+        assertEquals(10L, summary.hourlySeconds[8], "arbitrary second fixed bucket hourly");
+    }
+
+    private static void shouldSplitFixedBucketsAcrossHours() {
+        long t0 = java.time.ZonedDateTime.of(2026, 7, 2, 8, 59, 58, 0, java.time.ZoneId.systemDefault())
+                .toEpochSecond();
+        java.util.List<UsageSegment> segments = new java.util.ArrayList<>();
+        segments.add(segment("pc", "windows", "pc-input", t0, 5));
+
+        DailySummary summary = UsageSegmentMerger.buildDailySummary("2026-07-02", segments);
+
+        assertEquals(20L, summary.totalSeconds, "cross-hour fixed buckets total");
+        assertEquals(10L, summary.hourlySeconds[8], "cross-hour previous hour");
+        assertEquals(10L, summary.hourlySeconds[9], "cross-hour next hour");
+    }
+
     private static void shouldComputeDeviceBreakdown() {
         long t0 = java.time.OffsetDateTime.of(2026, 7, 2, 12, 0, 0, 0, java.time.ZoneOffset.UTC).toEpochSecond();
         java.util.List<UsageSegment> segments = new java.util.ArrayList<>();
@@ -169,7 +218,7 @@ public final class CoreLogicTest {
         assertEquals(30L, breakdown.phoneHourlySeconds[localHour], "device breakdown phone hourly");
     }
 
-    private static void shouldCapHourlySourceStackAtOneHour() {
+    private static void shouldDeDuplicateOverlappingSources() {
         long t0 = java.time.OffsetDateTime.of(2026, 7, 2, 12, 0, 0, 0, java.time.ZoneOffset.UTC).toEpochSecond();
         java.util.List<UsageSegment> segments = new java.util.ArrayList<>();
         segments.add(segment("pc", "windows", "pc-input", t0, 3600));
@@ -180,9 +229,109 @@ public final class CoreLogicTest {
 
         DeviceUsageBreakdown breakdown = DeviceUsageBreakdown.build("2026-07-02", segments);
 
-        assertEquals(3600L, breakdown.pcHourlySeconds[localHour] + breakdown.phoneHourlySeconds[localHour], "hourly source stack caps at one hour");
-        assertEquals(1800L, breakdown.pcHourlySeconds[localHour], "hourly source pc scales down");
-        assertEquals(1800L, breakdown.phoneHourlySeconds[localHour], "hourly source phone scales down");
+        assertEquals(0L, breakdown.pcSeconds, "overlapping source pc seconds");
+        assertEquals(3600L, breakdown.phoneSeconds, "overlapping source phone seconds");
+        assertEquals(0, breakdown.pcPercent(), "overlapping source pc percent");
+        assertEquals(100, breakdown.phonePercent(), "overlapping source phone percent");
+        assertEquals(3600L, breakdown.pcHourlySeconds[localHour] + breakdown.phoneHourlySeconds[localHour], "overlapping source stacked total");
+        assertEquals(0L, breakdown.pcHourlySeconds[localHour], "overlapping source pc hourly");
+        assertEquals(3600L, breakdown.phoneHourlySeconds[localHour], "overlapping source phone hourly");
+    }
+
+    private static void shouldCreateSyncSegmentsFromLegacySummaries() {
+        long[] hourly = new long[24];
+        hourly[9] = 3600L;
+        hourly[10] = 1800L;
+        java.util.List<DailySummary> summaries = java.util.Collections.singletonList(
+                new DailySummary("2026-07-01", 5400L, hourly, new long[0], 0L, false, 0));
+
+        java.util.List<UsageSegment> segments = LegacyUsageSegments.fromDailySummaries(
+                summaries,
+                java.util.Collections.emptyList(),
+                "phone-test",
+                "android");
+
+        assertEquals(2, segments.size(), "legacy sync segment count");
+        assertEquals(5400L, segments.get(0).durationSeconds() + segments.get(1).durationSeconds(), "legacy sync segment total");
+        assertEquals("legacy-summary", segments.get(0).source, "legacy sync source");
+    }
+
+    private static void shouldKeepLegacySummariesWhenDateHasModernSegment() {
+        long[] hourly = new long[24];
+        hourly[9] = 3600L;
+        java.util.List<DailySummary> summaries = java.util.Collections.singletonList(
+                new DailySummary("2026-07-02", 3600L, hourly, new long[0], 0L, false, 0));
+        java.util.List<UsageSegment> existing = java.util.Collections.singletonList(
+                segment("phone-test", "android", "android-screen", 1_783_065_600L, 60L));
+
+        java.util.List<UsageSegment> segments = LegacyUsageSegments.fromDailySummaries(
+                summaries,
+                existing,
+                "phone-test",
+                "android");
+
+        assertEquals(1, segments.size(), "modern segment does not hide legacy summary");
+        assertEquals(3600L, segments.get(0).durationSeconds(), "legacy summary remains available");
+    }
+
+    private static void shouldSkipLegacySummariesAlreadyStoredAsLegacySegments() {
+        long[] hourly = new long[24];
+        hourly[9] = 3600L;
+        java.util.List<DailySummary> summaries = java.util.Collections.singletonList(
+                new DailySummary("2026-07-02", 3600L, hourly, new long[0], 0L, false, 0));
+        java.util.List<UsageSegment> existing = LegacyUsageSegments.fromDailySummaries(
+                summaries,
+                java.util.Collections.emptyList(),
+                "phone-test",
+                "android");
+
+        java.util.List<UsageSegment> segments = LegacyUsageSegments.fromDailySummaries(
+                summaries,
+                existing,
+                "phone-test",
+                "android");
+
+        assertEquals(0, segments.size(), "already stored legacy segment is not duplicated");
+    }
+
+    private static void shouldSubtractModernSegmentsFromLegacyBackfill() {
+        long[] hourly = new long[24];
+        hourly[9] = 3600L;
+        java.util.List<DailySummary> summaries = java.util.Collections.singletonList(
+                new DailySummary("2026-07-02", 3600L, hourly, new long[0], 0L, false, 0));
+        long t0 = java.time.ZonedDateTime.of(2026, 7, 2, 9, 10, 0, 0, java.time.ZoneId.systemDefault())
+                .toEpochSecond();
+        java.util.List<UsageSegment> existing = java.util.Collections.singletonList(
+                segment("phone-test", "android", "android-screen", t0, 600L));
+
+        java.util.List<UsageSegment> segments = LegacyUsageSegments.fromDailySummaries(
+                summaries,
+                existing,
+                "phone-test",
+                "android");
+
+        assertEquals(1, segments.size(), "legacy backfill subtracts modern segment count");
+        assertEquals(3000L, segments.get(0).durationSeconds(), "legacy backfill subtracts modern segment duration");
+    }
+
+    private static void shouldIgnoreStoredOwnLegacyWhenNormalizingEffectiveSegments() {
+        long[] hourly = new long[24];
+        hourly[9] = 600L;
+        java.util.List<DailySummary> summaries = java.util.Collections.singletonList(
+                new DailySummary("2026-07-02", 600L, hourly, new long[0], 0L, false, 0));
+        long t0 = java.time.ZonedDateTime.of(2026, 7, 2, 9, 0, 0, 0, java.time.ZoneId.systemDefault())
+                .toEpochSecond();
+        java.util.List<UsageSegment> stored = java.util.Collections.singletonList(
+                segment("phone-test", "android", LegacyUsageSegments.SOURCE, t0, 3600L));
+
+        java.util.List<UsageSegment> effective = LegacyUsageSegments.normalizeEffectiveSegments(
+                stored,
+                summaries,
+                "phone-test",
+                "android");
+
+        assertEquals(1, effective.size(), "own stored legacy is ignored");
+        assertEquals(600L, effective.get(0).durationSeconds(), "local summary backfill is used");
     }
 
     private static void shouldBreakContinuousSegmentsAfterThreeMinutes() {
@@ -208,8 +357,8 @@ public final class CoreLogicTest {
 
         assertEquals(120L, summary.totalSeconds, "segment summary replaces legacy total");
         assertEquals(0L, summary.hourlySeconds[9], "legacy hourly data does not override synced day");
-        assertEquals(false, summary.reminderShown, "legacy reminder state does not override synced day");
-        assertEquals(0, summary.lastReminderStep, "legacy reminder step does not override synced day");
+        assertEquals(true, summary.reminderShown, "legacy reminder state is preserved for synced day");
+        assertEquals(2, summary.lastReminderStep, "legacy reminder step is preserved for synced day");
     }
 
     private static void shouldSignSyncMessages() {
@@ -265,6 +414,7 @@ public final class CoreLogicTest {
             settings.isPaired = true;
             settings.peerHost = "127.0.0.1";
             settings.peerPort = port;
+            settings.lastSyncUnixSeconds = 1234L;
             AndroidSyncClient client = new AndroidSyncClient(1000, 1000);
 
             String response = client.sendJson(settings, "{\"type\":\"syncRequest\"}");
@@ -273,6 +423,7 @@ public final class CoreLogicTest {
             server.close();
             assertEquals("{\"type\":\"syncResponse\",\"accepted\":true}", response, "client reads one JSON response");
             assertEquals("", settings.lastError, "successful sync clears error");
+            assertEquals(1234L, settings.lastSyncUnixSeconds, "client leaves sync cursor to response handling");
         } catch (Exception ex) {
             throw new AssertionError("socket sync test failed", ex);
         }
@@ -323,10 +474,34 @@ public final class CoreLogicTest {
         assertEquals(30L, segments.get(0).durationSeconds(), "reads pc segment duration");
     }
 
+    private static void shouldReadSyncResponseTimestamp() {
+        String responseJson = "{\"Type\":\"syncResponse\",\"Accepted\":true,\"TimestampUnixSeconds\":1783000042}";
+
+        assertEquals(1783000042L, AndroidSyncResponseReader.readTimestampUnixSeconds(responseJson), "reads pc sync timestamp");
+    }
+
     private static void shouldReadSyncResponseError() {
         String responseJson = "{\"Type\":\"syncResponse\",\"Accepted\":false,\"Error\":\"PC is not paired.\"}";
 
         assertEquals("PC is not paired.", AndroidSyncResponseReader.readError(responseJson), "reads sync response error");
+    }
+
+    private static void shouldMergeSyncSegmentsInOnePass() {
+        try {
+            org.json.JSONObject state = new org.json.JSONObject();
+            state.put("segments", new org.json.JSONArray());
+            long t0 = java.time.OffsetDateTime.of(2026, 7, 2, 12, 0, 0, 0, java.time.ZoneOffset.UTC).toEpochSecond();
+            UsageSegment existing = segment("pc", "windows", "pc-input", t0, 30L);
+            UsageSegment added = segment("pc", "windows", "pc-input", t0 + 60L, 30L);
+
+            EyeTimeStore.mergeSegments(state, java.util.Collections.singletonList(existing));
+            int changed = EyeTimeStore.mergeSegments(state, java.util.Arrays.asList(existing, added));
+
+            assertEquals(1, changed, "merge only reports newly added segment");
+            assertEquals(2, state.getJSONArray("segments").length(), "merge skips duplicate segment");
+        } catch (Exception ex) {
+            throw new AssertionError("sync segment merge test failed", ex);
+        }
     }
 
     private static void shouldRecognizePcUnpairedResponse() {
@@ -339,6 +514,21 @@ public final class CoreLogicTest {
         assertEquals(false, SyncConnectionState.shouldClearPairingAfterSync("", "Connection refused"), "keeps pairing after pc stops answering");
         assertEquals(true, SyncConnectionState.shouldClearPairingAfterSync("{\"Type\":\"syncResponse\",\"Accepted\":false,\"Error\":\"PC is not paired.\"}", ""), "clears pairing when pc rejects paired sync");
         assertEquals(false, SyncConnectionState.shouldClearPairingAfterSync("{\"Type\":\"syncResponse\",\"Accepted\":true}", ""), "keeps pairing after successful sync");
+    }
+
+    private static void shouldPrepareLocalFirstDisconnect() {
+        SyncSettings paired = new SyncSettings();
+        paired.isPaired = true;
+        paired.peerHost = "127.0.0.1";
+        paired.peerPort = 17420;
+        paired.peerDeviceId = "pc-1";
+        paired.sharedSecret = "secret";
+
+        SyncDisconnectPlan plan = SyncDisconnectPlan.create(paired);
+
+        assertEquals(false, plan.localSettings.isPaired, "disconnect local settings unpaired");
+        assertEquals(true, plan.peerNotificationSettings.isPaired, "disconnect keeps peer settings for notification");
+        assertEquals("127.0.0.1", plan.peerNotificationSettings.peerHost, "disconnect keeps peer host");
     }
 
     private static void shouldPairWithPcAndSavePairingInfo() {
@@ -365,6 +555,7 @@ public final class CoreLogicTest {
             SyncSettings settings = new SyncSettings();
             settings.peerHost = "127.0.0.1";
             settings.peerPort = port;
+            settings.lastSyncUnixSeconds = 1783000000L;
             AndroidPairingClient client = new AndroidPairingClient(new AndroidSyncClient(1000, 1000));
 
             boolean paired = client.pair(settings, "phone-1", "123456");
@@ -376,10 +567,53 @@ public final class CoreLogicTest {
             assertEquals("pc-1", settings.peerDeviceId, "pairing stores pc device");
             assertEquals("windows", settings.peerPlatform, "pairing stores pc platform");
             assertEquals("shared-secret", settings.sharedSecret, "pairing stores shared secret");
+            assertEquals(0L, settings.lastSyncUnixSeconds, "pairing resets sync cursor for full backfill");
             assertEquals("", settings.lastError, "pairing clears error");
         } catch (Exception ex) {
             throw new AssertionError("pairing test failed", ex);
         }
+    }
+
+    private static void shouldApplyDiscoveredAddressOnlyForPairedPc() {
+        SyncSettings settings = new SyncSettings();
+        settings.isPaired = true;
+        settings.peerDeviceId = "pc-1";
+        settings.peerHost = "192.168.1.5";
+        settings.peerPort = 17420;
+
+        AndroidPcDiscoveryClient.DiscoveryResult discovery = new AndroidPcDiscoveryClient.DiscoveryResult(
+                true,
+                "192.168.8.23",
+                17422,
+                "pc-1",
+                "windows");
+
+        boolean applied = AndroidSyncEndpointResolver.applyDiscoveredPeer(settings, discovery);
+
+        assertEquals(true, applied, "applies discovered paired pc");
+        assertEquals("192.168.8.23", settings.peerHost, "updates discovered host");
+        assertEquals(17422, settings.peerPort, "updates discovered port");
+    }
+
+    private static void shouldRejectDiscoveredAddressForDifferentPc() {
+        SyncSettings settings = new SyncSettings();
+        settings.isPaired = true;
+        settings.peerDeviceId = "pc-1";
+        settings.peerHost = "192.168.1.5";
+        settings.peerPort = 17420;
+
+        AndroidPcDiscoveryClient.DiscoveryResult discovery = new AndroidPcDiscoveryClient.DiscoveryResult(
+                true,
+                "192.168.8.99",
+                17422,
+                "pc-2",
+                "windows");
+
+        boolean applied = AndroidSyncEndpointResolver.applyDiscoveredPeer(settings, discovery);
+
+        assertEquals(false, applied, "rejects different discovered pc");
+        assertEquals("192.168.1.5", settings.peerHost, "keeps original host");
+        assertEquals(17420, settings.peerPort, "keeps original port");
     }
 
     private static void shouldGenerateSixDigitPairingCode() {

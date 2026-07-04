@@ -10,4 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="..\EyeTimeTracker.Core\EyeTimeTracker.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="Assets\Fonts\NotoSansSC-VF.ttf" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
