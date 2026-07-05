@@ -1,3 +1,5 @@
+using EyeTimeTracker.Core.Sync;
+
 namespace EyeTimeTracker.Core.Models;
 
 public sealed class SyncSettings
@@ -12,4 +14,6 @@ public sealed class SyncSettings
     public int LastKnownPort { get; set; }
     public long LastSyncUnixSeconds { get; set; }
     public string LastError { get; set; } = string.Empty;
+    public ReminderRuntimeState LocalReminderState { get; set; } = new();
+    public ReminderRuntimeState PeerReminderState { get; set; } = new();
 }

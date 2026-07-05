@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 public final class AndroidSyncResponseReader {
     private static final Pattern SEGMENTS_ARRAY = Pattern.compile("\"(?:Segments|segments)\"\\s*:\\s*\\[(.*?)]", Pattern.DOTALL);
@@ -55,6 +57,32 @@ public final class AndroidSyncResponseReader {
             return 0L;
         }
         return readLong(json, "TimestampUnixSeconds", "timestampUnixSeconds");
+    }
+
+    public static ReminderRuntimeState readReminderState(String responseJson) {
+        String json = safe(responseJson);
+        if (json.isEmpty() || !isAccepted(json)) {
+            return new ReminderRuntimeState();
+        }
+
+        try {
+            JSONObject root = new JSONObject(json);
+            JSONObject state = root.optJSONObject("ReminderState");
+            if (state == null) {
+                state = root.optJSONObject("reminderState");
+            }
+            if (state == null) {
+                return new ReminderRuntimeState();
+            }
+
+            return new ReminderRuntimeState(
+                    state.optString("DeviceId", state.optString("deviceId", "")),
+                    state.optString("Platform", state.optString("platform", "")),
+                    state.optBoolean("IsCounting", state.optBoolean("isCounting", false)),
+                    state.optLong("CurrentSessionStartedUnixSeconds", state.optLong("currentSessionStartedUnixSeconds", 0L)));
+        } catch (JSONException ignored) {
+            return new ReminderRuntimeState();
+        }
     }
 
     private static UsageSegment readSegment(String json) {

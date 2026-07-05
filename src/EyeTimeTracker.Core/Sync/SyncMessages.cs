@@ -56,6 +56,7 @@ public sealed class SyncRequest
     public string Platform { get; set; } = string.Empty;
     public List<UsageSegment> Segments { get; set; } = new();
     public TrackerSettings Settings { get; set; } = TrackerSettings.Default;
+    public ReminderRuntimeState ReminderState { get; set; } = new();
     public long SinceUnixSeconds { get; set; }
     public long TimestampUnixSeconds { get; set; }
     public string Signature { get; set; } = string.Empty;
@@ -68,6 +69,7 @@ public sealed class SyncResponse
     public string DeviceId { get; set; } = string.Empty;
     public string Platform { get; set; } = string.Empty;
     public List<UsageSegment> Segments { get; set; } = new();
+    public ReminderRuntimeState ReminderState { get; set; } = new();
     public string Error { get; set; } = string.Empty;
     public long TimestampUnixSeconds { get; set; }
     public string Signature { get; set; } = string.Empty;
@@ -99,4 +101,12 @@ public sealed class ReminderClaimMessage
     public bool DeviceActive { get; set; }
     public long TimestampUnixSeconds { get; set; }
     public string Signature { get; set; } = string.Empty;
+}
+
+public sealed class ReminderRuntimeState
+{
+    public string DeviceId { get; set; } = string.Empty;
+    public string Platform { get; set; } = string.Empty;
+    public bool IsCounting { get; set; }
+    public long CurrentSessionStartedUnixSeconds { get; set; }
 }

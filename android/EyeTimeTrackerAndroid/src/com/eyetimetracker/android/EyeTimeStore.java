@@ -29,6 +29,12 @@ public final class EyeTimeStore {
     private static final String SYNC_SHARED_SECRET = "sync_shared_secret";
     private static final String SYNC_LAST_SYNC_UNIX_SECONDS = "sync_last_sync_unix_seconds";
     private static final String SYNC_LAST_ERROR = "sync_last_error";
+    private static final String LOCAL_REMINDER_COUNTING = "local_reminder_counting";
+    private static final String LOCAL_REMINDER_SESSION_STARTED = "local_reminder_session_started";
+    private static final String PEER_REMINDER_DEVICE_ID = "peer_reminder_device_id";
+    private static final String PEER_REMINDER_PLATFORM = "peer_reminder_platform";
+    private static final String PEER_REMINDER_COUNTING = "peer_reminder_counting";
+    private static final String PEER_REMINDER_SESSION_STARTED = "peer_reminder_session_started";
     private static final String RESET_DATE = "display_reset_date";
     private static final String RESET_TODAY_SECONDS = "display_reset_today_seconds";
     private static final String RESET_YESTERDAY_SECONDS = "display_reset_yesterday_seconds";
@@ -206,7 +212,44 @@ public final class EyeTimeStore {
         settings.sharedSecret = prefs.getString(SYNC_SHARED_SECRET, "");
         settings.lastSyncUnixSeconds = prefs.getLong(SYNC_LAST_SYNC_UNIX_SECONDS, 0L);
         settings.lastError = prefs.getString(SYNC_LAST_ERROR, "");
+        settings.peerReminderState = getPeerReminderState();
         return settings;
+    }
+
+    public synchronized ReminderRuntimeState getLocalReminderState() {
+        return new ReminderRuntimeState(
+                ensureDeviceId(),
+                PLATFORM,
+                prefs.getBoolean(LOCAL_REMINDER_COUNTING, false),
+                prefs.getLong(LOCAL_REMINDER_SESSION_STARTED, 0L));
+    }
+
+    public synchronized void saveLocalReminderState(boolean isCounting, long currentSessionStartedUnixSeconds) {
+        prefs.edit()
+                .putBoolean(LOCAL_REMINDER_COUNTING, isCounting)
+                .putLong(LOCAL_REMINDER_SESSION_STARTED, Math.max(0L, currentSessionStartedUnixSeconds))
+                .apply();
+    }
+
+    public synchronized ReminderRuntimeState getPeerReminderState() {
+        return new ReminderRuntimeState(
+                prefs.getString(PEER_REMINDER_DEVICE_ID, ""),
+                prefs.getString(PEER_REMINDER_PLATFORM, ""),
+                prefs.getBoolean(PEER_REMINDER_COUNTING, false),
+                prefs.getLong(PEER_REMINDER_SESSION_STARTED, 0L));
+    }
+
+    public synchronized void savePeerReminderState(ReminderRuntimeState state) {
+        if (state == null) {
+            return;
+        }
+
+        prefs.edit()
+                .putString(PEER_REMINDER_DEVICE_ID, safe(state.deviceId))
+                .putString(PEER_REMINDER_PLATFORM, safe(state.platform))
+                .putBoolean(PEER_REMINDER_COUNTING, state.isCounting)
+                .putLong(PEER_REMINDER_SESSION_STARTED, Math.max(0L, state.currentSessionStartedUnixSeconds))
+                .apply();
     }
 
     public synchronized String diagnosticSnapshot() {

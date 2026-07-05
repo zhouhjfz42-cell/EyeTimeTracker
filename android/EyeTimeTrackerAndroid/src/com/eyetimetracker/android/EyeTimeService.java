@@ -58,6 +58,7 @@ public final class EyeTimeService extends Service implements SensorEventListener
     private float lastY;
     private float lastZ;
     private boolean counting;
+    private long currentSessionStartedUnixSeconds;
     private boolean syncInFlight;
 
     @Override public void onCreate() {
@@ -128,7 +129,14 @@ public final class EyeTimeService extends Service implements SensorEventListener
         boolean screenOn = powerManager == null || powerManager.isInteractive();
         boolean mediaActive = audioManager != null && audioManager.isMusicActive();
         ActivityDecision decision = ActivityDecision.evaluate(screenOn, now - lastMotionAt, mediaActive, elapsed, MOTION_THRESHOLD_MS);
-        counting = decision.isCounting();
+        boolean nextCounting = decision.isCounting();
+        if (nextCounting && !counting) {
+            currentSessionStartedUnixSeconds = now / 1000L;
+        } else if (!nextCounting) {
+            currentSessionStartedUnixSeconds = 0L;
+        }
+        counting = nextCounting;
+        store.saveLocalReminderState(counting, currentSessionStartedUnixSeconds);
         boolean countedThisTick = false;
         if (counting && elapsed > 0L && elapsed <= MAX_COUNTABLE_TICK_MS) {
             store.addSeconds(LocalDate.now(), elapsed / 1000L, now / 1000L, "android-screen");
@@ -149,20 +157,35 @@ public final class EyeTimeService extends Service implements SensorEventListener
                 today.lastReminderStep)) {
             int reminderStep = ReminderPolicy.reachedStep(today.totalSeconds, reminderMinutes);
             store.markReminderShown(todayDate, reminderStep);
-            showReminder(reminderMinutes, repeatReminder, reminderStep);
+            SyncSettings syncSettings = store.getSyncSettings();
+            boolean peerOnline = SyncConnectionState.isPeerOnline(syncSettings, now / 1000L);
+            if (ReminderDevicePolicy.shouldShowOnLocalDevice(
+                    store.getLocalReminderState(),
+                    syncSettings.peerReminderState,
+                    peerOnline)) {
+                showReminder(reminderMinutes, repeatReminder, reminderStep);
+            }
         }
         updateForegroundNotification(today.totalSeconds);
         sendBroadcast(new Intent(ACTION_STATE_CHANGED));
-        maybeRunSync(now, countedThisTick);
+        boolean upcomingReminderSync = syncPolicy.shouldSyncForUpcomingReminder(
+                now,
+                today.totalSeconds,
+                reminderMinutes,
+                repeatReminder,
+                today.reminderShown,
+                today.lastReminderStep);
+        maybeRunSync(now, countedThisTick, upcomingReminderSync);
     }
 
-    private void maybeRunSync(long now, boolean allowLocalChangeSync) {
+    private void maybeRunSync(long now, boolean allowLocalChangeSync, boolean allowUpcomingReminderSync) {
         SyncSettings settings = store.getSyncSettings();
         if (!settings.isPaired || syncInFlight) {
             return;
         }
         if (!syncPolicy.shouldSyncForServiceTick(now)
-                && (!allowLocalChangeSync || !syncPolicy.shouldSyncForLocalChange(now))) {
+                && (!allowLocalChangeSync || !syncPolicy.shouldSyncForLocalChange(now))
+                && !allowUpcomingReminderSync) {
             return;
         }
 

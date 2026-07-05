@@ -41,9 +41,13 @@ $manifest = Join-Path $project 'AndroidManifest.xml'
 $compiledResources = Get-ChildItem -Path $resCompiled -Filter *.flat -Recurse | ForEach-Object { $_.FullName }
 Invoke-Checked { & $aapt2 link -o $unsigned -I $androidJar --manifest $manifest --java $gen --min-sdk-version 26 --target-sdk-version 36 --auto-add-overlay $compiledResources }
 $sources = @(Get-ChildItem -Path (Join-Path $project 'src') -Filter *.java -Recurse | ForEach-Object { $_.FullName }) + @(Get-ChildItem -Path $gen -Filter *.java -Recurse | ForEach-Object { $_.FullName })
-Invoke-Checked { & $javac -encoding UTF-8 -source 11 -target 11 -classpath $androidJar -d $classes $sources }
+$sourcesFile = Join-Path $build 'sources.txt'
+[System.IO.File]::WriteAllLines($sourcesFile, $sources, [System.Text.UTF8Encoding]::new($false))
+Invoke-Checked { & $javac -encoding UTF-8 -source 11 -target 11 -classpath $androidJar -d $classes "@$sourcesFile" }
 $classFiles = Get-ChildItem -Path $classes -Filter *.class -Recurse | ForEach-Object { $_.FullName }
-Invoke-Checked { & $d8 --lib $androidJar --output $dex $classFiles }
+$classFilesFile = Join-Path $build 'classes.txt'
+[System.IO.File]::WriteAllLines($classFilesFile, $classFiles, [System.Text.UTF8Encoding]::new($false))
+Invoke-Checked { & $d8 --lib $androidJar --output $dex "@$classFilesFile" }
 
 $apkWithDex = Join-Path $build 'with-dex.apk'
 Copy-Item -LiteralPath $unsigned -Destination $apkWithDex -Force

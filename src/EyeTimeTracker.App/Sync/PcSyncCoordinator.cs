@@ -34,6 +34,7 @@ public sealed class PcSyncCoordinator
         }
 
         MergeSegments(state, request.Segments);
+        state.Sync.PeerReminderState = CloneReminderState(request.ReminderState);
         state.Settings = request.Settings;
         state.Sync.LastSyncUnixSeconds = _unixClock();
         state.Sync.LastError = string.Empty;
@@ -45,6 +46,7 @@ public sealed class PcSyncCoordinator
             DeviceId = state.DeviceId,
             Platform = state.Platform,
             Segments = GetLocalSegments(state),
+            ReminderState = CloneReminderState(state.Sync.LocalReminderState),
             TimestampUnixSeconds = state.Sync.LastSyncUnixSeconds
         };
     }
@@ -187,6 +189,7 @@ public sealed class PcSyncCoordinator
             DeviceId = state.DeviceId,
             Platform = state.Platform,
             Error = error,
+            ReminderState = CloneReminderState(state.Sync.LocalReminderState),
             TimestampUnixSeconds = _unixClock()
         };
     }
@@ -241,6 +244,22 @@ public sealed class PcSyncCoordinator
             LocalDate = segment.LocalDate,
             CreatedAtUnixSeconds = segment.CreatedAtUnixSeconds,
             UpdatedAtUnixSeconds = segment.UpdatedAtUnixSeconds
+        };
+    }
+
+    private static ReminderRuntimeState CloneReminderState(ReminderRuntimeState? state)
+    {
+        if (state is null)
+        {
+            return new ReminderRuntimeState();
+        }
+
+        return new ReminderRuntimeState
+        {
+            DeviceId = state.DeviceId,
+            Platform = state.Platform,
+            IsCounting = state.IsCounting,
+            CurrentSessionStartedUnixSeconds = state.CurrentSessionStartedUnixSeconds
         };
     }
 

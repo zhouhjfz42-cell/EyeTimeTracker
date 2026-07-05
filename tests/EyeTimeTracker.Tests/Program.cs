@@ -204,6 +204,85 @@ static void TestReminderDisplayCountUsesVisibleTotal()
     AssertEqual(2, ReminderDisplayCount.FromSeconds(90 * 60, TrackerSettings.Default with { ReminderThresholdSeconds = 45 * 60, RepeatReminder = true }), nameof(TestReminderDisplayCountUsesVisibleTotal) + " repeat policy");
 }
 
+static void TestEyeCareSummaryHighlightsContinuousPressure()
+{
+    AssertEqual("护眼表现：连续用眼偏多", EyeCareSummaryFormatter.CareText(65 * 60, 0, 45), nameof(TestEyeCareSummaryHighlightsContinuousPressure));
+}
+
+static void TestEyeCareSummarySuggestsDistanceForHighPhoneShare()
+{
+    AssertEqual("手机占比 61%，建议用大屏或拉远", EyeCareSummaryFormatter.SourceText(new UsageDeviceBreakdown(39, 61)), nameof(TestEyeCareSummarySuggestsDistanceForHighPhoneShare));
+}
+
+static void TestPcReminderShowsOnlyWhenPeerOffline()
+{
+    const long now = 1_783_000_000;
+    var local = new ReminderRuntimeState
+    {
+        DeviceId = "pc",
+        Platform = "windows",
+        IsCounting = true,
+        CurrentSessionStartedUnixSeconds = now - 30
+    };
+    var peer = new ReminderRuntimeState
+    {
+        DeviceId = "phone",
+        Platform = "android",
+        IsCounting = false,
+        CurrentSessionStartedUnixSeconds = 0
+    };
+    var online = new SyncSettings
+    {
+        IsPaired = true,
+        LastSyncUnixSeconds = now - 20,
+        LocalReminderState = local,
+        PeerReminderState = peer
+    };
+    var offline = new SyncSettings
+    {
+        IsPaired = true,
+        LastSyncUnixSeconds = now - 120,
+        LocalReminderState = local,
+        PeerReminderState = peer
+    };
+    var unpaired = SyncSettings.Unpaired;
+    unpaired.LocalReminderState = local;
+
+    peer.IsCounting = true;
+    peer.CurrentSessionStartedUnixSeconds = now - 10;
+    AssertEqual(false, ReminderDevicePolicy.ShouldPcShowReminder(online, now, 90), nameof(TestPcReminderShowsOnlyWhenPeerOffline) + " online peer owns");
+    peer.IsCounting = false;
+    AssertEqual(true, ReminderDevicePolicy.ShouldPcShowReminder(offline, now, 90), nameof(TestPcReminderShowsOnlyWhenPeerOffline) + " offline");
+    AssertEqual(true, ReminderDevicePolicy.ShouldPcShowReminder(unpaired, now, 90), nameof(TestPcReminderShowsOnlyWhenPeerOffline) + " unpaired");
+}
+
+static void TestReminderOwnerUsesActiveAndLatestSession()
+{
+    var pc = new ReminderRuntimeState
+    {
+        DeviceId = "pc",
+        Platform = "windows",
+        IsCounting = true,
+        CurrentSessionStartedUnixSeconds = 100
+    };
+    var phone = new ReminderRuntimeState
+    {
+        DeviceId = "phone",
+        Platform = "android",
+        IsCounting = true,
+        CurrentSessionStartedUnixSeconds = 120
+    };
+
+    AssertEqual(false, ReminderDevicePolicy.ShouldShowOnLocalDevice(pc, phone, true), nameof(TestReminderOwnerUsesActiveAndLatestSession) + " earlier local");
+    AssertEqual(true, ReminderDevicePolicy.ShouldShowOnLocalDevice(phone, pc, true), nameof(TestReminderOwnerUsesActiveAndLatestSession) + " later local");
+
+    phone.IsCounting = false;
+    AssertEqual(true, ReminderDevicePolicy.ShouldShowOnLocalDevice(pc, phone, true), nameof(TestReminderOwnerUsesActiveAndLatestSession) + " peer idle");
+
+    pc.IsCounting = false;
+    AssertEqual(false, ReminderDevicePolicy.ShouldShowOnLocalDevice(pc, phone, false), nameof(TestReminderOwnerUsesActiveAndLatestSession) + " local idle");
+}
+
 static void TestMainSummaryUsesVisibleRecordForToday()
 {
     var today = new DateOnly(2026, 7, 3);
@@ -1276,6 +1355,10 @@ TestDateRolloverStartsNewDay();
 TestReminderOnlyOncePerDay();
 TestReminderRepeatsAtThresholdMultiples();
 TestReminderDisplayCountUsesVisibleTotal();
+TestEyeCareSummaryHighlightsContinuousPressure();
+TestEyeCareSummarySuggestsDistanceForHighPhoneShare();
+TestPcReminderShowsOnlyWhenPeerOffline();
+TestReminderOwnerUsesActiveAndLatestSession();
 TestMainSummaryUsesVisibleRecordForToday();
 TestReminderThresholdMinutesAndDisplay();
 TestTodayToneThresholds();

@@ -13,8 +13,10 @@ public final class CoreLogicTest {
         shouldFormatReminderAlertText();
         shouldUseFreshHeadsUpReminderNotificationProfile();
         shouldFormatConnectionStatus();
+        shouldFormatEyeCareSummary();
         shouldNotifyOnceOrAtRepeatMultiples();
         shouldDisplayReminderCountFromVisibleTotal();
+        shouldPickReminderOwnerByActiveLatestSession();
         shouldCreateStableUsageSegmentIds();
         shouldMergeOverlappingSegmentsOnlyOnce();
         shouldUseFixedTenSecondBucketsForArbitraryStartSeconds();
@@ -49,6 +51,7 @@ public final class CoreLogicTest {
         shouldTriggerPeriodicSyncEveryMinute();
         shouldDebounceLocalChangeSyncForThirtySeconds();
         shouldNotPostponeLocalChangeSyncForever();
+        shouldSyncEveryTenSecondsWhenReminderIsWithinOneMinute();
         System.out.println("All Android core tests passed.");
     }
 
@@ -117,6 +120,12 @@ public final class CoreLogicTest {
         assertEquals("统计中（电脑离线）", ConnectionStatusText.format("统计中", true, false, "电脑"), "formats offline status");
     }
 
+    private static void shouldFormatEyeCareSummary() {
+        assertEquals("护眼表现：连续用眼偏多", EyeCareSummaryFormatter.careText(65L * 60L, 0L, 45), "formats continuous pressure");
+        DeviceUsageBreakdown breakdown = new DeviceUsageBreakdown(39L, 61L);
+        assertEquals("手机占比 61%，建议用大屏或拉远", EyeCareSummaryFormatter.sourceText(breakdown), "formats high phone share");
+    }
+
     private static void shouldUseFreshHeadsUpReminderNotificationProfile() {
         assertEquals("eye_time_tracker_reminders_v2", ReminderNotificationProfile.CHANNEL_ID, "uses fresh reminder channel");
         assertEquals(4, ReminderNotificationProfile.CHANNEL_IMPORTANCE, "uses high importance reminder channel");
@@ -138,6 +147,20 @@ public final class CoreLogicTest {
         assertEquals(0, ReminderPolicy.displayCount(44L * 60L, 45, false), "display reminder count below threshold");
         assertEquals(1, ReminderPolicy.displayCount(90L * 60L, 45, false), "display reminder count once policy");
         assertEquals(2, ReminderPolicy.displayCount(90L * 60L, 45, true), "display reminder count repeat policy");
+    }
+
+    private static void shouldPickReminderOwnerByActiveLatestSession() {
+        ReminderRuntimeState pc = new ReminderRuntimeState("pc", "windows", true, 100L);
+        ReminderRuntimeState phone = new ReminderRuntimeState("phone", "android", true, 120L);
+
+        assertEquals(false, ReminderDevicePolicy.shouldShowOnLocalDevice(pc, phone, true), "earlier active device does not show");
+        assertEquals(true, ReminderDevicePolicy.shouldShowOnLocalDevice(phone, pc, true), "later active device shows");
+
+        phone.isCounting = false;
+        assertEquals(true, ReminderDevicePolicy.shouldShowOnLocalDevice(pc, phone, true), "only active device shows");
+
+        pc.isCounting = false;
+        assertEquals(false, ReminderDevicePolicy.shouldShowOnLocalDevice(pc, phone, false), "idle device does not show");
     }
 
     private static UsageSegment segment(String device, String platform, String source, long startSeconds, long durationSeconds) {
@@ -696,6 +719,16 @@ public final class CoreLogicTest {
         policy.markLocalChange(30_000L);
 
         assertEquals(true, policy.shouldSyncForLocalChange(40_000L), "later local changes keep first debounce window");
+    }
+
+    private static void shouldSyncEveryTenSecondsWhenReminderIsWithinOneMinute() {
+        AndroidSyncTriggerPolicy policy = new AndroidSyncTriggerPolicy();
+
+        assertEquals(false, policy.shouldSyncForUpcomingReminder(1_000L, 3_530L, 60, true, true, 0), "does not sync before one minute window");
+        assertEquals(true, policy.shouldSyncForUpcomingReminder(2_000L, 3_540L, 60, true, true, 0), "syncs inside one minute window");
+        policy.markSyncAttempt(2_000L);
+        assertEquals(false, policy.shouldSyncForUpcomingReminder(11_999L, 3_550L, 60, true, true, 0), "waits ten seconds in reminder window");
+        assertEquals(true, policy.shouldSyncForUpcomingReminder(12_000L, 3_560L, 60, true, true, 0), "syncs every ten seconds in reminder window");
     }
 
     private static void assertEquals(Object expected, Object actual, String name) {

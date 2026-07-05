@@ -30,6 +30,7 @@ public sealed class StatsForm : Form
     private readonly FitTextLabel _summaryLineOne;
     private readonly FitTextLabel _summaryLineTwo;
     private readonly FitTextLabel _summaryLineThree;
+    private readonly FitTextLabel _summaryLineFour;
     private readonly WeekBarChart _weekChart;
     private readonly MonthTrendChart _monthChart;
     private readonly ContinuousBandsControl _continuousBands;
@@ -123,6 +124,7 @@ public sealed class StatsForm : Form
         _summaryLineOne = AddSummaryLabel(dayPanel, "", new Rectangle(692, 66, 380, 34), 10.5F, 9F, TextSecondary, FontStyle.Regular);
         _summaryLineTwo = AddSummaryLabel(dayPanel, "", new Rectangle(692, 112, 380, 34), 10.5F, 9F, TextSecondary, FontStyle.Regular);
         _summaryLineThree = AddSummaryLabel(dayPanel, "", new Rectangle(692, 158, 380, 34), 10.5F, 9F, TextSecondary, FontStyle.Regular);
+        _summaryLineFour = AddSummaryLabel(dayPanel, "", new Rectangle(692, 204, 380, 34), 10.5F, 9F, AccentGreen, FontStyle.Bold);
 
         var weekPanel = CreatePanel(new Rectangle(30, 410, 350, 300));
         root.Controls.Add(weekPanel);
@@ -222,7 +224,11 @@ public sealed class StatsForm : Form
         _summaryTitle.Text = isShowingToday ? "昨日摘要" : "当日摘要";
         _summaryLineOne.Text = $"主要集中在 {PeakHourText(summaryRecord.HourlySeconds)}";
         _summaryLineTwo.Text = $"最长连续 {FormatDuration(summaryLongest)}";
-        _summaryLineThree.Text = SummarySourceText(summaryDeviceBreakdown);
+        _summaryLineThree.Text = EyeCareSummaryFormatter.SourceText(summaryDeviceBreakdown);
+        _summaryLineFour.Text = EyeCareSummaryFormatter.CareText(
+            summaryLongest,
+            NightSeconds(summaryRecord.HourlySeconds),
+            summaryDeviceBreakdown.PhonePercent);
 
         _weekChart.Records = weekRecords;
         _weekChart.DeviceBreakdowns = weekBreakdowns;

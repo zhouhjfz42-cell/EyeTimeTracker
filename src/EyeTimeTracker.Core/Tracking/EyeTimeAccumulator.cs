@@ -34,6 +34,7 @@ public sealed class EyeTimeAccumulator
 
     public DailyRecord Today { get; private set; }
     public bool IsCounting { get; private set; }
+    public DateTimeOffset? CurrentSessionStartedAt { get; private set; }
 
     public void Tick(ActivitySnapshot snapshot, TrackerSettings settings)
     {
@@ -43,14 +44,14 @@ public sealed class EyeTimeAccumulator
             FinishCurrentSession();
             Today = new DailyRecord(snapshotDate);
             _lastTick = snapshot.Timestamp;
-            IsCounting = ShouldCount(snapshot, settings);
+            SetCountingState(ShouldCount(snapshot, settings), snapshot.Timestamp);
             return;
         }
 
         if (_lastTick is null)
         {
             _lastTick = snapshot.Timestamp;
-            IsCounting = ShouldCount(snapshot, settings);
+            SetCountingState(ShouldCount(snapshot, settings), snapshot.Timestamp);
             return;
         }
 
@@ -59,14 +60,14 @@ public sealed class EyeTimeAccumulator
 
         if (elapsed <= TimeSpan.Zero || elapsed > MaxCountableElapsed)
         {
-            IsCounting = ShouldCount(snapshot, settings);
+            SetCountingState(ShouldCount(snapshot, settings), snapshot.Timestamp);
             return;
         }
 
         var countedSeconds = CountableSeconds(snapshot, settings, elapsed);
         Today.TotalSeconds += countedSeconds;
         AddCountedSeconds(snapshot.Timestamp, countedSeconds);
-        IsCounting = countedSeconds > 0 || ShouldCount(snapshot, settings);
+        SetCountingState(countedSeconds > 0 || ShouldCount(snapshot, settings), snapshot.Timestamp);
         if (!IsCounting)
         {
             FinishCurrentSession();
@@ -94,6 +95,20 @@ public sealed class EyeTimeAccumulator
 
         Today.SessionSeconds.Add(Today.CurrentSessionSeconds);
         Today.CurrentSessionSeconds = 0;
+    }
+
+    private void SetCountingState(bool isCounting, DateTimeOffset timestamp)
+    {
+        if (isCounting && !IsCounting)
+        {
+            CurrentSessionStartedAt = timestamp;
+        }
+        else if (!isCounting)
+        {
+            CurrentSessionStartedAt = null;
+        }
+
+        IsCounting = isCounting;
     }
 
     private static bool ShouldCount(ActivitySnapshot snapshot, TrackerSettings settings)

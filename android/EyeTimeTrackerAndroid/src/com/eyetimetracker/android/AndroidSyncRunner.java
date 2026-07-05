@@ -77,6 +77,7 @@ public final class AndroidSyncRunner {
             String error = AndroidSyncResponseReader.readError(responseJson);
             if (error.isEmpty()) {
                 int changed = store.addSegments(AndroidSyncResponseReader.readSegments(responseJson));
+                store.savePeerReminderState(AndroidSyncResponseReader.readReminderState(responseJson));
                 Log.i(DIAG_TAG, "AndroidSyncRunner merged segments changed=" + changed);
                 long responseTimestamp = AndroidSyncResponseReader.readTimestampUnixSeconds(responseJson);
                 if (responseTimestamp > 0L) {
@@ -122,6 +123,7 @@ public final class AndroidSyncRunner {
             request.put("Platform", "android");
             request.put("Segments", segmentsToJson(store.getSegments(LocalDate.now().minusDays(30), LocalDate.now())));
             request.put("Settings", settingsToJson());
+            request.put("ReminderState", reminderStateToJson(store.getLocalReminderState()));
             request.put("SinceUnixSeconds", settings.lastSyncUnixSeconds);
             request.put("TimestampUnixSeconds", nowSeconds);
             request.put("Signature", SyncMessageSigner.sign(
@@ -193,6 +195,18 @@ public final class AndroidSyncRunner {
             item.put("UpdatedAtUnixSeconds", segment.updatedAtUnixSeconds);
             json.put(item);
         }
+        return json;
+    }
+
+    private static JSONObject reminderStateToJson(ReminderRuntimeState state) throws JSONException {
+        JSONObject json = new JSONObject();
+        if (state == null) {
+            state = new ReminderRuntimeState();
+        }
+        json.put("DeviceId", state.deviceId);
+        json.put("Platform", state.platform);
+        json.put("IsCounting", state.isCounting);
+        json.put("CurrentSessionStartedUnixSeconds", state.currentSessionStartedUnixSeconds);
         return json;
     }
 }

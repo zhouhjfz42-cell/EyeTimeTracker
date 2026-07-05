@@ -88,6 +88,9 @@ public final class StatsActivity extends Activity {
         stepStartedAt = logStep("StatsActivity get selected day", stepStartedAt);
         DeviceUsageBreakdown deviceBreakdown = store.getDeviceBreakdown(selectedDay);
         stepStartedAt = logStep("StatsActivity get selected device breakdown", stepStartedAt);
+        LocalDate summaryDate = selectedDay.equals(today) ? today.minusDays(1) : selectedDay;
+        DailySummary summary = store.getDay(summaryDate);
+        DeviceUsageBreakdown summaryBreakdown = store.getDeviceBreakdown(summaryDate);
         List<DailySummary> week = store.getDays(selectedWeekStart, selectedWeekStart.plusDays(6));
         stepStartedAt = logStep("StatsActivity get week summaries", stepStartedAt);
         List<DeviceUsageBreakdown> weekBreakdowns = new ArrayList<>();
@@ -153,6 +156,10 @@ public final class StatsActivity extends Activity {
         dayPanel.addView(insightRow, matchWrapTop(8));
         addInsightCard(insightRow, insightInfoCard("最集中", peakHour(todaySummary.hourlySeconds)), 0);
         addInsightCard(insightRow, insightInfoCard("夜间（22-6点）", DurationFormatter.format(nightSeconds(todaySummary.hourlySeconds))), 1);
+        dayPanel.addView(summaryCard(
+                selectedDay.equals(today) ? "昨日摘要" : "当日摘要",
+                summary,
+                summaryBreakdown), matchWrapTop(10));
 
         LinearLayout weekPanel = panel();
         root.addView(weekPanel, matchWrapTop(18));
@@ -491,6 +498,41 @@ public final class StatsActivity extends Activity {
         valueText.setIncludeFontPadding(false);
         valueText.setAutoSizeTextTypeUniformWithConfiguration(15, 19, 1, TypedValue.COMPLEX_UNIT_SP);
         card.addView(valueText, matchWrapTop(8));
+        return card;
+    }
+
+    private LinearLayout summaryCard(String title, DailySummary summary, DeviceUsageBreakdown breakdown) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(14), dp(12), dp(14), dp(12));
+        card.setBackground(rounded(Color.WHITE, dp(16), COLOR_LINE, 1));
+
+        TextView titleView = text(title, 20, COLOR_TEXT, true);
+        titleView.setIncludeFontPadding(false);
+        card.addView(titleView, matchWrap());
+
+        TextView peakText = text("集中 " + peakHour(summary.hourlySeconds), 14, COLOR_MUTED, false);
+        peakText.setLineSpacing(0f, 1.15f);
+        card.addView(peakText, matchWrapTop(8));
+
+        TextView longestText = text("最长 " + DurationFormatter.format(longestSession(summary)), 14, COLOR_MUTED, false);
+        longestText.setLineSpacing(0f, 1.15f);
+        card.addView(longestText, matchWrapTop(6));
+
+        TextView sourceText = text(EyeCareSummaryFormatter.sourceText(breakdown), 14, COLOR_MUTED, false);
+        sourceText.setLineSpacing(0f, 1.15f);
+        card.addView(sourceText, matchWrapTop(6));
+
+        TextView careText = text(
+                EyeCareSummaryFormatter.careText(
+                        longestSession(summary),
+                        nightSeconds(summary.hourlySeconds),
+                        breakdown.phonePercent()),
+                14,
+                COLOR_GREEN,
+                true);
+        careText.setLineSpacing(0f, 1.15f);
+        card.addView(careText, matchWrapTop(8));
         return card;
     }
 

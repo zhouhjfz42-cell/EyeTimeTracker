@@ -238,15 +238,22 @@ public sealed class TrackingController : IDisposable
                 }
 
                 var record = PersistAccumulatorLocked();
+                _state.Sync.LocalReminderState = CreateLocalReminderStateLocked();
 
-                if (_reminderPolicy.ShouldNotify(record, _state.Settings))
+                var reminderRecord = CreateReminderRecordLocked(record.Date, record);
+                if (_reminderPolicy.ShouldNotify(reminderRecord, _state.Settings))
                 {
-                    _reminderPolicy.MarkShown(record, _state.Settings);
+                    _reminderPolicy.MarkShown(reminderRecord, _state.Settings);
+                    record.ReminderShown = true;
+                    record.LastReminderStep = reminderRecord.LastReminderStep;
                     _accumulator.Today.ReminderShown = true;
-                    _accumulator.Today.LastReminderStep = record.LastReminderStep;
+                    _accumulator.Today.LastReminderStep = reminderRecord.LastReminderStep;
                     _hasPendingImmediateSave = true;
-                    _pendingReminderNotification = true;
-                    _pendingReminderStep = record.LastReminderStep;
+                    _pendingReminderNotification = ReminderDevicePolicy.ShouldPcShowReminder(
+                        _state.Sync,
+                        now.ToUnixTimeSeconds(),
+                        PeerOfflineAfterSeconds);
+                    _pendingReminderStep = _pendingReminderNotification ? record.LastReminderStep : 0;
                 }
 
                 if (_hasPendingImmediateSave)
@@ -346,6 +353,7 @@ public sealed class TrackingController : IDisposable
         lock (_gate)
         {
             PersistAccumulatorLocked();
+            _state.Sync.LocalReminderState = CreateLocalReminderStateLocked();
             return CloneStateLocked();
         }
     }
@@ -364,6 +372,7 @@ public sealed class TrackingController : IDisposable
                 .Select(CloneSegment)
                 .ToList();
             _state.Sync = CloneSyncSettings(syncedState.Sync);
+            _state.Sync.LocalReminderState = CreateLocalReminderStateLocked();
             snapshot = CreateSaveSnapshotLocked(now);
         }
 
@@ -386,6 +395,20 @@ public sealed class TrackingController : IDisposable
                 .ToList(),
             Sync = CloneSyncSettings(_state.Sync)
         };
+    }
+
+    private DailyRecord CreateReminderRecordLocked(DateOnly date, DailyRecord fallback)
+    {
+        var visible = CreateVisibleRecordsSnapshotLocked()
+            .FirstOrDefault(record => record.Date == date);
+        if (visible is null)
+        {
+            visible = CloneRecord(fallback);
+        }
+
+        visible.ReminderShown = fallback.ReminderShown;
+        visible.LastReminderStep = fallback.LastReminderStep;
+        return visible;
     }
 
     private List<DailyRecord> CreateVisibleRecordsSnapshotLocked()
@@ -460,7 +483,36 @@ public sealed class TrackingController : IDisposable
             LastKnownHost = sync.LastKnownHost,
             LastKnownPort = sync.LastKnownPort,
             LastSyncUnixSeconds = sync.LastSyncUnixSeconds,
-            LastError = sync.LastError
+            LastError = sync.LastError,
+            LocalReminderState = CloneReminderState(sync.LocalReminderState),
+            PeerReminderState = CloneReminderState(sync.PeerReminderState)
+        };
+    }
+
+    private ReminderRuntimeState CreateLocalReminderStateLocked()
+    {
+        return new ReminderRuntimeState
+        {
+            DeviceId = _state.DeviceId,
+            Platform = _state.Platform,
+            IsCounting = _accumulator.IsCounting,
+            CurrentSessionStartedUnixSeconds = _accumulator.CurrentSessionStartedAt?.ToUnixTimeSeconds() ?? 0
+        };
+    }
+
+    private static ReminderRuntimeState CloneReminderState(ReminderRuntimeState? state)
+    {
+        if (state is null)
+        {
+            return new ReminderRuntimeState();
+        }
+
+        return new ReminderRuntimeState
+        {
+            DeviceId = state.DeviceId,
+            Platform = state.Platform,
+            IsCounting = state.IsCounting,
+            CurrentSessionStartedUnixSeconds = state.CurrentSessionStartedUnixSeconds
         };
     }
 
