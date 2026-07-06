@@ -23,6 +23,13 @@ public sealed class DailyReminderPolicy
         record.LastReminderStep = Math.Max(record.LastReminderStep, ReachedStep(record, settings));
     }
 
+    public void AlignAfterSettingsChange(DailyRecord record, TrackerSettings settings)
+    {
+        var step = ReachedStep(record, settings);
+        record.LastReminderStep = step;
+        record.ReminderShown = step > 0;
+    }
+
     private static int ReachedStep(DailyRecord record, TrackerSettings settings)
     {
         if (settings.ReminderThresholdSeconds <= 0)

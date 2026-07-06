@@ -11,7 +11,10 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.media.AudioAttributes;
 import android.media.AudioManager;
+import android.media.RingtoneManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -218,6 +221,9 @@ public final class EyeTimeService extends Service implements SensorEventListener
         channel.setDescription("\u540e\u53f0\u7edf\u8ba1\u670d\u52a1\u72b6\u6001");
         NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager != null) {
+            for (String legacyChannelId : ReminderNotificationProfile.LEGACY_CHANNEL_IDS) {
+                manager.deleteNotificationChannel(legacyChannelId);
+            }
             manager.createNotificationChannel(channel);
             NotificationChannel reminderChannel = new NotificationChannel(
                     REMINDER_CHANNEL_ID,
@@ -226,6 +232,9 @@ public final class EyeTimeService extends Service implements SensorEventListener
             reminderChannel.setDescription("\u5230\u8fbe\u8bbe\u5b9a\u7528\u773c\u65f6\u957f\u65f6\u63d0\u9192\u4f11\u606f");
             reminderChannel.enableVibration(true);
             reminderChannel.setVibrationPattern(ReminderNotificationProfile.VIBRATION_PATTERN);
+            if (ReminderNotificationProfile.ENABLE_SOUND) {
+                reminderChannel.setSound(defaultReminderSound(), reminderAudioAttributes());
+            }
             reminderChannel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
             manager.createNotificationChannel(reminderChannel);
         }
@@ -288,10 +297,23 @@ public final class EyeTimeService extends Service implements SensorEventListener
                 .setCategory(Notification.CATEGORY_REMINDER)
                 .setVisibility(Notification.VISIBILITY_PUBLIC)
                 .setDefaults(Notification.DEFAULT_ALL)
+                .setStyle(new Notification.BigTextStyle().bigText(message))
+                .setFullScreenIntent(alertPendingIntent, ReminderNotificationProfile.USE_FULL_SCREEN_INTENT)
                 .build();
         NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager != null) {
             manager.notify(REMINDER_ID, notification);
         }
+    }
+
+    private Uri defaultReminderSound() {
+        return RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+    }
+
+    private AudioAttributes reminderAudioAttributes() {
+        return new AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build();
     }
 }

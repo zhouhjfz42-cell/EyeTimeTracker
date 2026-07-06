@@ -12,5 +12,6 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="Assets\Fonts\NotoSansSC-VF.ttf" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\i18n\source\*.json" Link="i18n\source\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

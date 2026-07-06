@@ -15,17 +15,7 @@ public static class ReminderDevicePolicy
             return false;
         }
 
-        if (!peerOnline || peerState is null || !peerState.IsCounting)
-        {
-            return true;
-        }
-
-        if (localState.CurrentSessionStartedUnixSeconds != peerState.CurrentSessionStartedUnixSeconds)
-        {
-            return localState.CurrentSessionStartedUnixSeconds > peerState.CurrentSessionStartedUnixSeconds;
-        }
-
-        return string.CompareOrdinal(localState.DeviceId, peerState.DeviceId) >= 0;
+        return true;
     }
 
     public static bool ShouldPcShowReminder(SyncSettings? sync, long nowUnixSeconds, int peerOfflineAfterSeconds)

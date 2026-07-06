@@ -15,8 +15,9 @@ public final class CoreLogicTest {
         shouldFormatConnectionStatus();
         shouldFormatEyeCareSummary();
         shouldNotifyOnceOrAtRepeatMultiples();
+        shouldAlignReminderAfterSettingsChange();
         shouldDisplayReminderCountFromVisibleTotal();
-        shouldPickReminderOwnerByActiveLatestSession();
+        shouldShowReminderOnEveryActiveDevice();
         shouldCreateStableUsageSegmentIds();
         shouldMergeOverlappingSegmentsOnlyOnce();
         shouldUseFixedTenSecondBucketsForArbitraryStartSeconds();
@@ -127,9 +128,13 @@ public final class CoreLogicTest {
     }
 
     private static void shouldUseFreshHeadsUpReminderNotificationProfile() {
-        assertEquals("eye_time_tracker_reminders_v2", ReminderNotificationProfile.CHANNEL_ID, "uses fresh reminder channel");
+        assertEquals("eye_time_tracker_reminders_v3", ReminderNotificationProfile.CHANNEL_ID, "uses fresh reminder channel");
         assertEquals(4, ReminderNotificationProfile.CHANNEL_IMPORTANCE, "uses high importance reminder channel");
         assertEquals(2, ReminderNotificationProfile.NOTIFICATION_PRIORITY, "uses max priority reminder notification");
+        assertEquals(true, ReminderNotificationProfile.USE_FULL_SCREEN_INTENT, "uses full screen intent for heads-up reminder");
+        assertEquals(true, ReminderNotificationProfile.ENABLE_SOUND, "uses sound for heads-up reminder");
+        assertEquals(true, ReminderNotificationProfile.isLegacyChannelId("eye_time_tracker_reminders_v2"), "knows old reminder channel");
+        assertEquals(false, ReminderNotificationProfile.isLegacyChannelId(ReminderNotificationProfile.CHANNEL_ID), "current channel is not legacy");
     }
 
     private static void shouldNotifyOnceOrAtRepeatMultiples() {
@@ -143,17 +148,24 @@ public final class CoreLogicTest {
         assertEquals(2, ReminderPolicy.reachedStep(660L * 60L, 330), "repeat step is based on today's total");
     }
 
+    private static void shouldAlignReminderAfterSettingsChange() {
+        assertEquals(9, ReminderPolicy.alignedStepAfterSettingsChange(197L * 60L, 20), "aligns to already reached new step");
+        assertEquals(0, ReminderPolicy.alignedStepAfterSettingsChange(50L * 60L, 60), "resets when below new threshold");
+        assertEquals(false, ReminderPolicy.shouldNotify(197L * 60L, 20, true, true, 9), "does not backfill old repeated reminders");
+        assertEquals(true, ReminderPolicy.shouldNotify(200L * 60L, 20, true, true, 9), "notifies at next new boundary");
+    }
+
     private static void shouldDisplayReminderCountFromVisibleTotal() {
         assertEquals(0, ReminderPolicy.displayCount(44L * 60L, 45, false), "display reminder count below threshold");
         assertEquals(1, ReminderPolicy.displayCount(90L * 60L, 45, false), "display reminder count once policy");
         assertEquals(2, ReminderPolicy.displayCount(90L * 60L, 45, true), "display reminder count repeat policy");
     }
 
-    private static void shouldPickReminderOwnerByActiveLatestSession() {
+    private static void shouldShowReminderOnEveryActiveDevice() {
         ReminderRuntimeState pc = new ReminderRuntimeState("pc", "windows", true, 100L);
         ReminderRuntimeState phone = new ReminderRuntimeState("phone", "android", true, 120L);
 
-        assertEquals(false, ReminderDevicePolicy.shouldShowOnLocalDevice(pc, phone, true), "earlier active device does not show");
+        assertEquals(true, ReminderDevicePolicy.shouldShowOnLocalDevice(pc, phone, true), "earlier active device also shows");
         assertEquals(true, ReminderDevicePolicy.shouldShowOnLocalDevice(phone, pc, true), "later active device shows");
 
         phone.isCounting = false;

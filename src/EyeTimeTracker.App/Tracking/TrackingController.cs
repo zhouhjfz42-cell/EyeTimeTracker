@@ -93,7 +93,17 @@ public sealed class TrackingController : IDisposable
         {
             lock (_gate)
             {
-                _state.Settings = value ?? throw new ArgumentNullException(nameof(value));
+                var nextSettings = value ?? throw new ArgumentNullException(nameof(value));
+                var reminderChanged = _state.Settings.ReminderThresholdSeconds != nextSettings.ReminderThresholdSeconds
+                    || _state.Settings.RepeatReminder != nextSettings.RepeatReminder;
+                _state.Settings = nextSettings;
+                if (reminderChanged)
+                {
+                    var record = PersistAccumulatorLocked();
+                    _reminderPolicy.AlignAfterSettingsChange(record, _state.Settings);
+                    _accumulator.Today.ReminderShown = record.ReminderShown;
+                    _accumulator.Today.LastReminderStep = record.LastReminderStep;
+                }
             }
         }
     }

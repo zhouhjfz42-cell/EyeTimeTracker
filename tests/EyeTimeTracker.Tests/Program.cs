@@ -1,5 +1,6 @@
 using EyeTimeTracker.App.Sync;
 using EyeTimeTracker.App.UI;
+using EyeTimeTracker.App.Localization;
 using EyeTimeTracker.Core.Models;
 using EyeTimeTracker.Core.Formatting;
 using EyeTimeTracker.Core.Reminders;
@@ -197,6 +198,56 @@ static void TestReminderRepeatsAtThresholdMultiples()
     AssertEqual(2, dailyRecord.LastReminderStep, nameof(TestReminderRepeatsAtThresholdMultiples) + " second step");
 }
 
+static void TestReminderSettingsChangeSkipsAlreadyReachedSteps()
+{
+    var policy = new DailyReminderPolicy();
+    var dailyRecord = new DailyRecord(new DateOnly(2026, 7, 6))
+    {
+        TotalSeconds = 197 * 60,
+        ReminderShown = true,
+        LastReminderStep = 3
+    };
+    var newSettings = TrackerSettings.Default with
+    {
+        ReminderThresholdSeconds = 20 * 60,
+        RepeatReminder = true
+    };
+
+    policy.AlignAfterSettingsChange(dailyRecord, newSettings);
+
+    AssertEqual(9, dailyRecord.LastReminderStep, nameof(TestReminderSettingsChangeSkipsAlreadyReachedSteps) + " step");
+    AssertEqual(false, policy.ShouldNotify(dailyRecord, newSettings), nameof(TestReminderSettingsChangeSkipsAlreadyReachedSteps) + " no backfill");
+
+    dailyRecord.TotalSeconds = 200 * 60;
+
+    AssertEqual(true, policy.ShouldNotify(dailyRecord, newSettings), nameof(TestReminderSettingsChangeSkipsAlreadyReachedSteps) + " next boundary");
+}
+
+static void TestReminderSettingsChangeResetsWhenBelowNewThreshold()
+{
+    var policy = new DailyReminderPolicy();
+    var dailyRecord = new DailyRecord(new DateOnly(2026, 7, 6))
+    {
+        TotalSeconds = 50 * 60,
+        ReminderShown = true,
+        LastReminderStep = 1
+    };
+    var newSettings = TrackerSettings.Default with
+    {
+        ReminderThresholdSeconds = 60 * 60,
+        RepeatReminder = false
+    };
+
+    policy.AlignAfterSettingsChange(dailyRecord, newSettings);
+
+    AssertEqual(0, dailyRecord.LastReminderStep, nameof(TestReminderSettingsChangeResetsWhenBelowNewThreshold) + " step");
+    AssertEqual(false, dailyRecord.ReminderShown, nameof(TestReminderSettingsChangeResetsWhenBelowNewThreshold) + " shown");
+
+    dailyRecord.TotalSeconds = 60 * 60;
+
+    AssertEqual(true, policy.ShouldNotify(dailyRecord, newSettings), nameof(TestReminderSettingsChangeResetsWhenBelowNewThreshold) + " threshold");
+}
+
 static void TestReminderDisplayCountUsesVisibleTotal()
 {
     AssertEqual(0, ReminderDisplayCount.FromSeconds(44 * 60, TrackerSettings.Default with { ReminderThresholdSeconds = 45 * 60 }), nameof(TestReminderDisplayCountUsesVisibleTotal) + " below threshold");
@@ -214,7 +265,7 @@ static void TestEyeCareSummarySuggestsDistanceForHighPhoneShare()
     AssertEqual("手机占比 61%，建议用大屏或拉远", EyeCareSummaryFormatter.SourceText(new UsageDeviceBreakdown(39, 61)), nameof(TestEyeCareSummarySuggestsDistanceForHighPhoneShare));
 }
 
-static void TestPcReminderShowsOnlyWhenPeerOffline()
+static void TestPcReminderShowsWhenLocalIsCounting()
 {
     const long now = 1_783_000_000;
     var local = new ReminderRuntimeState
@@ -250,13 +301,13 @@ static void TestPcReminderShowsOnlyWhenPeerOffline()
 
     peer.IsCounting = true;
     peer.CurrentSessionStartedUnixSeconds = now - 10;
-    AssertEqual(false, ReminderDevicePolicy.ShouldPcShowReminder(online, now, 90), nameof(TestPcReminderShowsOnlyWhenPeerOffline) + " online peer owns");
+    AssertEqual(true, ReminderDevicePolicy.ShouldPcShowReminder(online, now, 90), nameof(TestPcReminderShowsWhenLocalIsCounting) + " both active");
     peer.IsCounting = false;
-    AssertEqual(true, ReminderDevicePolicy.ShouldPcShowReminder(offline, now, 90), nameof(TestPcReminderShowsOnlyWhenPeerOffline) + " offline");
-    AssertEqual(true, ReminderDevicePolicy.ShouldPcShowReminder(unpaired, now, 90), nameof(TestPcReminderShowsOnlyWhenPeerOffline) + " unpaired");
+    AssertEqual(true, ReminderDevicePolicy.ShouldPcShowReminder(offline, now, 90), nameof(TestPcReminderShowsWhenLocalIsCounting) + " offline");
+    AssertEqual(true, ReminderDevicePolicy.ShouldPcShowReminder(unpaired, now, 90), nameof(TestPcReminderShowsWhenLocalIsCounting) + " unpaired");
 }
 
-static void TestReminderOwnerUsesActiveAndLatestSession()
+static void TestReminderShowsOnEveryActiveDevice()
 {
     var pc = new ReminderRuntimeState
     {
@@ -273,14 +324,14 @@ static void TestReminderOwnerUsesActiveAndLatestSession()
         CurrentSessionStartedUnixSeconds = 120
     };
 
-    AssertEqual(false, ReminderDevicePolicy.ShouldShowOnLocalDevice(pc, phone, true), nameof(TestReminderOwnerUsesActiveAndLatestSession) + " earlier local");
-    AssertEqual(true, ReminderDevicePolicy.ShouldShowOnLocalDevice(phone, pc, true), nameof(TestReminderOwnerUsesActiveAndLatestSession) + " later local");
+    AssertEqual(true, ReminderDevicePolicy.ShouldShowOnLocalDevice(pc, phone, true), nameof(TestReminderShowsOnEveryActiveDevice) + " earlier local");
+    AssertEqual(true, ReminderDevicePolicy.ShouldShowOnLocalDevice(phone, pc, true), nameof(TestReminderShowsOnEveryActiveDevice) + " later local");
 
     phone.IsCounting = false;
-    AssertEqual(true, ReminderDevicePolicy.ShouldShowOnLocalDevice(pc, phone, true), nameof(TestReminderOwnerUsesActiveAndLatestSession) + " peer idle");
+    AssertEqual(true, ReminderDevicePolicy.ShouldShowOnLocalDevice(pc, phone, true), nameof(TestReminderShowsOnEveryActiveDevice) + " peer idle");
 
     pc.IsCounting = false;
-    AssertEqual(false, ReminderDevicePolicy.ShouldShowOnLocalDevice(pc, phone, false), nameof(TestReminderOwnerUsesActiveAndLatestSession) + " local idle");
+    AssertEqual(false, ReminderDevicePolicy.ShouldShowOnLocalDevice(pc, phone, false), nameof(TestReminderShowsOnEveryActiveDevice) + " local idle");
 }
 
 static void TestMainSummaryUsesVisibleRecordForToday()
@@ -343,6 +394,15 @@ static void TestReminderMessageText()
     AssertEqual("\u4eca\u5929\u7684\u5c4f\u5e55\u4f7f\u7528\u65f6\u95f4\u5df2\u8fbe\u52305\u5c0f\u65f630\u5206\uff0c\u5efa\u8bae\u4f11\u606f\u4e00\u4e0b\u773c\u775b\u3002", ReminderMessage.Body(19800), nameof(TestReminderMessageText) + " body");
     AssertEqual("\u4eca\u5929\u7684\u5c4f\u5e55\u4f7f\u7528\u65f6\u95f4\u5df2\u7ecf\u7b2c2\u6b21\u8fbe\u5230330\u5206\u949f\u4e86\uff0c\u5efa\u8bae\u4f11\u606f\u4e00\u4e0b\u773c\u775b\u3002", ReminderMessage.Body(19800, true, 2), nameof(TestReminderMessageText) + " repeat body");
     AssertEqual("\u4eca\u5929\u7684\u5c4f\u5e55\u4f7f\u7528\u65f6\u95f4\u5df2\u8fbe\u52305\u5c0f\u65f630\u5206\uff0c\u5efa\u8bae\u4f11\u606f\u4e00\u4e0b\u773c\u775b\u3002", ReminderMessage.Body(19800, false, 2), nameof(TestReminderMessageText) + " once body");
+}
+
+static void TestAppTextLoadsReminderCopy()
+{
+    AssertEqual("用眼提醒", AppText.Get("reminder.alertTitle"), nameof(TestAppTextLoadsReminderCopy) + " title");
+    AssertEqual(
+        "今天的屏幕使用时间已达到5小时30分，建议休息一下眼睛。",
+        ReminderText.Body(19800, repeatReminder: false, reminderStep: 0),
+        nameof(TestAppTextLoadsReminderCopy) + " body");
 }
 
 static void TestMainFormStartupControlsDoNotOverlapSubtitle()
@@ -1354,11 +1414,13 @@ TestFractionalTicksAreTruncated();
 TestDateRolloverStartsNewDay();
 TestReminderOnlyOncePerDay();
 TestReminderRepeatsAtThresholdMultiples();
+TestReminderSettingsChangeSkipsAlreadyReachedSteps();
+TestReminderSettingsChangeResetsWhenBelowNewThreshold();
 TestReminderDisplayCountUsesVisibleTotal();
 TestEyeCareSummaryHighlightsContinuousPressure();
 TestEyeCareSummarySuggestsDistanceForHighPhoneShare();
-TestPcReminderShowsOnlyWhenPeerOffline();
-TestReminderOwnerUsesActiveAndLatestSession();
+TestPcReminderShowsWhenLocalIsCounting();
+TestReminderShowsOnEveryActiveDevice();
 TestMainSummaryUsesVisibleRecordForToday();
 TestReminderThresholdMinutesAndDisplay();
 TestTodayToneThresholds();
@@ -1366,6 +1428,7 @@ TestChartValueFormatting();
 TestConnectionStatusFormatting();
 TestSyncPeerConnectionState();
 TestReminderMessageText();
+TestAppTextLoadsReminderCopy();
 TestMainFormStartupControlsDoNotOverlapSubtitle();
 TestMainFormStartupControlsAlignWithTitleAndDisconnectButton();
 TestJsonStateRoundTrip();

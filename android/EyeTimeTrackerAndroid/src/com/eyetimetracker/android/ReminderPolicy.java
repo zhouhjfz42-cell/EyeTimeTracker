@@ -12,6 +12,10 @@ public final class ReminderPolicy {
         return (int) Math.max(0L, totalSeconds / thresholdSeconds);
     }
 
+    public static int alignedStepAfterSettingsChange(long totalSeconds, int thresholdMinutes) {
+        return reachedStep(totalSeconds, thresholdMinutes);
+    }
+
     public static boolean shouldNotify(
             long totalSeconds,
             int thresholdMinutes,

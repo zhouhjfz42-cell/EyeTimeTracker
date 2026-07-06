@@ -188,10 +188,27 @@ public final class EyeTimeStore {
     }
 
     public synchronized void saveReminderSettings(int reminderMinutes, boolean repeatReminder) {
+        int safeMinutes = ReminderThreshold.clampMinutes(reminderMinutes);
         prefs.edit()
-                .putInt(REMINDER_MINUTES, ReminderThreshold.clampMinutes(reminderMinutes))
+                .putInt(REMINDER_MINUTES, safeMinutes)
                 .putBoolean(REPEAT_REMINDER, repeatReminder)
                 .apply();
+        alignTodayReminderAfterSettingsChange(safeMinutes);
+    }
+
+    private void alignTodayReminderAfterSettingsChange(int reminderMinutes) {
+        LocalDate todayDate = LocalDate.now();
+        DailySummary today = getDay(todayDate);
+        int reachedStep = ReminderPolicy.alignedStepAfterSettingsChange(today.totalSeconds, reminderMinutes);
+        try {
+            JSONObject state = loadState();
+            JSONObject record = getOrCreateRecord(state, todayDate.toString());
+            record.put("reminderShown", reachedStep > 0);
+            record.put("lastReminderStep", reachedStep);
+            record.put("updatedAt", System.currentTimeMillis());
+            saveState(state);
+        } catch (JSONException ignored) {
+        }
     }
 
     public synchronized void setMainActivityVisible(boolean visible) {

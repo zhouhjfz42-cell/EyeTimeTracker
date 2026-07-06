@@ -1,0 +1,135 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_main_title" formatted="false">用眼时间</string>
+    <string name="app_name" formatted="false">用眼时间记录</string>
+    <string name="app_stats_title" formatted="false">用眼时间统计</string>
+    <string name="calendar_month_title" formatted="false">{year}年 {month}月</string>
+    <string name="calendar_pick_day" formatted="false">点击日期选择单日</string>
+    <string name="calendar_pick_month" formatted="false">点击任意一天选择整月</string>
+    <string name="calendar_pick_range" formatted="false">点击日期设置起止范围</string>
+    <string name="calendar_pick_range_next" formatted="false">先选开始日期，再选结束日期</string>
+    <string name="calendar_pick_week" formatted="false">点击任意一天选择整周</string>
+    <string name="calendar_weekday_fri" formatted="false">五</string>
+    <string name="calendar_weekday_mon" formatted="false">一</string>
+    <string name="calendar_weekday_sat" formatted="false">六</string>
+    <string name="calendar_weekday_sun" formatted="false">日</string>
+    <string name="calendar_weekday_thu" formatted="false">四</string>
+    <string name="calendar_weekday_tue" formatted="false">二</string>
+    <string name="calendar_weekday_wed" formatted="false">三</string>
+    <string name="common_apply" formatted="false">应用</string>
+    <string name="common_cancel" formatted="false">取消</string>
+    <string name="common_disconnect" formatted="false">断开</string>
+    <string name="common_got_it" formatted="false">我知道了</string>
+    <string name="common_main_page" formatted="false">主界面</string>
+    <string name="common_none" formatted="false">暂无</string>
+    <string name="common_ok" formatted="false">知道了</string>
+    <string name="common_pc" formatted="false">电脑</string>
+    <string name="common_phone" formatted="false">手机</string>
+    <string name="common_quit" formatted="false">退出</string>
+    <string name="common_save" formatted="false">保存</string>
+    <string name="common_start" formatted="false">启动</string>
+    <string name="common_stats_page" formatted="false">统计页</string>
+    <string name="common_this_month" formatted="false">本月</string>
+    <string name="common_this_week" formatted="false">本周</string>
+    <string name="common_today" formatted="false">今天</string>
+    <string name="common_yesterday" formatted="false">昨天</string>
+    <string name="disconnect_message" formatted="false">断开后，下次连接需要重新配对。</string>
+    <string name="disconnect_title" formatted="false">断开连接</string>
+    <string name="duration_about_hours" formatted="false">约{hours}小时</string>
+    <string name="duration_equivalent" formatted="false">即{duration}</string>
+    <string name="duration_half_hours" formatted="false">{hours}.5小时</string>
+    <string name="duration_hours" formatted="false">{hours}小时</string>
+    <string name="duration_hours_minutes" formatted="false">{hours}小时{minutes}分</string>
+    <string name="duration_hours_minutes_padded" formatted="false">{hours}小时{minutes:00}分</string>
+    <string name="duration_minutes" formatted="false">{minutes}分钟</string>
+    <string name="duration_zero_minutes" formatted="false">0分钟</string>
+    <string name="main_autostart" formatted="false">开机启动</string>
+    <string name="main_card_month" formatted="false">本月</string>
+    <string name="main_card_reminder" formatted="false">提醒</string>
+    <string name="main_card_reminder_clickable" formatted="false">提醒（点击修改）</string>
+    <string name="main_card_week" formatted="false">本周</string>
+    <string name="main_card_yesterday" formatted="false">昨天</string>
+    <string name="main_help_auto_start" formatted="false">2. 使用手机几秒内会自动开始统计，如果没有开始，点击右上角的“启动”。</string>
+    <string name="main_help_sync" formatted="false">1. 将手机和电脑配对，共同统计注视两块屏幕的时间，有统计到重合时段的会删除重复统计，但可能会有部分误差；</string>
+    <string name="main_status_connected" formatted="false">{status}（已连{device}）</string>
+    <string name="main_status_offline" formatted="false">{status}（{device}离线）</string>
+    <string name="main_status_tracking" formatted="false">统计中</string>
+    <string name="main_subtitle_android" formatted="false">亮屏时计入统计</string>
+    <string name="main_subtitle_pc" formatted="false">键鼠动作、媒体播放时计入统计</string>
+    <string name="pair_android_connecting" formatted="false">正在连接电脑…</string>
+    <string name="pair_android_failed" formatted="false">配对失败，请检查配对码和电脑是否在同一 WiFi。</string>
+    <string name="pair_android_found" formatted="false">已找到电脑，等待电脑确认配对码…</string>
+    <string name="pair_android_instruction" formatted="false">先在电脑上点击“手机配对”，输入下面的 6 位码。手机会自动寻找电脑，找不到时再手动填地址。</string>
+    <string name="pair_android_manual" formatted="false">手动连接</string>
+    <string name="pair_android_manual_fallback" formatted="false">暂时没有自动连上。可以手动填写电脑 IP 地址后再连接。</string>
+    <string name="pair_android_manual_hint" formatted="false">请输入电脑 IP 地址，然后点击手动连接。</string>
+    <string name="pair_android_not_found" formatted="false">还在寻找电脑。请确认电脑已打开“手机配对”窗口。</string>
+    <string name="pair_android_searching" formatted="false">正在同一个 WiFi 里寻找电脑…</string>
+    <string name="pair_android_title" formatted="false">手机配对</string>
+    <string name="pair_pc_input_title" formatted="false">输入手机上显示的配对码</string>
+    <string name="pair_pc_start" formatted="false">开始配对</string>
+    <string name="pair_pc_title" formatted="false">手机配对</string>
+    <string name="pair_pc_validation_code_required" formatted="false">请输入手机上显示的 6 位数字配对码。</string>
+    <string name="reminder_alert_title" formatted="false">用眼提醒</string>
+    <string name="reminder_android_body_once" formatted="false">今天用眼时间已达到 {duration}，建议休息一下眼睛。</string>
+    <string name="reminder_android_body_repeat" formatted="false">今天用眼时间已经第{step}次达到{minutes}分钟了，建议休息一下眼睛。</string>
+    <string name="reminder_body_once" formatted="false">今天的屏幕使用时间已达到{duration}，建议休息一下眼睛。</string>
+    <string name="reminder_body_repeat" formatted="false">今天的屏幕使用时间已经第{step}次达到{minutes}分钟了，建议休息一下眼睛。</string>
+    <string name="reminder_pc_connected_readonly" formatted="false">已连接手机，请在手机端修改提醒</string>
+    <string name="reminder_repeat_label" formatted="false">反复提醒（每达到时间就提醒一次，一天\n内可能出现多次提醒）</string>
+    <string name="reminder_saved" formatted="false">提醒时间已保存</string>
+    <string name="reminder_title" formatted="false">提醒时间</string>
+    <string name="reminder_unit_hint" formatted="false">单位：分钟（{equivalent}）</string>
+    <string name="reminder_unit_minute" formatted="false">分钟</string>
+    <string name="stats_care_continuous_high" formatted="false">护眼表现：连续用眼偏多</string>
+    <string name="stats_care_night_high" formatted="false">护眼表现：夜间用眼偏多</string>
+    <string name="stats_care_no_pressure" formatted="false">护眼表现：暂无明显压力</string>
+    <string name="stats_care_phone_high" formatted="false">护眼表现：手机占比较高</string>
+    <string name="stats_care_steady" formatted="false">护眼表现：节奏较平稳</string>
+    <string name="stats_daily_insight_night" formatted="false">夜间（22-6点）</string>
+    <string name="stats_daily_insight_peak" formatted="false">最集中</string>
+    <string name="stats_daily_metric_device_share" formatted="false">电脑 / 手机</string>
+    <string name="stats_daily_metric_longest" formatted="false">最长连续</string>
+    <string name="stats_daily_metric_reminders" formatted="false">提醒触发</string>
+    <string name="stats_daily_metric_total" formatted="false">今日用眼</string>
+    <string name="stats_daily_summary_day" formatted="false">当日摘要</string>
+    <string name="stats_daily_summary_longest" formatted="false">最长连续 {duration}</string>
+    <string name="stats_daily_summary_longest_short" formatted="false">最长 {duration}</string>
+    <string name="stats_daily_summary_peak" formatted="false">主要集中在 {range}</string>
+    <string name="stats_daily_summary_peak_short" formatted="false">集中 {range}</string>
+    <string name="stats_daily_summary_yesterday" formatted="false">昨日摘要</string>
+    <string name="stats_daily_title" formatted="false">单日情况</string>
+    <string name="stats_month_recorded_days" formatted="false">本月已记录 {count} 天</string>
+    <string name="stats_month_title" formatted="false">月度趋势</string>
+    <string name="stats_sessions_advice" formatted="false">最长连续 {duration}，建议减少 45 分钟以上的连续使用。</string>
+    <string name="stats_sessions_band_30to45" formatted="false">30-45分</string>
+    <string name="stats_sessions_band_over45" formatted="false">45分以上</string>
+    <string name="stats_sessions_band_under30" formatted="false">0-30分</string>
+    <string name="stats_sessions_count" formatted="false">{count}次</string>
+    <string name="stats_sessions_empty" formatted="false">暂无连续使用片段。</string>
+    <string name="stats_sessions_title" formatted="false">连续使用分析</string>
+    <string name="stats_source_empty" formatted="false">暂无设备来源数据</string>
+    <string name="stats_source_pc_high" formatted="false">电脑占比 {percent}%，注意定时休息</string>
+    <string name="stats_source_phone_high" formatted="false">手机占比 {percent}%，建议用大屏或拉远</string>
+    <string name="stats_source_phone_high_short" formatted="false">手机占比 {percent}%，可减少碎片查看</string>
+    <string name="stats_source_title" formatted="false">设备来源</string>
+    <string name="stats_subtitle" formatted="false">看趋势、分布和连续使用情况</string>
+    <string name="stats_title" formatted="false">统计</string>
+    <string name="stats_week_title" formatted="false">本周用眼</string>
+    <string name="stats_week_total" formatted="false">本周合计 {duration}</string>
+    <string name="sync_computer_offline" formatted="false">电脑离线</string>
+    <string name="sync_connected_computer" formatted="false">已连接电脑</string>
+    <string name="sync_connected_phone" formatted="false">已连接手机</string>
+    <string name="sync_notification_status" formatted="false">{status} · 今天 {duration}</string>
+    <string name="sync_phone_offline" formatted="false">手机离线</string>
+    <string name="sync_service_running" formatted="false">计时服务运行中</string>
+    <string name="time_hour_range" formatted="false">{start:00}-{end:00}点</string>
+    <string name="tray_disconnect_body" formatted="false">下次连接需要重新配对。</string>
+    <string name="tray_disconnect_title" formatted="false">已断开手机连接</string>
+    <string name="tray_main_page" formatted="false">主界面</string>
+    <string name="tray_pair_success_body" formatted="false">手机已连接并开始同步。</string>
+    <string name="tray_pair_success_title" formatted="false">手机配对成功</string>
+    <string name="tray_quit" formatted="false">退出</string>
+    <string name="tray_stats_page" formatted="false">统计页</string>
+    <string name="tray_status" formatted="false">统计</string>
+</resources>

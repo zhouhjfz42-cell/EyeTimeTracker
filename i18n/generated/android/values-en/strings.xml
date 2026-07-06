@@ -1,0 +1,135 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_main_title" formatted="false">Screen Time</string>
+    <string name="app_name" formatted="false">Eye Time Tracker</string>
+    <string name="app_stats_title" formatted="false">Screen Time Stats</string>
+    <string name="calendar_month_title" formatted="false">{month} {year}</string>
+    <string name="calendar_pick_day" formatted="false">Tap a date to select one day</string>
+    <string name="calendar_pick_month" formatted="false">Tap any day to select the month</string>
+    <string name="calendar_pick_range" formatted="false">Select dates to set a range</string>
+    <string name="calendar_pick_range_next" formatted="false">Select a start date, then an end date</string>
+    <string name="calendar_pick_week" formatted="false">Tap any day to select the week</string>
+    <string name="calendar_weekday_fri" formatted="false">Fri</string>
+    <string name="calendar_weekday_mon" formatted="false">Mon</string>
+    <string name="calendar_weekday_sat" formatted="false">Sat</string>
+    <string name="calendar_weekday_sun" formatted="false">Sun</string>
+    <string name="calendar_weekday_thu" formatted="false">Thu</string>
+    <string name="calendar_weekday_tue" formatted="false">Tue</string>
+    <string name="calendar_weekday_wed" formatted="false">Wed</string>
+    <string name="common_apply" formatted="false">Apply</string>
+    <string name="common_cancel" formatted="false">Cancel</string>
+    <string name="common_disconnect" formatted="false">Disconnect</string>
+    <string name="common_got_it" formatted="false">Got it</string>
+    <string name="common_main_page" formatted="false">Main</string>
+    <string name="common_none" formatted="false">None</string>
+    <string name="common_ok" formatted="false">Got it</string>
+    <string name="common_pc" formatted="false">Computer</string>
+    <string name="common_phone" formatted="false">Phone</string>
+    <string name="common_quit" formatted="false">Quit</string>
+    <string name="common_save" formatted="false">Save</string>
+    <string name="common_start" formatted="false">Start</string>
+    <string name="common_stats_page" formatted="false">Stats</string>
+    <string name="common_this_month" formatted="false">This Month</string>
+    <string name="common_this_week" formatted="false">This Week</string>
+    <string name="common_today" formatted="false">Today</string>
+    <string name="common_yesterday" formatted="false">Yesterday</string>
+    <string name="disconnect_message" formatted="false">After disconnecting, you will need to pair again next time.</string>
+    <string name="disconnect_title" formatted="false">Disconnect</string>
+    <string name="duration_about_hours" formatted="false">about {hours} hr</string>
+    <string name="duration_equivalent" formatted="false">{duration}</string>
+    <string name="duration_half_hours" formatted="false">{hours}.5 hr</string>
+    <string name="duration_hours" formatted="false">{hours} hr</string>
+    <string name="duration_hours_minutes" formatted="false">{hours} hr {minutes} min</string>
+    <string name="duration_hours_minutes_padded" formatted="false">{hours} hr {minutes:00} min</string>
+    <string name="duration_minutes" formatted="false">{minutes} min</string>
+    <string name="duration_zero_minutes" formatted="false">0 min</string>
+    <string name="main_autostart" formatted="false">Start on login</string>
+    <string name="main_card_month" formatted="false">This Month</string>
+    <string name="main_card_reminder" formatted="false">Reminder</string>
+    <string name="main_card_reminder_clickable" formatted="false">Reminder (click to edit)</string>
+    <string name="main_card_week" formatted="false">This Week</string>
+    <string name="main_card_yesterday" formatted="false">Yesterday</string>
+    <string name="main_help_auto_start" formatted="false">2. Tracking starts automatically a few seconds after you use the phone. If it does not start, tap “Start” in the top right.</string>
+    <string name="main_help_sync" formatted="false">1. Pair your phone and computer to track time across both screens. Overlapping periods are counted once, though small errors may remain.</string>
+    <string name="main_status_connected" formatted="false">{status} ({device} connected)</string>
+    <string name="main_status_offline" formatted="false">{status} ({device} offline)</string>
+    <string name="main_status_tracking" formatted="false">Tracking</string>
+    <string name="main_subtitle_android" formatted="false">Screen-on time counts as use</string>
+    <string name="main_subtitle_pc" formatted="false">Keyboard, mouse, and media playback count as use</string>
+    <string name="pair_android_connecting" formatted="false">Connecting to computer…</string>
+    <string name="pair_android_failed" formatted="false">Pairing failed. Check the code and make sure both devices are on the same Wi-Fi.</string>
+    <string name="pair_android_found" formatted="false">Computer found. Waiting for the computer to confirm the code…</string>
+    <string name="pair_android_instruction" formatted="false">First click “Pair Phone” on your computer, then enter the 6-digit code below. Your phone will find the computer automatically; enter the address manually only if it cannot.</string>
+    <string name="pair_android_manual" formatted="false">Connect Manually</string>
+    <string name="pair_android_manual_fallback" formatted="false">Could not connect automatically. You can enter the computer IP address manually and try again.</string>
+    <string name="pair_android_manual_hint" formatted="false">Enter the computer IP address, then tap Connect Manually.</string>
+    <string name="pair_android_not_found" formatted="false">Still looking for your computer. Make sure the Pair Phone window is open on the computer.</string>
+    <string name="pair_android_searching" formatted="false">Looking for your computer on the same Wi-Fi…</string>
+    <string name="pair_android_title" formatted="false">Pair Phone</string>
+    <string name="pair_pc_input_title" formatted="false">Enter the code shown on your phone</string>
+    <string name="pair_pc_start" formatted="false">Start Pairing</string>
+    <string name="pair_pc_title" formatted="false">Pair Phone</string>
+    <string name="pair_pc_validation_code_required" formatted="false">Enter the 6-digit code shown on your phone.</string>
+    <string name="reminder_alert_title" formatted="false">Eye Break Reminder</string>
+    <string name="reminder_android_body_once" formatted="false">You have reached {duration} of screen time today. Give your eyes a short break.</string>
+    <string name="reminder_android_body_repeat" formatted="false">This is the {step} time today you have reached {minutes} minutes. Give your eyes a short break.</string>
+    <string name="reminder_body_once" formatted="false">You have reached {duration} of screen time today. Give your eyes a short break.</string>
+    <string name="reminder_body_repeat" formatted="false">This is the {step} time today you have reached {minutes} minutes. Give your eyes a short break.</string>
+    <string name="reminder_pc_connected_readonly" formatted="false">Phone connected. Change reminder settings on your phone.</string>
+    <string name="reminder_repeat_label" formatted="false">Repeat reminders (show a reminder each time the limit is reached;\nthis may happen multiple times a day)</string>
+    <string name="reminder_saved" formatted="false">Reminder saved</string>
+    <string name="reminder_title" formatted="false">Reminder Time</string>
+    <string name="reminder_unit_hint" formatted="false">Unit: minutes ({equivalent})</string>
+    <string name="reminder_unit_minute" formatted="false">min</string>
+    <string name="stats_care_continuous_high" formatted="false">Eye care: long uninterrupted use</string>
+    <string name="stats_care_night_high" formatted="false">Eye care: more night use</string>
+    <string name="stats_care_no_pressure" formatted="false">Eye care: no clear pressure</string>
+    <string name="stats_care_phone_high" formatted="false">Eye care: phone use is high</string>
+    <string name="stats_care_steady" formatted="false">Eye care: steady rhythm</string>
+    <string name="stats_daily_insight_night" formatted="false">Night (22:00-06:00)</string>
+    <string name="stats_daily_insight_peak" formatted="false">Peak</string>
+    <string name="stats_daily_metric_device_share" formatted="false">Computer / Phone</string>
+    <string name="stats_daily_metric_longest" formatted="false">Longest</string>
+    <string name="stats_daily_metric_reminders" formatted="false">Reminders</string>
+    <string name="stats_daily_metric_total" formatted="false">Today</string>
+    <string name="stats_daily_summary_day" formatted="false">Day Summary</string>
+    <string name="stats_daily_summary_longest" formatted="false">Longest stretch: {duration}</string>
+    <string name="stats_daily_summary_longest_short" formatted="false">Longest {duration}</string>
+    <string name="stats_daily_summary_peak" formatted="false">Most active: {range}</string>
+    <string name="stats_daily_summary_peak_short" formatted="false">Peak {range}</string>
+    <string name="stats_daily_summary_yesterday" formatted="false">Yesterday Summary</string>
+    <string name="stats_daily_title" formatted="false">Daily View</string>
+    <string name="stats_month_recorded_days" formatted="false">{count} days recorded this month</string>
+    <string name="stats_month_title" formatted="false">Monthly Trend</string>
+    <string name="stats_sessions_advice" formatted="false">Longest stretch: {duration}. Try to reduce sessions over 45 minutes.</string>
+    <string name="stats_sessions_band_30to45" formatted="false">30-45 min</string>
+    <string name="stats_sessions_band_over45" formatted="false">45+ min</string>
+    <string name="stats_sessions_band_under30" formatted="false">0-30 min</string>
+    <string name="stats_sessions_count" formatted="false">{count} times</string>
+    <string name="stats_sessions_empty" formatted="false">No continuous-use sessions yet.</string>
+    <string name="stats_sessions_title" formatted="false">Continuous Use</string>
+    <string name="stats_source_empty" formatted="false">No device source data</string>
+    <string name="stats_source_pc_high" formatted="false">Computer use {percent}%. Remember to take breaks.</string>
+    <string name="stats_source_phone_high" formatted="false">Phone use {percent}%. Use a larger screen or hold it farther away.</string>
+    <string name="stats_source_phone_high_short" formatted="false">Phone use {percent}%. Reduce quick checks when possible.</string>
+    <string name="stats_source_title" formatted="false">Device Sources</string>
+    <string name="stats_subtitle" formatted="false">Trends, distribution, and continuous use</string>
+    <string name="stats_title" formatted="false">Stats</string>
+    <string name="stats_week_title" formatted="false">Weekly Use</string>
+    <string name="stats_week_total" formatted="false">Weekly total: {duration}</string>
+    <string name="sync_computer_offline" formatted="false">Computer offline</string>
+    <string name="sync_connected_computer" formatted="false">Computer connected</string>
+    <string name="sync_connected_phone" formatted="false">Phone connected</string>
+    <string name="sync_notification_status" formatted="false">{status} · Today {duration}</string>
+    <string name="sync_phone_offline" formatted="false">Phone offline</string>
+    <string name="sync_service_running" formatted="false">Tracking service is running</string>
+    <string name="time_hour_range" formatted="false">{start:00}-{end:00}</string>
+    <string name="tray_disconnect_body" formatted="false">Pair again to reconnect next time.</string>
+    <string name="tray_disconnect_title" formatted="false">Phone disconnected</string>
+    <string name="tray_main_page" formatted="false">Main</string>
+    <string name="tray_pair_success_body" formatted="false">Phone connected. Sync has started.</string>
+    <string name="tray_pair_success_title" formatted="false">Phone paired</string>
+    <string name="tray_quit" formatted="false">Quit</string>
+    <string name="tray_stats_page" formatted="false">Stats</string>
+    <string name="tray_status" formatted="false">Tracking</string>
+</resources>

@@ -1,6 +1,7 @@
+using System.Media;
 using System.Windows.Forms;
+using EyeTimeTracker.App.Localization;
 using EyeTimeTracker.Core.Models;
-using EyeTimeTracker.Core.Reminders;
 using EyeTimeTracker.App.UI;
 
 namespace EyeTimeTracker.App.Platform;
@@ -41,9 +42,21 @@ public sealed class NotificationService
 
     private void ShowDailyReminderCore(TrackerSettings settings, int reminderStep)
     {
-        var title = ReminderMessage.Title;
-        var body = ReminderMessage.Body(settings.ReminderThresholdSeconds, settings.RepeatReminder, reminderStep);
+        var title = ReminderText.Title;
+        var body = ReminderText.Body(settings.ReminderThresholdSeconds, settings.RepeatReminder, reminderStep);
         using var dialog = new PcReminderDialog(title, body, _notifyIcon.Icon);
+        PlayReminderSound();
         dialog.ShowDialog();
+    }
+
+    private static void PlayReminderSound()
+    {
+        try
+        {
+            SystemSounds.Exclamation.Play();
+        }
+        catch (InvalidOperationException)
+        {
+        }
     }
 }

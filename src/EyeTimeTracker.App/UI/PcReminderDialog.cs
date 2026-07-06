@@ -1,4 +1,5 @@
 using System.Drawing.Drawing2D;
+using EyeTimeTracker.App.Localization;
 
 namespace EyeTimeTracker.App.UI;
 
@@ -64,7 +65,7 @@ public sealed class PcReminderDialog : Form
 
         var okButton = new RoundedButton
         {
-            Text = "\u6211\u77e5\u9053\u4e86",
+            Text = AppText.Get("common.gotIt"),
             Bounds = new Rectangle(135, 218, 200, 48),
             ButtonColor = AccentGreen,
             HoverColor = Color.FromArgb(19, 145, 111),
