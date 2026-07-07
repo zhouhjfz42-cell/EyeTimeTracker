@@ -1,12 +1,20 @@
 # Generated platform resources
 
-This folder is reserved for generated platform-specific language files.
+This folder stores platform-specific files generated from `i18n/source/*.json`.
 
-Expected outputs:
+Do not edit generated files by hand. Update the source language files first, then regenerate platform resources.
+
+Expected platform outputs:
 
 - `android/values/strings.xml`
 - `android/values-en/strings.xml`
-- `windows/*.resx` or embedded C# resources
-- `apple/Localizable.strings` or String Catalog files
+- `dotnet/*.json`, `.resx`, or embedded C# resources
+- `apple/Localizable.strings`, `.xcstrings`, or generated Swift resources in the future
 
-Do not edit generated files by hand after generators are added. Edit `i18n/source/*.json` instead.
+Current direction:
+
+- Android should read UI strings from Android resources whenever possible.
+- Windows should read UI strings through a central text provider, not scattered literals.
+- iOS and macOS should reuse the same source keys when those platforms are added.
+
+Before releasing a language version, check the real UI instead of only reviewing text files. English strings are often longer than Chinese strings and may require layout adjustments.
