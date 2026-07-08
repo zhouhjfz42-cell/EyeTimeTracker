@@ -1,4 +1,5 @@
 using System.Drawing.Drawing2D;
+using EyeTimeTracker.App.Localization;
 using EyeTimeTracker.App.Platform;
 using EyeTimeTracker.App.Tracking;
 using EyeTimeTracker.Core.Formatting;
@@ -53,7 +54,7 @@ public sealed class MainForm : Form
         _disconnectPairing = disconnectPairing;
 
         AutoScaleMode = AutoScaleMode.None;
-        Text = "\u7528\u773c\u65f6\u95f4\u8bb0\u5f55";
+        Text = AppText.Get("app.name");
         _appIcon = (Icon)(appIcon ?? throw new ArgumentNullException(nameof(appIcon))).Clone();
         Icon = (Icon)_appIcon.Clone();
         StartPosition = FormStartPosition.CenterScreen;
@@ -127,7 +128,7 @@ public sealed class MainForm : Form
     {
         root.Controls.Add(new FitTextLabel
         {
-            Text = "\u7528\u773c\u65f6\u95f4",
+            Text = AppText.Get("app.mainTitle"),
             Bounds = MainFormLayout.TitleBounds,
             MaxFontSize = 22F,
             MinFontSize = 20F,
@@ -139,7 +140,7 @@ public sealed class MainForm : Form
 
         root.Controls.Add(new FitTextLabel
         {
-            Text = "\u952e\u9f20\u52a8\u4f5c\u3001\u5a92\u4f53\u64ad\u653e\u65f6\u8ba1\u5165\u7edf\u8ba1",
+            Text = AppText.Get("main.subtitle.pc"),
             Bounds = MainFormLayout.SubtitleBounds,
             MaxFontSize = 11F,
             MinFontSize = 10F,
@@ -151,7 +152,7 @@ public sealed class MainForm : Form
 
         var startupLabel = new FitTextLabel
         {
-            Text = "\u5f00\u673a\u542f\u52a8",
+            Text = AppText.Get("main.autostart"),
             Bounds = MainFormLayout.StartupLabelBounds,
             MaxFontSize = 10.5F,
             MinFontSize = 9F,
@@ -174,7 +175,7 @@ public sealed class MainForm : Form
 
         root.Controls.Add(new FitTextLabel
         {
-            Text = "\u4eca\u5929",
+            Text = AppText.Get("common.today"),
             Bounds = new Rectangle(34, 144, 104, 52),
             MaxFontSize = 14F,
             MinFontSize = 14F,
@@ -193,7 +194,7 @@ public sealed class MainForm : Form
 
         statusValue = new FitTextLabel
         {
-            Text = "\u7edf\u8ba1\u4e2d",
+            Text = AppText.Get("main.status.tracking"),
             Bounds = new Rectangle(178, 144, 310, 52),
             MaxFontSize = 14F,
             MinFontSize = 10F,
@@ -207,7 +208,7 @@ public sealed class MainForm : Form
 
         todayValue = new FitTextLabel
         {
-            Text = "0\u5206\u949f",
+            Text = AppText.Get("duration.zeroMinutes"),
             Bounds = new Rectangle(34, 194, 600, 104),
             MaxFontSize = 44F,
             MinFontSize = 24F,
@@ -218,16 +219,16 @@ public sealed class MainForm : Form
         };
         root.Controls.Add(todayValue);
 
-        root.Controls.Add(BuildMetricCard("\u6628\u5929", new Rectangle(34, 320, 282, 136), out yesterdayValue));
-        root.Controls.Add(BuildMetricCard("\u672c\u5468", new Rectangle(344, 320, 282, 136), out weekValue));
-        root.Controls.Add(BuildMetricCard("\u672c\u6708", new Rectangle(34, 484, 282, 136), out monthValue));
+        root.Controls.Add(BuildMetricCard(AppText.Get("main.card.yesterday"), new Rectangle(34, 320, 282, 136), out yesterdayValue));
+        root.Controls.Add(BuildMetricCard(AppText.Get("main.card.week"), new Rectangle(344, 320, 282, 136), out weekValue));
+        root.Controls.Add(BuildMetricCard(AppText.Get("main.card.month"), new Rectangle(34, 484, 282, 136), out monthValue));
         root.Controls.Add(BuildReminderCard(new Rectangle(344, 484, 282, 136), out reminderValue));
 
         if (_showPairingDialog is not null)
         {
             _pairingButton = new RoundedButton
             {
-                Text = "\u624b\u673a\u914d\u5bf9",
+                Text = AppText.Get("pair.pc.title"),
                 Bounds = MainFormLayout.PairingButtonBounds,
                 ButtonColor = AccentGreen,
                 HoverColor = Color.FromArgb(19, 145, 111),
@@ -242,7 +243,7 @@ public sealed class MainForm : Form
 
         _statsButton = new RoundedButton
         {
-            Text = "\u7edf\u8ba1\u9875",
+            Text = AppText.Get("common.statsPage"),
             Bounds = new Rectangle(200, 668, 260, 58),
             ButtonColor = AccentGreen,
             HoverColor = Color.FromArgb(19, 145, 111),
@@ -266,7 +267,7 @@ public sealed class MainForm : Form
         AddMetricTitle(card, title);
         value = new FitTextLabel
         {
-            Text = "0\u5206\u949f",
+            Text = AppText.Get("duration.zeroMinutes"),
             Bounds = new Rectangle(24, 58, bounds.Width - 40, 66),
             MaxFontSize = 22F,
             MinFontSize = 14F,
@@ -282,7 +283,7 @@ public sealed class MainForm : Form
     private Control BuildReminderCard(Rectangle bounds, out FitTextLabel value)
     {
         var card = CreateMetricShell(bounds);
-        AddMetricTitle(card, "\u63d0\u9192 (\u70b9\u51fb\u4fee\u6539)");
+        AddMetricTitle(card, AppText.Get("main.card.reminderClickable"));
         value = new FitTextLabel
         {
             Text = ReminderThreshold.Format(_controller.Settings.ReminderThresholdSeconds),
@@ -378,15 +379,15 @@ public sealed class MainForm : Form
         _weekValue.Text = FormatDuration(weekTotal);
         _monthValue.Text = FormatDuration(monthTotal);
         UpdateReminderDisplay();
-        _statusValue.Text = ConnectionStatusFormatter.Format(
-            current.IsCounting ? "\u7edf\u8ba1\u4e2d" : "\u6682\u505c",
+        _statusValue.Text = FormatConnectionStatus(
+            current.IsCounting ? AppText.Get("main.status.tracking") : AppText.Get("main.status.paused"),
             _controller.IsPaired,
             _controller.IsPeerOnline,
-            "\u624b\u673a");
+            AppText.Get("common.phone"));
         _statusDot.IsActive = current.IsCounting;
         if (_pairingButton is not null)
         {
-            _pairingButton.Text = _controller.IsPaired ? "\u65ad\u5f00" : "\u624b\u673a\u914d\u5bf9";
+            _pairingButton.Text = _controller.IsPaired ? AppText.Get("common.disconnect") : AppText.Get("pair.pc.title");
         }
     }
 
@@ -399,6 +400,19 @@ public sealed class MainForm : Form
         }
 
         _showPairingDialog?.Invoke();
+    }
+
+    private static string FormatConnectionStatus(string baseStatus, bool isPaired, bool isOnline, string peerName)
+    {
+        if (!isPaired || string.IsNullOrWhiteSpace(peerName))
+        {
+            return baseStatus;
+        }
+
+        return AppText.Format(
+            isOnline ? "main.status.connected" : "main.status.offline",
+            ("status", baseStatus),
+            ("device", peerName));
     }
 
     private void ShowReminderDialog()
@@ -486,8 +500,8 @@ public sealed class MainForm : Form
         var duration = TimeSpan.FromSeconds(Math.Max(0, totalSeconds));
         var totalHours = (int)duration.TotalHours;
         return totalHours > 0
-            ? string.Format("{0}\u5c0f\u65f6 {1:00}\u5206", totalHours, duration.Minutes)
-            : string.Format("{0}\u5206\u949f", duration.Minutes);
+            ? AppText.Format("duration.hoursMinutesPadded", ("hours", totalHours), ("minutes:00", duration.Minutes.ToString("00")))
+            : AppText.Format("duration.minutes", ("minutes", duration.Minutes));
     }
 
     private static Color TodayColor(long totalSeconds)
@@ -774,7 +788,7 @@ public sealed class MainForm : Form
             RepeatReminder = repeatReminder;
             _canEdit = canEdit;
             AutoScaleMode = AutoScaleMode.None;
-            Text = "\u4fee\u6539\u63d0\u9192\u65f6\u95f4";
+            Text = AppText.Get("reminder.title");
             if (icon is not null)
             {
                 Icon = (Icon)icon.Clone();
@@ -792,7 +806,7 @@ public sealed class MainForm : Form
 
             Controls.Add(new FitTextLabel
             {
-                Text = "\u63d0\u9192\u65f6\u95f4",
+                Text = AppText.Get("reminder.title"),
                 Bounds = new Rectangle(28, 20, 240, 60),
                 MaxFontSize = 19F,
                 MinFontSize = 17F,
@@ -852,7 +866,7 @@ public sealed class MainForm : Form
 
             inputShell.Controls.Add(new FitTextLabel
             {
-                Text = "\u5206\u949f",
+                Text = AppText.Get("reminder.unitMinute"),
                 Bounds = new Rectangle(306, 8, 84, 58),
                 MaxFontSize = 14F,
                 MinFontSize = 13F,
@@ -890,7 +904,7 @@ public sealed class MainForm : Form
 
             var cancelButton = new RoundedButton
             {
-                Text = "\u53d6\u6d88",
+                Text = AppText.Get("common.cancel"),
                 Bounds = new Rectangle(28, 270, 190, 48),
                 ButtonColor = Color.FromArgb(242, 244, 247),
                 HoverColor = Color.FromArgb(232, 236, 240),
@@ -907,7 +921,7 @@ public sealed class MainForm : Form
 
             var okButton = new RoundedButton
             {
-                Text = _canEdit ? "\u4fdd\u5b58" : "\u77e5\u9053\u4e86",
+                Text = _canEdit ? AppText.Get("common.save") : AppText.Get("common.ok"),
                 Bounds = new Rectangle(238, 270, 204, 48),
                 ButtonColor = AccentGreen,
                 HoverColor = Color.FromArgb(19, 145, 111),
@@ -1006,20 +1020,20 @@ public sealed class MainForm : Form
             {
                 _hintLabel.ForeColor = TextSecondary;
                 _hintLabel.Text = _canEdit
-                    ? string.Format(
-                        "\u5355\u4f4d\uff1a\u5206\u949f{0}",
-                        ReminderThreshold.FormatEquivalent(ReminderThreshold.FromMinutes(minutes)))
-                    : "\u5df2\u8fde\u63a5\u624b\u673a\uff0c\u8bf7\u5728\u624b\u673a\u7aef\u4fee\u6539\u63d0\u9192";
-                _repeatLabel.Text = ReminderThreshold.FormatRepeatLabel(minutes);
+                    ? AppText.Format(
+                        "reminder.unitHint",
+                        ("equivalent", ReminderThreshold.FormatEquivalent(ReminderThreshold.FromMinutes(minutes))))
+                    : AppText.Get("reminder.pcConnectedReadonly");
+                _repeatLabel.Text = AppText.Get("reminder.repeatLabel");
                 return;
             }
 
             _hintLabel.ForeColor = Color.FromArgb(190, 80, 68);
-            _hintLabel.Text = string.Format(
-                "\u8bf7\u8f93\u5165 {0}-{1} \u4e4b\u95f4\u7684\u5206\u949f\u6570",
-                ReminderThreshold.MinMinutes,
-                ReminderThreshold.MaxMinutes);
-            _repeatLabel.Text = "\u53cd\u590d\u63d0\u9192";
+            _hintLabel.Text = AppText.Format(
+                "reminder.validation.minutesRange",
+                ("min", ReminderThreshold.MinMinutes),
+                ("max", ReminderThreshold.MaxMinutes));
+            _repeatLabel.Text = AppText.Get("reminder.repeatShort");
         }
 
         private bool TryReadMinutes(out int minutes)

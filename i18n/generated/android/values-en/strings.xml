@@ -3,6 +3,7 @@
     <string name="app_main_title" formatted="false">Screen Time</string>
     <string name="app_name" formatted="false">Eye Time Tracker</string>
     <string name="app_stats_title" formatted="false">Screen Time Stats</string>
+    <string name="calendar_month_compact" formatted="false">M{month}</string>
     <string name="calendar_month_title" formatted="false">{month} {year}</string>
     <string name="calendar_pick_day" formatted="false">Tap a date to select one day</string>
     <string name="calendar_pick_month" formatted="false">Tap any day to select the month</string>
@@ -33,7 +34,9 @@
     <string name="common_this_week" formatted="false">This Week</string>
     <string name="common_today" formatted="false">Today</string>
     <string name="common_yesterday" formatted="false">Yesterday</string>
+    <string name="disconnect_android_toast" formatted="false">Computer disconnected</string>
     <string name="disconnect_message" formatted="false">After disconnecting, you will need to pair again next time.</string>
+    <string name="disconnect_pc_message" formatted="false">After disconnecting, phone and computer sync will stop.\nPair again to reconnect next time.</string>
     <string name="disconnect_title" formatted="false">Disconnect</string>
     <string name="duration_about_hours" formatted="false">about {hours} hr</string>
     <string name="duration_equivalent" formatted="false">{duration}</string>
@@ -53,19 +56,31 @@
     <string name="main_help_sync" formatted="false">1. Pair your phone and computer to track time across both screens. Overlapping periods are counted once, though small errors may remain.</string>
     <string name="main_status_connected" formatted="false">{status} ({device} connected)</string>
     <string name="main_status_offline" formatted="false">{status} ({device} offline)</string>
+    <string name="main_status_paused" formatted="false">Paused</string>
     <string name="main_status_tracking" formatted="false">Tracking</string>
     <string name="main_subtitle_android" formatted="false">Screen-on time counts as use</string>
     <string name="main_subtitle_pc" formatted="false">Keyboard, mouse, and media playback count as use</string>
+    <string name="pair_android_connected" formatted="false">Paired with computer.</string>
+    <string name="pair_android_connected_toast" formatted="false">Paired with computer</string>
     <string name="pair_android_connecting" formatted="false">Connecting to computer…</string>
+    <string name="pair_android_connecting_short" formatted="false">Connecting</string>
     <string name="pair_android_failed" formatted="false">Pairing failed. Check the code and make sure both devices are on the same Wi-Fi.</string>
+    <string name="pair_android_failed_short" formatted="false">Pairing failed. Check the code and computer status.</string>
     <string name="pair_android_found" formatted="false">Computer found. Waiting for the computer to confirm the code…</string>
+    <string name="pair_android_host_hint" formatted="false">Computer IP address, e.g. 192.168.1.8</string>
+    <string name="pair_android_host_required" formatted="false">Enter the computer IP address</string>
     <string name="pair_android_instruction" formatted="false">First click “Pair Phone” on your computer, then enter the 6-digit code below. Your phone will find the computer automatically; enter the address manually only if it cannot.</string>
     <string name="pair_android_manual" formatted="false">Connect Manually</string>
     <string name="pair_android_manual_fallback" formatted="false">Could not connect automatically. You can enter the computer IP address manually and try again.</string>
     <string name="pair_android_manual_hint" formatted="false">Enter the computer IP address, then tap Connect Manually.</string>
+    <string name="pair_android_manual_question" formatted="false">Can\'t find the computer? Enter it manually</string>
     <string name="pair_android_not_found" formatted="false">Still looking for your computer. Make sure the Pair Phone window is open on the computer.</string>
+    <string name="pair_android_port_hint" formatted="false">Port</string>
+    <string name="pair_android_port_required" formatted="false">Enter a valid port</string>
     <string name="pair_android_searching" formatted="false">Looking for your computer on the same Wi-Fi…</string>
     <string name="pair_android_title" formatted="false">Pair Phone</string>
+    <string name="pair_android_wait_confirm" formatted="false">Waiting for computer</string>
+    <string name="pair_pc_confirm_code" formatted="false">Confirm Code</string>
     <string name="pair_pc_input_title" formatted="false">Enter the code shown on your phone</string>
     <string name="pair_pc_start" formatted="false">Start Pairing</string>
     <string name="pair_pc_title" formatted="false">Pair Phone</string>
@@ -75,12 +90,15 @@
     <string name="reminder_android_body_repeat" formatted="false">This is the {step} time today you have reached {minutes} minutes. Give your eyes a short break.</string>
     <string name="reminder_body_once" formatted="false">You have reached {duration} of screen time today. Give your eyes a short break.</string>
     <string name="reminder_body_repeat" formatted="false">This is the {step} time today you have reached {minutes} minutes. Give your eyes a short break.</string>
+    <string name="reminder_channel_description" formatted="false">Reminds you to rest when screen time reaches your limit</string>
     <string name="reminder_pc_connected_readonly" formatted="false">Phone connected. Change reminder settings on your phone.</string>
     <string name="reminder_repeat_label" formatted="false">Repeat reminders (show a reminder each time the limit is reached;\nthis may happen multiple times a day)</string>
+    <string name="reminder_repeat_short" formatted="false">Repeat reminders</string>
     <string name="reminder_saved" formatted="false">Reminder saved</string>
     <string name="reminder_title" formatted="false">Reminder Time</string>
     <string name="reminder_unit_hint" formatted="false">Unit: minutes ({equivalent})</string>
     <string name="reminder_unit_minute" formatted="false">min</string>
+    <string name="reminder_validation_minutes_range" formatted="false">Enter a number from {min} to {max} minutes</string>
     <string name="stats_care_continuous_high" formatted="false">Eye care: long uninterrupted use</string>
     <string name="stats_care_night_high" formatted="false">Eye care: more night use</string>
     <string name="stats_care_no_pressure" formatted="false">Eye care: no clear pressure</string>
@@ -122,13 +140,16 @@
     <string name="sync_connected_phone" formatted="false">Phone connected</string>
     <string name="sync_notification_status" formatted="false">{status} · Today {duration}</string>
     <string name="sync_phone_offline" formatted="false">Phone offline</string>
+    <string name="sync_service_channel_description" formatted="false">Background tracking service status</string>
     <string name="sync_service_running" formatted="false">Tracking service is running</string>
+    <string name="sync_status_counting" formatted="false">Tracking</string>
     <string name="time_hour_range" formatted="false">{start:00}-{end:00}</string>
     <string name="tray_disconnect_body" formatted="false">Pair again to reconnect next time.</string>
     <string name="tray_disconnect_title" formatted="false">Phone disconnected</string>
     <string name="tray_main_page" formatted="false">Main</string>
     <string name="tray_pair_success_body" formatted="false">Phone connected. Sync has started.</string>
     <string name="tray_pair_success_title" formatted="false">Phone paired</string>
+    <string name="tray_pair_waiting_body" formatted="false">Waiting for your phone to connect. The code is valid for 5 minutes.</string>
     <string name="tray_quit" formatted="false">Quit</string>
     <string name="tray_stats_page" formatted="false">Stats</string>
     <string name="tray_status" formatted="false">Tracking</string>

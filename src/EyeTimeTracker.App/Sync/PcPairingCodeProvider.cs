@@ -1,3 +1,5 @@
+using EyeTimeTracker.App.Localization;
+
 namespace EyeTimeTracker.App.Sync;
 
 public sealed class PcPairingCodeProvider
@@ -31,7 +33,7 @@ public sealed class PcPairingCodeProvider
         var normalizedCode = (code ?? string.Empty).Trim();
         if (normalizedCode.Length != 6 || normalizedCode.Any(ch => ch < '0' || ch > '9'))
         {
-            error = "请输入手机上显示的 6 位数字配对码。";
+            error = AppText.Get("pair.pc.validation.codeRequired");
             return false;
         }
 

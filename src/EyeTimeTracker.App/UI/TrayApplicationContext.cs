@@ -1,3 +1,4 @@
+using EyeTimeTracker.App.Localization;
 using EyeTimeTracker.App.Platform;
 using EyeTimeTracker.App.Sync;
 using EyeTimeTracker.App.Tracking;
@@ -28,7 +29,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         _notifyIcon = new NotifyIcon
         {
             Icon = _appIcon,
-            Text = "\u7528\u773c\u65f6\u95f4\u8bb0\u5f55",
+            Text = AppText.Get("app.name"),
             Visible = true
         };
         _notifyIcon.DoubleClick += (_, _) => OpenMainWindow();
@@ -127,8 +128,8 @@ public sealed class TrayApplicationContext : ApplicationContext
         UpdateTrayMenuState();
         _notifyIcon.ShowBalloonTip(
             4000,
-            "\u5df2\u65ad\u5f00\u624b\u673a",
-            "\u518d\u6b21\u8fde\u63a5\u65f6\u9700\u8981\u91cd\u65b0\u914d\u5bf9\u3002",
+            AppText.Get("tray.disconnectTitle"),
+            AppText.Get("tray.disconnectBody"),
             ToolTipIcon.Info);
     }
 
@@ -140,7 +141,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         }
 
         _trayMenu.UpdateState(
-            _controller.Current.IsCounting ? "\u7edf\u8ba1\u4e2d" : "\u6682\u505c",
+            _controller.Current.IsCounting ? AppText.Get("main.status.tracking") : AppText.Get("main.status.paused"),
             _controller.IsPaired && _controller.IsPeerOnline);
     }
 
@@ -158,7 +159,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         {
             MessageBox.Show(
                 error,
-                "\u624b\u673a\u914d\u5bf9",
+                AppText.Get("pair.pc.title"),
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Warning);
             return;
@@ -166,8 +167,8 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         _notifyIcon.ShowBalloonTip(
             5000,
-            "\u624b\u673a\u914d\u5bf9",
-            "\u7535\u8111\u5df2\u5f00\u59cb\u7b49\u5f85\u624b\u673a\u8fde\u63a5\uff0c5\u5206\u949f\u5185\u6709\u6548\u3002",
+            AppText.Get("pair.pc.title"),
+            AppText.Get("tray.pairWaitingBody"),
             ToolTipIcon.Info);
     }
 

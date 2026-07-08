@@ -3,6 +3,7 @@
     <string name="app_main_title" formatted="false">用眼时间</string>
     <string name="app_name" formatted="false">用眼时间记录</string>
     <string name="app_stats_title" formatted="false">用眼时间统计</string>
+    <string name="calendar_month_compact" formatted="false">{month}月</string>
     <string name="calendar_month_title" formatted="false">{year}年 {month}月</string>
     <string name="calendar_pick_day" formatted="false">点击日期选择单日</string>
     <string name="calendar_pick_month" formatted="false">点击任意一天选择整月</string>
@@ -33,7 +34,9 @@
     <string name="common_this_week" formatted="false">本周</string>
     <string name="common_today" formatted="false">今天</string>
     <string name="common_yesterday" formatted="false">昨天</string>
+    <string name="disconnect_android_toast" formatted="false">已断开电脑</string>
     <string name="disconnect_message" formatted="false">断开后，下次连接需要重新配对。</string>
+    <string name="disconnect_pc_message" formatted="false">断开后，手机和电脑将停止同步。\n下次连接需要重新配对。</string>
     <string name="disconnect_title" formatted="false">断开连接</string>
     <string name="duration_about_hours" formatted="false">约{hours}小时</string>
     <string name="duration_equivalent" formatted="false">即{duration}</string>
@@ -53,19 +56,31 @@
     <string name="main_help_sync" formatted="false">1. 将手机和电脑配对，共同统计注视两块屏幕的时间，有统计到重合时段的会删除重复统计，但可能会有部分误差；</string>
     <string name="main_status_connected" formatted="false">{status}（已连{device}）</string>
     <string name="main_status_offline" formatted="false">{status}（{device}离线）</string>
+    <string name="main_status_paused" formatted="false">暂停</string>
     <string name="main_status_tracking" formatted="false">统计中</string>
     <string name="main_subtitle_android" formatted="false">亮屏时计入统计</string>
     <string name="main_subtitle_pc" formatted="false">键鼠动作、媒体播放时计入统计</string>
+    <string name="pair_android_connected" formatted="false">已和电脑配对。</string>
+    <string name="pair_android_connected_toast" formatted="false">已和电脑配对</string>
     <string name="pair_android_connecting" formatted="false">正在连接电脑…</string>
+    <string name="pair_android_connecting_short" formatted="false">连接中</string>
     <string name="pair_android_failed" formatted="false">配对失败，请检查配对码和电脑是否在同一 WiFi。</string>
+    <string name="pair_android_failed_short" formatted="false">配对失败，请检查配对码和电脑状态</string>
     <string name="pair_android_found" formatted="false">已找到电脑，等待电脑确认配对码…</string>
+    <string name="pair_android_host_hint" formatted="false">电脑 IP 地址，例如 192.168.1.8</string>
+    <string name="pair_android_host_required" formatted="false">请输入电脑 IP 地址</string>
     <string name="pair_android_instruction" formatted="false">先在电脑上点击“手机配对”，输入下面的 6 位码。手机会自动寻找电脑，找不到时再手动填地址。</string>
     <string name="pair_android_manual" formatted="false">手动连接</string>
     <string name="pair_android_manual_fallback" formatted="false">暂时没有自动连上。可以手动填写电脑 IP 地址后再连接。</string>
     <string name="pair_android_manual_hint" formatted="false">请输入电脑 IP 地址，然后点击手动连接。</string>
+    <string name="pair_android_manual_question" formatted="false">找不到电脑？手动填写</string>
     <string name="pair_android_not_found" formatted="false">还在寻找电脑。请确认电脑已打开“手机配对”窗口。</string>
+    <string name="pair_android_port_hint" formatted="false">端口</string>
+    <string name="pair_android_port_required" formatted="false">请输入正确端口</string>
     <string name="pair_android_searching" formatted="false">正在同一个 WiFi 里寻找电脑…</string>
     <string name="pair_android_title" formatted="false">手机配对</string>
+    <string name="pair_android_wait_confirm" formatted="false">等待电脑确认</string>
+    <string name="pair_pc_confirm_code" formatted="false">确认配对码</string>
     <string name="pair_pc_input_title" formatted="false">输入手机上显示的配对码</string>
     <string name="pair_pc_start" formatted="false">开始配对</string>
     <string name="pair_pc_title" formatted="false">手机配对</string>
@@ -75,12 +90,15 @@
     <string name="reminder_android_body_repeat" formatted="false">今天用眼时间已经第{step}次达到{minutes}分钟了，建议休息一下眼睛。</string>
     <string name="reminder_body_once" formatted="false">今天的屏幕使用时间已达到{duration}，建议休息一下眼睛。</string>
     <string name="reminder_body_repeat" formatted="false">今天的屏幕使用时间已经第{step}次达到{minutes}分钟了，建议休息一下眼睛。</string>
+    <string name="reminder_channel_description" formatted="false">到达设定用眼时长时提醒休息</string>
     <string name="reminder_pc_connected_readonly" formatted="false">已连接手机，请在手机端修改提醒</string>
     <string name="reminder_repeat_label" formatted="false">反复提醒（每达到时间就提醒一次，一天\n内可能出现多次提醒）</string>
+    <string name="reminder_repeat_short" formatted="false">反复提醒</string>
     <string name="reminder_saved" formatted="false">提醒时间已保存</string>
     <string name="reminder_title" formatted="false">提醒时间</string>
     <string name="reminder_unit_hint" formatted="false">单位：分钟（{equivalent}）</string>
     <string name="reminder_unit_minute" formatted="false">分钟</string>
+    <string name="reminder_validation_minutes_range" formatted="false">请输入 {min}-{max} 之间的分钟数</string>
     <string name="stats_care_continuous_high" formatted="false">护眼表现：连续用眼偏多</string>
     <string name="stats_care_night_high" formatted="false">护眼表现：夜间用眼偏多</string>
     <string name="stats_care_no_pressure" formatted="false">护眼表现：暂无明显压力</string>
@@ -122,13 +140,16 @@
     <string name="sync_connected_phone" formatted="false">已连接手机</string>
     <string name="sync_notification_status" formatted="false">{status} · 今天 {duration}</string>
     <string name="sync_phone_offline" formatted="false">手机离线</string>
+    <string name="sync_service_channel_description" formatted="false">后台统计服务状态</string>
     <string name="sync_service_running" formatted="false">计时服务运行中</string>
+    <string name="sync_status_counting" formatted="false">计时中</string>
     <string name="time_hour_range" formatted="false">{start:00}-{end:00}点</string>
     <string name="tray_disconnect_body" formatted="false">下次连接需要重新配对。</string>
     <string name="tray_disconnect_title" formatted="false">已断开手机连接</string>
     <string name="tray_main_page" formatted="false">主界面</string>
     <string name="tray_pair_success_body" formatted="false">手机已连接并开始同步。</string>
     <string name="tray_pair_success_title" formatted="false">手机配对成功</string>
+    <string name="tray_pair_waiting_body" formatted="false">电脑已开始等待手机连接，5分钟内有效。</string>
     <string name="tray_quit" formatted="false">退出</string>
     <string name="tray_stats_page" formatted="false">统计页</string>
     <string name="tray_status" formatted="false">统计</string>

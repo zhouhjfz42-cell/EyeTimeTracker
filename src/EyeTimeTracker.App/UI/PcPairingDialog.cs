@@ -1,4 +1,5 @@
 using System.Drawing.Drawing2D;
+using EyeTimeTracker.App.Localization;
 
 namespace EyeTimeTracker.App.UI;
 
@@ -18,7 +19,7 @@ public sealed class PcPairingDialog : Form
     public PcPairingDialog(Icon? icon)
     {
         AutoScaleMode = AutoScaleMode.None;
-        Text = "\u624b\u673a\u914d\u5bf9";
+        Text = AppText.Get("pair.pc.title");
         if (icon is not null)
         {
             Icon = (Icon)icon.Clone();
@@ -36,7 +37,7 @@ public sealed class PcPairingDialog : Form
 
         Controls.Add(new StaticText
         {
-            Text = "\u624b\u673a\u914d\u5bf9",
+            Text = AppText.Get("pair.pc.title"),
             Bounds = new Rectangle(28, 24, 300, 58),
             Font = AppFonts.Create(19F, FontStyle.Bold, GraphicsUnit.Point),
             ForeColor = TextPrimary,
@@ -57,7 +58,7 @@ public sealed class PcPairingDialog : Form
 
         Controls.Add(new StaticText
         {
-            Text = "\u8f93\u5165\u624b\u673a\u4e0a\u663e\u793a\u7684\u914d\u5bf9\u7801",
+            Text = AppText.Get("pair.pc.inputTitle"),
             Bounds = new Rectangle(28, 92, 414, 42),
             Font = AppFonts.Create(11F, FontStyle.Regular, GraphicsUnit.Point),
             ForeColor = TextSecondary,
@@ -86,7 +87,7 @@ public sealed class PcPairingDialog : Form
 
         var cancelButton = new RoundedButton
         {
-            Text = "\u53d6\u6d88",
+            Text = AppText.Get("common.cancel"),
             Bounds = new Rectangle(28, 284, 190, 48),
             ButtonColor = Color.FromArgb(242, 244, 247),
             HoverColor = Color.FromArgb(232, 236, 240),
@@ -102,7 +103,7 @@ public sealed class PcPairingDialog : Form
 
         var okButton = new RoundedButton
         {
-            Text = "\u786e\u8ba4\u914d\u5bf9\u7801",
+            Text = AppText.Get("pair.pc.confirmCode"),
             Bounds = new Rectangle(238, 284, 204, 48),
             ButtonColor = AccentGreen,
             HoverColor = Color.FromArgb(19, 145, 111),
@@ -161,7 +162,7 @@ public sealed class PcPairingDialog : Form
         var code = _codeInput.Text.Trim();
         if (code.Length != 6)
         {
-            _hintLabel.Text = "\u8bf7\u8f93\u5165 6 \u4f4d\u6570\u5b57\u914d\u5bf9\u7801\u3002";
+            _hintLabel.Text = AppText.Get("pair.pc.validation.codeRequired");
             return;
         }
 

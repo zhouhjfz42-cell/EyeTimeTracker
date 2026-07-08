@@ -1,6 +1,6 @@
 using System.Drawing.Drawing2D;
+using EyeTimeTracker.App.Localization;
 using EyeTimeTracker.App.Tracking;
-using EyeTimeTracker.Core.Formatting;
 using EyeTimeTracker.Core.Models;
 using EyeTimeTracker.Core.Reminders;
 using EyeTimeTracker.Core.Sync;
@@ -59,7 +59,7 @@ public sealed class StatsForm : Form
         _rangeEnd = today;
 
         AutoScaleMode = AutoScaleMode.None;
-        Text = "用眼时间统计";
+        Text = AppText.Get("app.statsTitle");
         if (icon is not null)
         {
             Icon = (Icon)icon.Clone();
@@ -82,7 +82,7 @@ public sealed class StatsForm : Form
 
         root.Controls.Add(new FitTextLabel
         {
-            Text = "统计",
+            Text = AppText.Get("stats.title"),
             Bounds = new Rectangle(30, 12, 140, 76),
             MaxFontSize = 24F,
             MinFontSize = 21F,
@@ -93,7 +93,7 @@ public sealed class StatsForm : Form
         });
         root.Controls.Add(new FitTextLabel
         {
-            Text = "看趋势、分布和连续使用情况",
+            Text = AppText.Get("stats.subtitle"),
             Bounds = new Rectangle(168, 45, 380, 30),
             MaxFontSize = 11F,
             MinFontSize = 10F,
@@ -104,14 +104,14 @@ public sealed class StatsForm : Form
 
         var dayPanel = CreatePanel(new Rectangle(30, 98, 1120, 290));
         root.Controls.Add(dayPanel);
-        AddPanelTitle(dayPanel, "单日情况", new Rectangle(24, 18, 132, 36));
-        _daySelectorText = AddPill(dayPanel, "今天 ▾", new Rectangle(170, 22, 112, 30), ShowDayMenu);
+        AddPanelTitle(dayPanel, AppText.Get("stats.daily.title"), new Rectangle(24, 18, 132, 36));
+        _daySelectorText = AddPill(dayPanel, SelectorText(AppText.Get("common.today")), new Rectangle(170, 22, 112, 30), ShowDayMenu);
         AddLegend(dayPanel, new Point(314, 27));
 
-        dayPanel.Controls.Add(BuildSmallMetric("今日用眼", out _dayTotalValue, new Rectangle(24, 70, 155, 78), AccentGreen));
-        dayPanel.Controls.Add(BuildSmallMetric("最长连续", out _longestSessionValue, new Rectangle(194, 70, 155, 78), AccentYellow));
-        dayPanel.Controls.Add(BuildSmallMetric("电脑 / 手机", out _deviceShareValue, new Rectangle(24, 164, 155, 78), TextPrimary));
-        dayPanel.Controls.Add(BuildSmallMetric("提醒触发", out _reminderCountValue, new Rectangle(194, 164, 155, 78), TextPrimary));
+        dayPanel.Controls.Add(BuildSmallMetric(AppText.Get("stats.daily.metric.total"), out _dayTotalValue, new Rectangle(24, 70, 155, 78), AccentGreen));
+        dayPanel.Controls.Add(BuildSmallMetric(AppText.Get("stats.daily.metric.longest"), out _longestSessionValue, new Rectangle(194, 70, 155, 78), AccentYellow));
+        dayPanel.Controls.Add(BuildSmallMetric(AppText.Get("stats.daily.metric.deviceShare"), out _deviceShareValue, new Rectangle(24, 164, 155, 78), TextPrimary));
+        dayPanel.Controls.Add(BuildSmallMetric(AppText.Get("stats.daily.metric.reminders"), out _reminderCountValue, new Rectangle(194, 164, 155, 78), TextPrimary));
 
         _hourlyChart = new HourlyHeatChart
         {
@@ -120,7 +120,7 @@ public sealed class StatsForm : Form
         };
         dayPanel.Controls.Add(_hourlyChart);
 
-        _summaryTitle = AddSummaryLabel(dayPanel, "昨日摘要", new Rectangle(690, 18, 180, 36), 13.5F, 12F, TextPrimary, FontStyle.Bold);
+        _summaryTitle = AddSummaryLabel(dayPanel, AppText.Get("stats.daily.summary.yesterday"), new Rectangle(690, 18, 180, 36), 13.5F, 12F, TextPrimary, FontStyle.Bold);
         _summaryLineOne = AddSummaryLabel(dayPanel, "", new Rectangle(692, 66, 380, 34), 10.5F, 9F, TextSecondary, FontStyle.Regular);
         _summaryLineTwo = AddSummaryLabel(dayPanel, "", new Rectangle(692, 112, 380, 34), 10.5F, 9F, TextSecondary, FontStyle.Regular);
         _summaryLineThree = AddSummaryLabel(dayPanel, "", new Rectangle(692, 158, 380, 34), 10.5F, 9F, TextSecondary, FontStyle.Regular);
@@ -128,25 +128,25 @@ public sealed class StatsForm : Form
 
         var weekPanel = CreatePanel(new Rectangle(30, 410, 350, 300));
         root.Controls.Add(weekPanel);
-        AddPanelTitle(weekPanel, "本周用眼", new Rectangle(22, 18, 150, 34));
-        _weekSelectorText = AddPill(weekPanel, "本周 ▾", new Rectangle(232, 18, 96, 30), ShowWeekMenu);
+        AddPanelTitle(weekPanel, AppText.Get("stats.week.title"), new Rectangle(22, 18, 150, 34));
+        _weekSelectorText = AddPill(weekPanel, SelectorText(AppText.Get("common.thisWeek")), new Rectangle(232, 18, 96, 30), ShowWeekMenu);
         _weekChart = new WeekBarChart { Bounds = new Rectangle(22, 62, 306, 180), BackColor = Color.Transparent };
         weekPanel.Controls.Add(_weekChart);
         _weekNote = AddNote(weekPanel, new Rectangle(22, 250, 300, 34));
 
         var monthPanel = CreatePanel(new Rectangle(405, 410, 350, 300));
         root.Controls.Add(monthPanel);
-        AddPanelTitle(monthPanel, "月度趋势", new Rectangle(22, 18, 150, 34));
-        _monthSelectorText = AddPill(monthPanel, "本月 ▾", new Rectangle(232, 18, 96, 30), ShowMonthMenu);
+        AddPanelTitle(monthPanel, AppText.Get("stats.month.title"), new Rectangle(22, 18, 150, 34));
+        _monthSelectorText = AddPill(monthPanel, SelectorText(AppText.Get("common.thisMonth")), new Rectangle(232, 18, 96, 30), ShowMonthMenu);
         _monthChart = new MonthTrendChart { Bounds = new Rectangle(22, 64, 306, 170), BackColor = Color.Transparent };
         monthPanel.Controls.Add(_monthChart);
         _monthNote = AddNote(monthPanel, new Rectangle(22, 250, 300, 34));
 
         var continuousPanel = CreatePanel(new Rectangle(780, 410, 370, 300));
         root.Controls.Add(continuousPanel);
-        AddPanelTitle(continuousPanel, "连续使用分析", new Rectangle(22, 18, 150, 34));
-        _rangeStartSelectorText = AddPill(continuousPanel, "7/1 ▾", new Rectangle(178, 18, 84, 30), ShowRangeStartMenu);
-        _rangeEndSelectorText = AddPill(continuousPanel, "7/1 ▾", new Rectangle(270, 18, 84, 30), ShowRangeEndMenu);
+        AddPanelTitle(continuousPanel, AppText.Get("stats.sessions.title"), new Rectangle(22, 18, 150, 34));
+        _rangeStartSelectorText = AddPill(continuousPanel, SelectorText("7/1"), new Rectangle(178, 18, 84, 30), ShowRangeStartMenu);
+        _rangeEndSelectorText = AddPill(continuousPanel, SelectorText("7/1"), new Rectangle(270, 18, 84, 30), ShowRangeEndMenu);
         _continuousBands = new ContinuousBandsControl { Bounds = new Rectangle(22, 68, 326, 150), BackColor = Color.Transparent };
         continuousPanel.Controls.Add(_continuousBands);
         _continuousNote = AddNote(continuousPanel, new Rectangle(22, 235, 320, 48));
@@ -217,25 +217,25 @@ public sealed class StatsForm : Form
         _dayTotalValue.ForeColor = TodayColor(todayRecord.TotalSeconds);
         _longestSessionValue.Text = FormatDuration(longest);
         _deviceShareValue.Text = $"{deviceBreakdown.PcPercent}%/{deviceBreakdown.PhonePercent}%";
-        _reminderCountValue.Text = $"{ReminderDisplayCount.FromSeconds(todayRecord.TotalSeconds, _controller.Settings)}次";
+        _reminderCountValue.Text = CountText(ReminderDisplayCount.FromSeconds(todayRecord.TotalSeconds, _controller.Settings));
         _hourlyChart.HourlySeconds = todayRecord.HourlySeconds;
         _hourlyChart.SetSourceHourlySeconds(deviceBreakdown.PcHourlySeconds, deviceBreakdown.PhoneHourlySeconds);
 
-        _summaryTitle.Text = isShowingToday ? "昨日摘要" : "当日摘要";
-        _summaryLineOne.Text = $"主要集中在 {PeakHourText(summaryRecord.HourlySeconds)}";
-        _summaryLineTwo.Text = $"最长连续 {FormatDuration(summaryLongest)}";
-        _summaryLineThree.Text = EyeCareSummaryFormatter.SourceText(summaryDeviceBreakdown);
-        _summaryLineFour.Text = EyeCareSummaryFormatter.CareText(
+        _summaryTitle.Text = isShowingToday ? AppText.Get("stats.daily.summary.yesterday") : AppText.Get("stats.daily.summary.day");
+        _summaryLineOne.Text = AppText.Format("stats.daily.summary.peak", ("range", PeakHourText(summaryRecord.HourlySeconds)));
+        _summaryLineTwo.Text = AppText.Format("stats.daily.summary.longest", ("duration", FormatDuration(summaryLongest)));
+        _summaryLineThree.Text = SummarySourceText(summaryDeviceBreakdown);
+        _summaryLineFour.Text = SummaryCareText(
             summaryLongest,
             NightSeconds(summaryRecord.HourlySeconds),
             summaryDeviceBreakdown.PhonePercent);
 
         _weekChart.Records = weekRecords;
         _weekChart.DeviceBreakdowns = weekBreakdowns;
-        _weekNote.Text = $"本周合计 {FormatDuration(weekRecords.Sum(record => record.TotalSeconds))}";
+        _weekNote.Text = AppText.Format("stats.week.total", ("duration", FormatDuration(weekRecords.Sum(record => record.TotalSeconds))));
 
         _monthChart.Records = monthRecords;
-        _monthNote.Text = $"本月已记录 {monthRecords.Count(record => record.TotalSeconds > 0)} 天";
+        _monthNote.Text = AppText.Format("stats.month.recordedDays", ("count", monthRecords.Count(record => record.TotalSeconds > 0)));
 
         var rangeStart = _rangeStart <= _rangeEnd ? _rangeStart : _rangeEnd;
         var rangeEnd = _rangeStart <= _rangeEnd ? _rangeEnd : _rangeStart;
@@ -245,8 +245,8 @@ public sealed class StatsForm : Form
             .ToList();
         _continuousBands.Sessions = rangeSessions;
         _continuousNote.Text = rangeSessions.Count == 0
-            ? "暂无连续使用片段。"
-            : $"最长连续 {FormatDuration(rangeSessions.Max())}，建议减少 45 分钟以上的连续使用。";
+            ? AppText.Get("stats.sessions.empty")
+            : AppText.Format("stats.sessions.advice", ("duration", FormatDuration(rangeSessions.Max())));
         UpdateSelectorTexts(actualToday);
     }
 
@@ -347,11 +347,11 @@ public sealed class StatsForm : Form
 
     private void UpdateSelectorTexts(DateOnly actualToday)
     {
-        _daySelectorText.Text = $"{DateLabel(_selectedDay, actualToday)} ▾";
-        _weekSelectorText.Text = $"{WeekLabel(_selectedWeekStart, actualToday)} ▾";
-        _monthSelectorText.Text = $"{MonthLabel(_selectedMonthStart, actualToday)} ▾";
-        _rangeStartSelectorText.Text = $"{CompactDateLabel(_rangeStart)} ▾";
-        _rangeEndSelectorText.Text = $"{CompactDateLabel(_rangeEnd)} ▾";
+        _daySelectorText.Text = SelectorText(DateLabel(_selectedDay, actualToday));
+        _weekSelectorText.Text = SelectorText(WeekLabel(_selectedWeekStart, actualToday));
+        _monthSelectorText.Text = SelectorText(MonthLabel(_selectedMonthStart, actualToday));
+        _rangeStartSelectorText.Text = SelectorText(CompactDateLabel(_rangeStart));
+        _rangeEndSelectorText.Text = SelectorText(CompactDateLabel(_rangeEnd));
     }
 
     private static string DateLabel(DateOnly date)
@@ -361,18 +361,20 @@ public sealed class StatsForm : Form
 
     private static string DateLabel(DateOnly date, DateOnly today)
     {
-        return date == today ? "今天" : ShortDateLabel(date);
+        return date == today ? AppText.Get("common.today") : ShortDateLabel(date);
     }
 
     private static string WeekLabel(DateOnly weekStart, DateOnly today)
     {
         var currentWeekStart = today.AddDays(-GetMondayOffset(today.DayOfWeek));
-        return weekStart == currentWeekStart ? "本周" : $"{weekStart.Month}/{weekStart.Day}";
+        return weekStart == currentWeekStart ? AppText.Get("common.thisWeek") : CompactDateLabel(weekStart);
     }
 
     private static string MonthLabel(DateOnly monthStart, DateOnly today)
     {
-        return monthStart.Year == today.Year && monthStart.Month == today.Month ? "本月" : $"{monthStart.Month}月";
+        return monthStart.Year == today.Year && monthStart.Month == today.Month
+            ? AppText.Get("common.thisMonth")
+            : AppText.Format("calendar.monthCompact", ("month", monthStart.Month));
     }
 
     private static string ShortDateLabel(DateOnly date)
@@ -404,23 +406,45 @@ public sealed class StatsForm : Form
         var max = hourlySeconds.Length == 0 ? 0 : hourlySeconds.Max();
         if (max <= 0)
         {
-            return "暂无";
+            return AppText.Get("common.none");
         }
 
         var hour = Array.IndexOf(hourlySeconds, max);
-        return $"{hour:00}:00-{(hour + 1) % 24:00}:00";
+        return AppText.Format("time.hourRange", ("start:00", hour.ToString("00")), ("end:00", ((hour + 1) % 24).ToString("00")));
     }
 
     private static string SummarySourceText(UsageDeviceBreakdown breakdown)
     {
         if (breakdown.PcSeconds + breakdown.PhoneSeconds <= 0)
         {
-            return "暂无设备来源数据";
+            return AppText.Get("stats.source.empty");
         }
 
         return breakdown.PhonePercent >= breakdown.PcPercent
-            ? $"手机占比 {breakdown.PhonePercent}%，可减少碎片查看"
-            : $"电脑占比 {breakdown.PcPercent}%，注意定时休息";
+            ? AppText.Format("stats.source.phoneHighShort", ("percent", breakdown.PhonePercent))
+            : AppText.Format("stats.source.pcHigh", ("percent", breakdown.PcPercent));
+    }
+
+    private static string SummaryCareText(long longestSessionSeconds, long nightSeconds, int phonePercent)
+    {
+        if (longestSessionSeconds >= 45L * 60L)
+        {
+            return AppText.Get("stats.care.continuousHigh");
+        }
+
+        if (nightSeconds >= 60L * 60L)
+        {
+            return AppText.Get("stats.care.nightHigh");
+        }
+
+        if (phonePercent >= 60)
+        {
+            return AppText.Get("stats.care.phoneHigh");
+        }
+
+        return longestSessionSeconds <= 0 && nightSeconds <= 0
+            ? AppText.Get("stats.care.noPressure")
+            : AppText.Get("stats.care.steady");
     }
 
     private static long NightSeconds(long[] hourlySeconds)
@@ -474,7 +498,7 @@ public sealed class StatsForm : Form
         });
         value = new FitTextLabel
         {
-            Text = "0分钟",
+            Text = AppText.Get("duration.zeroMinutes"),
             Bounds = new Rectangle(16, 38, bounds.Width - 28, 32),
             MaxFontSize = 17F,
             MinFontSize = 11F,
@@ -540,7 +564,7 @@ public sealed class StatsForm : Form
         parent.Controls.Add(new LegendDot { Bounds = new Rectangle(location.X, location.Y, 14, 14), DotColor = AccentGreen });
         parent.Controls.Add(new FitTextLabel
         {
-            Text = "电脑",
+            Text = AppText.Get("common.pc"),
             Bounds = new Rectangle(location.X + 20, location.Y - 5, 44, 24),
             MaxFontSize = 9F,
             MinFontSize = 8F,
@@ -550,7 +574,7 @@ public sealed class StatsForm : Form
         parent.Controls.Add(new LegendDot { Bounds = new Rectangle(location.X + 76, location.Y, 14, 14), DotColor = AccentBlue });
         parent.Controls.Add(new FitTextLabel
         {
-            Text = "手机",
+            Text = AppText.Get("common.phone"),
             Bounds = new Rectangle(location.X + 96, location.Y - 5, 44, 24),
             MaxFontSize = 9F,
             MinFontSize = 8F,
@@ -599,7 +623,7 @@ public sealed class StatsForm : Form
 
         var value = new FitTextLabel
         {
-            Text = "暂无",
+            Text = AppText.Get("common.none"),
             Bounds = new Rectangle(bounds.X, bounds.Y + 28, bounds.Width, 30),
             MaxFontSize = 12F,
             MinFontSize = 8.5F,
@@ -632,8 +656,48 @@ public sealed class StatsForm : Form
         var duration = TimeSpan.FromSeconds(Math.Max(0, totalSeconds));
         var totalHours = (int)duration.TotalHours;
         return totalHours > 0
-            ? string.Format("{0}小时{1:00}分", totalHours, duration.Minutes)
-            : string.Format("{0}分钟", duration.Minutes);
+            ? AppText.Format("duration.hoursMinutesPadded", ("hours", totalHours), ("minutes:00", duration.Minutes.ToString("00")))
+            : AppText.Format("duration.minutes", ("minutes", duration.Minutes));
+    }
+
+    private static string FormatTooltipMinutes(long totalSeconds)
+    {
+        return AppText.Format("duration.minutes", ("minutes", Math.Max(0L, totalSeconds) / 60L));
+    }
+
+    private static string FormatCompactHours(long totalSeconds)
+    {
+        var safeSeconds = Math.Max(0L, totalSeconds);
+        var halfHourUnits = (long)Math.Round(safeSeconds / 1800D, MidpointRounding.AwayFromZero);
+        var wholeHours = halfHourUnits / 2L;
+
+        return halfHourUnits % 2L == 0L
+            ? AppText.Format("duration.hours", ("hours", wholeHours))
+            : AppText.Format("duration.halfHours", ("hours", wholeHours));
+    }
+
+    private static string CountText(int count)
+    {
+        return AppText.Format("stats.sessions.count", ("count", count));
+    }
+
+    private static string[] WeekdayLabels()
+    {
+        return new[]
+        {
+            AppText.Get("calendar.weekday.mon"),
+            AppText.Get("calendar.weekday.tue"),
+            AppText.Get("calendar.weekday.wed"),
+            AppText.Get("calendar.weekday.thu"),
+            AppText.Get("calendar.weekday.fri"),
+            AppText.Get("calendar.weekday.sat"),
+            AppText.Get("calendar.weekday.sun")
+        };
+    }
+
+    private static string SelectorText(string text)
+    {
+        return text + " ▾";
     }
 
     private static Color TodayColor(long totalSeconds)
@@ -726,7 +790,7 @@ public sealed class StatsForm : Form
             {
                 var tip = new FitTextLabel
                 {
-                    Text = "点击日期设置起止范围",
+                    Text = AppText.Get("calendar.pickRange"),
                     Bounds = new Rectangle(24, 330, 300, 28),
                     MaxFontSize = 9F,
                     MinFontSize = 8F,
@@ -735,8 +799,8 @@ public sealed class StatsForm : Form
                 };
                 root.Controls.Add(tip);
 
-                root.Controls.Add(CreateActionButton("取消", new Rectangle(496, 330, 86, 40), Color.FromArgb(238, 242, 241), TextPrimary, (_, _) => Close()));
-                root.Controls.Add(CreateActionButton("应用", new Rectangle(596, 330, 86, 40), AccentGreen, Color.White, (_, _) =>
+                root.Controls.Add(CreateActionButton(AppText.Get("common.cancel"), new Rectangle(496, 330, 86, 40), Color.FromArgb(238, 242, 241), TextPrimary, (_, _) => Close()));
+                root.Controls.Add(CreateActionButton(AppText.Get("common.apply"), new Rectangle(596, 330, 86, 40), AccentGreen, Color.White, (_, _) =>
                 {
                     RangeSelected?.Invoke((_rangeStart, _rangeEnd));
                     Close();
@@ -746,9 +810,9 @@ public sealed class StatsForm : Form
             {
                 var tipText = mode switch
                 {
-                    CalendarSelectionMode.Week => "点击任意一天选择整周",
-                    CalendarSelectionMode.Month => "点击任意一天选择整月",
-                    _ => "点击日期选择单日"
+                    CalendarSelectionMode.Week => AppText.Get("calendar.pickWeek"),
+                    CalendarSelectionMode.Month => AppText.Get("calendar.pickMonth"),
+                    _ => AppText.Get("calendar.pickDay")
                 };
                 var tip = new FitTextLabel
                 {
@@ -760,7 +824,7 @@ public sealed class StatsForm : Form
                     BackColor = Color.Transparent
                 };
                 root.Controls.Add(tip);
-                root.Controls.Add(CreateActionButton("取消", new Rectangle(260, 328, 86, 40), Color.FromArgb(238, 242, 241), TextPrimary, (_, _) => Close()));
+                root.Controls.Add(CreateActionButton(AppText.Get("common.cancel"), new Rectangle(260, 328, 86, 40), Color.FromArgb(238, 242, 241), TextPrimary, (_, _) => Close()));
             }
 
             RefreshMonths();
@@ -872,7 +936,7 @@ public sealed class StatsForm : Form
 
         private void RefreshMonths()
         {
-            _leftTitle.Text = $"{_leftMonthStart.Year}年 {_leftMonthStart.Month}月";
+            _leftTitle.Text = AppText.Format("calendar.monthTitle", ("year", _leftMonthStart.Year), ("month", _leftMonthStart.Month));
             _leftMonth.DisplayMonth = _leftMonthStart;
             _leftMonth.SelectedDate = _selectedDate;
             _leftMonth.RangeStart = _rangeStart;
@@ -882,7 +946,7 @@ public sealed class StatsForm : Form
             if (_rightMonth is not null && _rightTitle is not null)
             {
                 var rightStart = _leftMonthStart.AddMonths(1);
-                _rightTitle.Text = $"{rightStart.Year}年 {rightStart.Month}月";
+                _rightTitle.Text = AppText.Format("calendar.monthTitle", ("year", rightStart.Year), ("month", rightStart.Month));
                 _rightMonth.DisplayMonth = rightStart;
                 _rightMonth.SelectedDate = _selectedDate;
                 _rightMonth.RangeStart = _rangeStart;
@@ -924,8 +988,6 @@ public sealed class StatsForm : Form
 
     private sealed class CalendarMonthView : Control
     {
-        private readonly string[] _weekdays = { "一", "二", "三", "四", "五", "六", "日" };
-
         public CalendarSelectionMode Mode { get; set; }
         public DateOnly DisplayMonth { get; set; } = new(DateTime.Now.Year, DateTime.Now.Month, 1);
         public DateOnly SelectedDate { get; set; } = DateOnly.FromDateTime(DateTime.Now);
@@ -957,7 +1019,7 @@ public sealed class StatsForm : Form
 
             for (var i = 0; i < 7; i++)
             {
-                DrawCenteredText(e.Graphics, _weekdays[i], weekdayFont, weekdayBrush, new RectangleF(i * cellWidth, 0, cellWidth, weekdayHeight));
+                DrawCenteredText(e.Graphics, WeekdayLabels()[i], weekdayFont, weekdayBrush, new RectangleF(i * cellWidth, 0, cellWidth, weekdayHeight));
             }
 
             foreach (var day in VisibleDays())
@@ -1142,7 +1204,7 @@ public sealed class StatsForm : Form
                 var length = 10F + (float)seconds / maxSeconds * (outerRadius - innerRadius - 14F);
                 var bounds = DrawSourceHourBar(e.Graphics, center, angle, innerRadius, length, pcSeconds, phoneSeconds);
                 bounds.Inflate(8F, 8F);
-                _hits.Add(new ChartHit(bounds, ChartValueFormatter.FormatMinutes(seconds)));
+                _hits.Add(new ChartHit(bounds, FormatTooltipMinutes(seconds)));
             }
 
             DrawHourLabels(e.Graphics, center, outerRadius);
@@ -1340,7 +1402,7 @@ public sealed class StatsForm : Form
                 ? _deviceBreakdowns
                 : Enumerable.Range(0, 7).Select(_ => new UsageDeviceBreakdown(0, 0)).ToList();
             var maxSeconds = Math.Max(1L, records.Max(record => record.TotalSeconds));
-            var labels = new[] { "一", "二", "三", "四", "五", "六", "日" };
+            var labels = WeekdayLabels();
             using var textBrush = new SolidBrush(TextSecondary);
             using var font = AppFonts.Create(7.5F);
             using var labelFormat = new StringFormat
@@ -1374,7 +1436,7 @@ public sealed class StatsForm : Form
                 }
 
                 var bounds = new RectangleF(x - 6, y - 6, width + 12, barHeight + 12);
-                _hits.Add(new ChartHit(bounds, ChartValueFormatter.FormatCompactHours(records[i].TotalSeconds)));
+                _hits.Add(new ChartHit(bounds, FormatCompactHours(records[i].TotalSeconds)));
                 e.Graphics.DrawString(labels[i], font, textBrush, new RectangleF(x - 8, Height - 22, width + 16, 20), labelFormat);
             }
         }
@@ -1475,7 +1537,7 @@ public sealed class StatsForm : Form
             {
                 var point = points[i];
                 e.Graphics.FillEllipse(brush, point.X - 3F, point.Y - 3F, 6F, 6F);
-                _hits.Add(new ChartHit(new RectangleF(point.X - 12F, point.Y - 12F, 24F, 24F), ChartValueFormatter.FormatCompactHours(_records[i].TotalSeconds)));
+                _hits.Add(new ChartHit(new RectangleF(point.X - 12F, point.Y - 12F, 24F, 24F), FormatCompactHours(_records[i].TotalSeconds)));
             }
         }
 
@@ -1570,7 +1632,7 @@ public sealed class StatsForm : Form
                 _sessions.Count(seconds => seconds >= 30 * 60 && seconds < 45 * 60),
                 _sessions.Count(seconds => seconds >= 45 * 60)
             };
-            var labels = new[] { "0-30分", "30-45分", "45分以上" };
+            var labels = new[] { AppText.Get("stats.sessions.band.under30"), AppText.Get("stats.sessions.band.30to45"), AppText.Get("stats.sessions.band.over45") };
             var colors = new[] { AccentGreen, AccentYellow, AccentRed };
             var max = Math.Max(1, counts.Max());
 
@@ -1603,7 +1665,7 @@ public sealed class StatsForm : Form
                 }
 
                 using var valueBrush = new SolidBrush(TextPrimary);
-                e.Graphics.DrawString($"{counts[i]}次", valueFont, valueBrush, valueBounds, valueFormat);
+                e.Graphics.DrawString(CountText(counts[i]), valueFont, valueBrush, valueBounds, valueFormat);
             }
         }
     }
@@ -1631,14 +1693,14 @@ public sealed class StatsForm : Form
             using var titleFont = AppFonts.Create(9F, FontStyle.Bold);
             TextRenderer.DrawText(
                 e.Graphics,
-                "设备来源",
+                AppText.Get("stats.source.title"),
                 titleFont,
                 new Rectangle(0, 0, Width, 24),
                 TextPrimary,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
 
-            DrawSourceRow(e.Graphics, 36, "电脑", _pcSeconds, AccentGreen);
-            DrawSourceRow(e.Graphics, 88, "手机", _phoneSeconds, AccentBlue);
+            DrawSourceRow(e.Graphics, 36, AppText.Get("common.pc"), _pcSeconds, AccentGreen);
+            DrawSourceRow(e.Graphics, 88, AppText.Get("common.phone"), _phoneSeconds, AccentBlue);
         }
 
         private void DrawSourceRow(Graphics graphics, int y, string label, long seconds, Color color)

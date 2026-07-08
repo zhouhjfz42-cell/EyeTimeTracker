@@ -2,6 +2,7 @@ package com.eyetimetracker.android;
 
 import android.app.Activity;
 import android.app.Dialog;
+import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -117,28 +118,28 @@ public final class StatsActivity extends Activity {
         root.setPadding(dp(24), dp(28), dp(24), dp(28));
         scroll.addView(root);
 
-        TextView title = text("统计", 34, COLOR_TEXT, true);
+        TextView title = text(getString(R.string.stats_title), 34, COLOR_TEXT, true);
         title.setIncludeFontPadding(false);
         root.addView(title, matchWrap());
-        TextView subtitle = text("看趋势、分布和连续使用情况", 16, COLOR_MUTED, false);
+        TextView subtitle = text(getString(R.string.stats_subtitle), 16, COLOR_MUTED, false);
         root.addView(subtitle, matchWrapTop(10));
 
         LinearLayout dayPanel = panel();
         root.addView(dayPanel, matchWrapTop(24));
-        TextView dayPill = addPanelHead(dayPanel, "单日情况", dateLabel(selectedDay, today) + " ▾");
+        TextView dayPill = addPanelHead(dayPanel, getString(R.string.stats_daily_title), selectorText(dateLabel(selectedDay, today)));
         dayPill.setOnClickListener(v -> showDateSheet(DatePickMode.DAY));
         GridLayout metrics = new GridLayout(this);
         metrics.setColumnCount(2);
         dayPanel.addView(metrics, matchWrapTop(12));
-        addCard(metrics, metricCard("今日用眼", DurationFormatter.format(todaySummary.totalSeconds), colorForToday(todaySummary.totalSeconds)), 0, 0);
-        addCard(metrics, metricCard("最长连续", DurationFormatter.format(longestSession(todaySummary)), COLOR_YELLOW), 0, 1);
-        addCard(metrics, metricCard("电脑 / 手机", deviceBreakdown.pcPercent() + "%/" + deviceBreakdown.phonePercent() + "%", COLOR_TEXT), 1, 0);
+        addCard(metrics, metricCard(getString(R.string.stats_daily_metric_total), formatDuration(todaySummary.totalSeconds), colorForToday(todaySummary.totalSeconds)), 0, 0);
+        addCard(metrics, metricCard(getString(R.string.stats_daily_metric_longest), formatDuration(longestSession(todaySummary)), COLOR_YELLOW), 0, 1);
+        addCard(metrics, metricCard(getString(R.string.stats_daily_metric_device_share), deviceBreakdown.pcPercent() + "%/" + deviceBreakdown.phonePercent() + "%", COLOR_TEXT), 1, 0);
         addCard(metrics, metricCard(
-                "提醒触发",
-                ReminderPolicy.displayCount(
+                getString(R.string.stats_daily_metric_reminders),
+                countText(ReminderPolicy.displayCount(
                         todaySummary.totalSeconds,
                         store.getReminderMinutes(),
-                        store.isRepeatReminderEnabled()) + "次",
+                        store.isRepeatReminderEnabled())),
                 COLOR_TEXT), 1, 1);
 
         dayPanel.addView(deviceLegend(), matchWrapTop(8));
@@ -154,42 +155,42 @@ public final class StatsActivity extends Activity {
         LinearLayout insightRow = new LinearLayout(this);
         insightRow.setOrientation(LinearLayout.HORIZONTAL);
         dayPanel.addView(insightRow, matchWrapTop(8));
-        addInsightCard(insightRow, insightInfoCard("最集中", peakHour(todaySummary.hourlySeconds)), 0);
-        addInsightCard(insightRow, insightInfoCard("夜间（22-6点）", DurationFormatter.format(nightSeconds(todaySummary.hourlySeconds))), 1);
+        addInsightCard(insightRow, insightInfoCard(getString(R.string.stats_daily_insight_peak), peakHour(todaySummary.hourlySeconds)), 0);
+        addInsightCard(insightRow, insightInfoCard(getString(R.string.stats_daily_insight_night), formatDuration(nightSeconds(todaySummary.hourlySeconds))), 1);
         dayPanel.addView(summaryCard(
-                selectedDay.equals(today) ? "昨日摘要" : "当日摘要",
+                selectedDay.equals(today) ? getString(R.string.stats_daily_summary_yesterday) : getString(R.string.stats_daily_summary_day),
                 summary,
                 summaryBreakdown), matchWrapTop(10));
 
         LinearLayout weekPanel = panel();
         root.addView(weekPanel, matchWrapTop(18));
-        TextView weekPill = addPanelHead(weekPanel, "本周用眼", weekLabel(selectedWeekStart, today) + " ▾");
+        TextView weekPill = addPanelHead(weekPanel, getString(R.string.stats_week_title), selectorText(weekLabel(selectedWeekStart, today)));
         weekPill.setOnClickListener(v -> showDateSheet(DatePickMode.WEEK));
         WeekBarView weekView = new WeekBarView(this);
         weekView.setSummaries(week);
         weekView.setDeviceBreakdowns(weekBreakdowns);
         weekPanel.addView(weekView, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(210)));
-        weekPanel.addView(note("本周合计 " + DurationFormatter.format(sum(week))), matchWrapTop(8));
+        weekPanel.addView(note(formatResource(R.string.stats_week_total, "duration", formatDuration(sum(week)))), matchWrapTop(8));
 
         LinearLayout monthPanel = panel();
         root.addView(monthPanel, matchWrapTop(18));
-        TextView monthPill = addPanelHead(monthPanel, "月度趋势", monthLabel(selectedMonthStart, today) + " ▾");
+        TextView monthPill = addPanelHead(monthPanel, getString(R.string.stats_month_title), selectorText(monthLabel(selectedMonthStart, today)));
         monthPill.setOnClickListener(v -> showDateSheet(DatePickMode.MONTH));
         MonthTrendView monthView = new MonthTrendView(this);
         monthView.setSummaries(month);
         monthPanel.addView(monthView, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(190)));
-        monthPanel.addView(note("本月已记录 " + activeDays(month) + " 天"), matchWrapTop(8));
+        monthPanel.addView(note(formatResource(R.string.stats_month_recorded_days, "count", activeDays(month))), matchWrapTop(8));
 
         LinearLayout sessionsPanel = panel();
         root.addView(sessionsPanel, matchWrapTop(18));
-        TextView rangePill = addPanelHead(sessionsPanel, "连续使用分析", compactDate(rangeStart) + " ▾ " + compactDate(rangeEnd) + " ▾");
+        TextView rangePill = addPanelHead(sessionsPanel, getString(R.string.stats_sessions_title), selectorText(compactDate(rangeStart)) + " " + selectorText(compactDate(rangeEnd)));
         rangePill.setOnClickListener(v -> showDateSheet(DatePickMode.RANGE));
         ContinuousBandsView bandsView = new ContinuousBandsView(this);
         bandsView.setSessions(sessions);
         sessionsPanel.addView(bandsView, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(150)));
         sessionsPanel.addView(note(sessions.isEmpty()
-                ? "暂无连续使用片段。"
-                : "最长连续 " + DurationFormatter.format(max(sessions)) + "，建议减少 45 分钟以上的连续使用。"), matchWrapTop(8));
+                ? getString(R.string.stats_sessions_empty)
+                : formatResource(R.string.stats_sessions_advice, "duration", formatDuration(max(sessions)))), matchWrapTop(8));
 
         Log.i(DIAG_TAG, "StatsActivity buildUi end totalMs=" + elapsed(totalStartedAt));
         return scroll;
@@ -240,12 +241,12 @@ public final class StatsActivity extends Activity {
         panel.setBackground(rounded(Color.WHITE, dp(28), COLOR_LINE, 1));
 
         String hintText = mode == DatePickMode.WEEK
-                ? "点击任意一天选择整周"
+                ? getString(R.string.calendar_pick_week)
                 : mode == DatePickMode.MONTH
-                    ? "点击任意一天选择整月"
+                    ? getString(R.string.calendar_pick_month)
                     : mode == DatePickMode.RANGE
-                        ? "先选开始日期，再选结束日期"
-                        : "点击日期选择单日";
+                        ? getString(R.string.calendar_pick_range_next)
+                        : getString(R.string.calendar_pick_day);
 
         TextView hint = text(hintText, 14, COLOR_MUTED, false);
         panel.addView(hint, matchWrap());
@@ -281,7 +282,12 @@ public final class StatsActivity extends Activity {
 
         Runnable[] render = new Runnable[1];
         render[0] = () -> {
-            monthTitle.setText(displayMonth[0].getYear() + "年 " + displayMonth[0].getMonthValue() + "月");
+            monthTitle.setText(formatResource(
+                    R.string.calendar_month_title,
+                    "year",
+                    displayMonth[0].getYear(),
+                    "month",
+                    displayMonth[0].getMonthValue()));
             renderCalendarGrid(grid, mode, displayMonth[0], dialog, selectingRangeEnd, render[0]);
         };
 
@@ -294,7 +300,7 @@ public final class StatsActivity extends Activity {
             render[0].run();
         });
 
-        TextView cancel = text("取消", 16, COLOR_TEXT, true);
+        TextView cancel = text(getString(R.string.common_cancel), 16, COLOR_TEXT, true);
         cancel.setGravity(Gravity.CENTER);
         cancel.setMinHeight(dp(44));
         cancel.setBackground(rounded(Color.rgb(239, 242, 244), dp(999), Color.TRANSPARENT, 0));
@@ -329,7 +335,7 @@ public final class StatsActivity extends Activity {
 
     private void renderCalendarGrid(GridLayout grid, DatePickMode mode, LocalDate monthStart, Dialog dialog, boolean[] selectingRangeEnd, Runnable rerender) {
         grid.removeAllViews();
-        String[] weekdays = { "一", "二", "三", "四", "五", "六", "日" };
+        String[] weekdays = weekdayLabels(this);
         for (String weekday : weekdays) {
             TextView label = text(weekday, 13, COLOR_MUTED, false);
             label.setGravity(Gravity.CENTER);
@@ -441,18 +447,18 @@ public final class StatsActivity extends Activity {
         return date.minusDays(date.getDayOfWeek().getValue() - DayOfWeek.MONDAY.getValue());
     }
 
-    private static String dateLabel(LocalDate date, LocalDate today) {
-        return date.equals(today) ? "今天" : compactDate(date);
+    private String dateLabel(LocalDate date, LocalDate today) {
+        return date.equals(today) ? getString(R.string.common_today) : compactDate(date);
     }
 
-    private static String weekLabel(LocalDate weekStart, LocalDate today) {
-        return weekStart.equals(startOfWeek(today)) ? "本周" : compactDate(weekStart) + "-" + compactDate(weekStart.plusDays(6));
+    private String weekLabel(LocalDate weekStart, LocalDate today) {
+        return weekStart.equals(startOfWeek(today)) ? getString(R.string.common_this_week) : compactDate(weekStart) + "-" + compactDate(weekStart.plusDays(6));
     }
 
-    private static String monthLabel(LocalDate monthStart, LocalDate today) {
+    private String monthLabel(LocalDate monthStart, LocalDate today) {
         return monthStart.getYear() == today.getYear() && monthStart.getMonthValue() == today.getMonthValue()
-                ? "本月"
-                : monthStart.getMonthValue() + "月";
+                ? getString(R.string.common_this_month)
+                : formatResource(R.string.calendar_month_compact, "month", monthStart.getMonthValue());
     }
 
     private static String compactDate(LocalDate date) {
@@ -511,20 +517,20 @@ public final class StatsActivity extends Activity {
         titleView.setIncludeFontPadding(false);
         card.addView(titleView, matchWrap());
 
-        TextView peakText = text("集中 " + peakHour(summary.hourlySeconds), 14, COLOR_MUTED, false);
+        TextView peakText = text(formatResource(R.string.stats_daily_summary_peak_short, "range", peakHour(summary.hourlySeconds)), 14, COLOR_MUTED, false);
         peakText.setLineSpacing(0f, 1.15f);
         card.addView(peakText, matchWrapTop(8));
 
-        TextView longestText = text("最长 " + DurationFormatter.format(longestSession(summary)), 14, COLOR_MUTED, false);
+        TextView longestText = text(formatResource(R.string.stats_daily_summary_longest_short, "duration", formatDuration(longestSession(summary))), 14, COLOR_MUTED, false);
         longestText.setLineSpacing(0f, 1.15f);
         card.addView(longestText, matchWrapTop(6));
 
-        TextView sourceText = text(EyeCareSummaryFormatter.sourceText(breakdown), 14, COLOR_MUTED, false);
+        TextView sourceText = text(summarySourceText(breakdown), 14, COLOR_MUTED, false);
         sourceText.setLineSpacing(0f, 1.15f);
         card.addView(sourceText, matchWrapTop(6));
 
         TextView careText = text(
-                EyeCareSummaryFormatter.careText(
+                summaryCareText(
                         longestSession(summary),
                         nightSeconds(summary.hourlySeconds),
                         breakdown.phonePercent()),
@@ -540,10 +546,10 @@ public final class StatsActivity extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.addView(legendItem("\u7535\u8111", COLOR_GREEN), wrapWrap());
+        row.addView(legendItem(getString(R.string.common_pc), COLOR_GREEN), wrapWrap());
         LinearLayout.LayoutParams phoneParams = wrapWrap();
         phoneParams.leftMargin = dp(22);
-        row.addView(legendItem("\u624b\u673a", COLOR_BLUE), phoneParams);
+        row.addView(legendItem(getString(R.string.common_phone), COLOR_BLUE), phoneParams);
         return row;
     }
 
@@ -594,6 +600,97 @@ public final class StatsActivity extends Activity {
         return note;
     }
 
+    private String formatResource(int resId, Object... pairs) {
+        return formatResource(this, resId, pairs);
+    }
+
+    private static String formatResource(Context context, int resId, Object... pairs) {
+        String text = context.getString(resId);
+        for (int i = 0; i + 1 < pairs.length; i += 2) {
+            text = text.replace("{" + pairs[i] + "}", String.valueOf(pairs[i + 1]));
+        }
+        return text;
+    }
+
+    private String formatDuration(long totalSeconds) {
+        return formatDuration(this, totalSeconds);
+    }
+
+    private static String formatDuration(Context context, long totalSeconds) {
+        long safeSeconds = Math.max(0L, totalSeconds);
+        long totalMinutes = safeSeconds / 60L;
+        long hours = totalMinutes / 60L;
+        long minutes = totalMinutes % 60L;
+        if (hours > 0L) {
+            return formatResource(
+                    context,
+                    R.string.duration_hours_minutes_padded,
+                    "hours",
+                    hours,
+                    "minutes:00",
+                    String.format("%02d", minutes));
+        }
+        return formatResource(context, R.string.duration_minutes, "minutes", minutes);
+    }
+
+    private static String formatTooltipMinutes(Context context, long totalSeconds) {
+        return formatResource(context, R.string.duration_minutes, "minutes", Math.max(0L, totalSeconds) / 60L);
+    }
+
+    private static String formatTooltipHours(Context context, long totalSeconds) {
+        long safeSeconds = Math.max(0L, totalSeconds);
+        long halfHourUnits = Math.round(safeSeconds / 1800D);
+        long wholeHours = halfHourUnits / 2L;
+        if (halfHourUnits % 2L == 0L) {
+            return formatResource(context, R.string.duration_hours, "hours", wholeHours);
+        }
+        return formatResource(context, R.string.duration_half_hours, "hours", wholeHours);
+    }
+
+    private String countText(int count) {
+        return formatResource(R.string.stats_sessions_count, "count", count);
+    }
+
+    private String summarySourceText(DeviceUsageBreakdown breakdown) {
+        if (breakdown.pcSeconds + breakdown.phoneSeconds <= 0L) {
+            return getString(R.string.stats_source_empty);
+        }
+        return breakdown.phonePercent() >= breakdown.pcPercent()
+                ? formatResource(R.string.stats_source_phone_high, "percent", breakdown.phonePercent())
+                : formatResource(R.string.stats_source_pc_high, "percent", breakdown.pcPercent());
+    }
+
+    private String summaryCareText(long longestSessionSeconds, long nightSeconds, int phonePercent) {
+        if (longestSessionSeconds >= 45L * 60L) {
+            return getString(R.string.stats_care_continuous_high);
+        }
+        if (nightSeconds >= 60L * 60L) {
+            return getString(R.string.stats_care_night_high);
+        }
+        if (phonePercent >= 60) {
+            return getString(R.string.stats_care_phone_high);
+        }
+        return longestSessionSeconds <= 0L && nightSeconds <= 0L
+                ? getString(R.string.stats_care_no_pressure)
+                : getString(R.string.stats_care_steady);
+    }
+
+    private static String[] weekdayLabels(Context context) {
+        return new String[] {
+                context.getString(R.string.calendar_weekday_mon),
+                context.getString(R.string.calendar_weekday_tue),
+                context.getString(R.string.calendar_weekday_wed),
+                context.getString(R.string.calendar_weekday_thu),
+                context.getString(R.string.calendar_weekday_fri),
+                context.getString(R.string.calendar_weekday_sat),
+                context.getString(R.string.calendar_weekday_sun)
+        };
+    }
+
+    private static String selectorText(String text) {
+        return text + " ▾";
+    }
+
     private int colorForToday(long seconds) {
         TodayTone tone = TodayTone.fromSeconds(seconds);
         if (tone == TodayTone.DANGER) {
@@ -613,7 +710,7 @@ public final class StatsActivity extends Activity {
         return max;
     }
 
-    private static String peakHour(long[] hourlySeconds) {
+    private String peakHour(long[] hourlySeconds) {
         long max = 0L;
         int hour = 0;
         for (int i = 0; i < hourlySeconds.length; i++) {
@@ -623,9 +720,14 @@ public final class StatsActivity extends Activity {
             }
         }
         if (max <= 0L) {
-            return "暂无";
+            return getString(R.string.common_none);
         }
-        return String.format("%02d-%02d点", hour, (hour + 1) % 24);
+        return formatResource(
+                R.string.time_hour_range,
+                "start:00",
+                String.format("%02d", hour),
+                "end:00",
+                String.format("%02d", (hour + 1) % 24));
     }
 
     private static long nightSeconds(long[] hourlySeconds) {
@@ -801,7 +903,7 @@ public final class StatsActivity extends Activity {
                 float length = dpLocal(10) + seconds * (outer - inner - dpLocal(12)) / (float) max;
                 RectF bounds = drawSourceHourBar(canvas, cx, cy, -90f + hour * 15f, inner, length, pcSeconds, phoneSeconds);
                 bounds.inset(-dpLocal(8), -dpLocal(8));
-                hits.add(new ChartHit(bounds, DurationFormatter.formatTooltipMinutes(seconds), bounds.centerX(), bounds.centerY()));
+                hits.add(new ChartHit(bounds, formatTooltipMinutes(getContext(), seconds), bounds.centerX(), bounds.centerY()));
             }
             drawHourLabels(canvas, cx, cy, outer);
             paint.setStyle(Paint.Style.FILL);
@@ -984,7 +1086,7 @@ public final class StatsActivity extends Activity {
             for (DailySummary summary : summaries) {
                 max = Math.max(max, summary.totalSeconds);
             }
-            String[] labels = { "一", "二", "三", "四", "五", "六", "日" };
+            String[] labels = weekdayLabels(getContext());
             float slot = getWidth() / 7f;
             float maxHeight = getHeight() - dpLocal(34);
             paint.setTextAlign(Paint.Align.CENTER);
@@ -1011,7 +1113,7 @@ public final class StatsActivity extends Activity {
                 }
                 RectF hit = new RectF(bar);
                 hit.inset(-dpLocal(8), -dpLocal(8));
-                hits.add(new ChartHit(hit, DurationFormatter.formatTooltipHours(seconds), hit.centerX(), top));
+                hits.add(new ChartHit(hit, formatTooltipHours(getContext(), seconds), hit.centerX(), top));
                 paint.setColor(COLOR_MUTED);
                 canvas.drawText(labels[i], i * slot + slot / 2f, getHeight() - dpLocal(4), paint);
             }
@@ -1100,7 +1202,7 @@ public final class StatsActivity extends Activity {
                 float y = points.get(i)[1];
                 canvas.drawCircle(x, y, dpLocal(3.5f), paint);
                 RectF hit = new RectF(x - dpLocal(12), y - dpLocal(12), x + dpLocal(12), y + dpLocal(12));
-                hits.add(new ChartHit(hit, DurationFormatter.formatTooltipHours(summaries.get(i).totalSeconds), x, y));
+                hits.add(new ChartHit(hit, formatTooltipHours(getContext(), summaries.get(i).totalSeconds), x, y));
             }
             drawChartTip(canvas, paint, tipText, tipX, tipY, getResources().getDisplayMetrics().density, getWidth(), AppFonts.bold(getContext()));
         }
@@ -1159,7 +1261,11 @@ public final class StatsActivity extends Activity {
                 }
             }
             int max = Math.max(1, Math.max(counts[0], Math.max(counts[1], counts[2])));
-            String[] labels = { "0-30分", "30-45分", "45分以上" };
+            String[] labels = {
+                    getContext().getString(R.string.stats_sessions_band_under30),
+                    getContext().getString(R.string.stats_sessions_band_30to45),
+                    getContext().getString(R.string.stats_sessions_band_over45)
+            };
             int[] colors = { COLOR_GREEN, COLOR_YELLOW, COLOR_RED };
             paint.setTypeface(AppFonts.regular(getContext()));
             paint.setTextSize(dpLocal(12));
@@ -1177,7 +1283,7 @@ public final class StatsActivity extends Activity {
                 paint.setColor(colors[i]);
                 canvas.drawRect(left, top, left + width * counts[i] / max, top + dpLocal(12), paint);
                 paint.setColor(COLOR_TEXT);
-                canvas.drawText(counts[i] + "次", getWidth() - dpLocal(60), y, paint);
+                canvas.drawText(formatResource(getContext(), R.string.stats_sessions_count, "count", counts[i]), getWidth() - dpLocal(60), y, paint);
             }
         }
 

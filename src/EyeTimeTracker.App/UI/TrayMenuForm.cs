@@ -1,4 +1,5 @@
 using System.Drawing.Drawing2D;
+using EyeTimeTracker.App.Localization;
 
 namespace EyeTimeTracker.App.UI;
 
@@ -29,12 +30,12 @@ public sealed class TrayMenuForm : Form
         Font = AppFonts.Create(9F, FontStyle.Regular, GraphicsUnit.Point);
         Padding = new Padding(16);
 
-        Controls.Add(new MenuButton("\u4e3b\u754c\u9762", "\u2302", AccentGreen)
+        Controls.Add(new MenuButton(AppText.Get("tray.mainPage"), "\u2302", AccentGreen)
         {
             Bounds = new Rectangle(16, 14, 158, 42),
             ClickAction = openMain
         });
-        Controls.Add(new MenuButton("\u7edf\u8ba1\u9875", "\u25a5", AccentBlue)
+        Controls.Add(new MenuButton(AppText.Get("tray.statsPage"), "\u25a5", AccentBlue)
         {
             Bounds = new Rectangle(16, 62, 158, 42),
             ClickAction = openStats
@@ -42,7 +43,7 @@ public sealed class TrayMenuForm : Form
 
         Controls.Add(new Divider { Bounds = new Rectangle(16, 116, 158, 1) });
 
-        Controls.Add(new MenuButton("\u9000\u51fa", "\u00d7", Danger)
+        Controls.Add(new MenuButton(AppText.Get("tray.quit"), "\u00d7", Danger)
         {
             Bounds = new Rectangle(16, 124, 158, 42),
             ClickAction = exitApplication

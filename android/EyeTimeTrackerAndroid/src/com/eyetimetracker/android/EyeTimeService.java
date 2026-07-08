@@ -83,7 +83,7 @@ public final class EyeTimeService extends Service implements SensorEventListener
             stopSelf();
             return START_NOT_STICKY;
         }
-        startForeground(FOREGROUND_ID, buildStatusNotification("计时服务运行中"));
+        startForeground(FOREGROUND_ID, buildStatusNotification(getString(R.string.sync_service_running)));
         handler.removeCallbacks(tickRunnable);
         handler.post(tickRunnable);
         return START_STICKY;
@@ -217,8 +217,8 @@ public final class EyeTimeService extends Service implements SensorEventListener
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             return;
         }
-        NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "\u7528\u773c\u65f6\u95f4\u8bb0\u5f55", NotificationManager.IMPORTANCE_LOW);
-        channel.setDescription("\u540e\u53f0\u7edf\u8ba1\u670d\u52a1\u72b6\u6001");
+        NotificationChannel channel = new NotificationChannel(CHANNEL_ID, getString(R.string.app_name), NotificationManager.IMPORTANCE_LOW);
+        channel.setDescription(getString(R.string.sync_service_channel_description));
         NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager != null) {
             for (String legacyChannelId : ReminderNotificationProfile.LEGACY_CHANNEL_IDS) {
@@ -227,9 +227,9 @@ public final class EyeTimeService extends Service implements SensorEventListener
             manager.createNotificationChannel(channel);
             NotificationChannel reminderChannel = new NotificationChannel(
                     REMINDER_CHANNEL_ID,
-                    "\u7528\u773c\u63d0\u9192",
+                    getString(R.string.reminder_alert_title),
                     ReminderNotificationProfile.CHANNEL_IMPORTANCE);
-            reminderChannel.setDescription("\u5230\u8fbe\u8bbe\u5b9a\u7528\u773c\u65f6\u957f\u65f6\u63d0\u9192\u4f11\u606f");
+            reminderChannel.setDescription(getString(R.string.reminder_channel_description));
             reminderChannel.enableVibration(true);
             reminderChannel.setVibrationPattern(ReminderNotificationProfile.VIBRATION_PATTERN);
             if (ReminderNotificationProfile.ENABLE_SOUND) {
@@ -247,7 +247,7 @@ public final class EyeTimeService extends Service implements SensorEventListener
                 ? new Notification.Builder(this, CHANNEL_ID)
                 : new Notification.Builder(this);
         return builder
-                .setContentTitle("\u7528\u773c\u65f6\u95f4\u8bb0\u5f55")
+                .setContentTitle(getString(R.string.app_name))
                 .setContentText(text)
                 .setSmallIcon(R.drawable.ic_launcher)
                 .setContentIntent(pendingIntent)
@@ -256,8 +256,11 @@ public final class EyeTimeService extends Service implements SensorEventListener
     }
 
     private void updateForegroundNotification(long todaySeconds) {
-        String status = counting ? "\u8ba1\u65f6\u4e2d" : "\u6682\u505c";
-        Notification notification = buildStatusNotification(status + " \u00b7 \u4eca\u5929 " + DurationFormatter.format(todaySeconds));
+        String status = counting ? getString(R.string.sync_status_counting) : getString(R.string.main_status_paused);
+        String text = getString(R.string.sync_notification_status)
+                .replace("{status}", status)
+                .replace("{duration}", DurationFormatter.format(this, todaySeconds));
+        Notification notification = buildStatusNotification(text);
         NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager != null) {
             manager.notify(FOREGROUND_ID, notification);
@@ -286,9 +289,9 @@ public final class EyeTimeService extends Service implements SensorEventListener
         Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                 ? new Notification.Builder(this, REMINDER_CHANNEL_ID)
                 : new Notification.Builder(this);
-        String message = ReminderAlert.message(reminderMinutes, repeatReminder, reminderStep);
+        String message = ReminderAlert.message(this, reminderMinutes, repeatReminder, reminderStep);
         Notification notification = builder
-                .setContentTitle(ReminderAlert.title())
+                .setContentTitle(ReminderAlert.title(this))
                 .setContentText(message)
                 .setSmallIcon(R.drawable.ic_launcher)
                 .setContentIntent(alertPendingIntent)

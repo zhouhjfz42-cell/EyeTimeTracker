@@ -132,19 +132,19 @@ public final class MainActivity extends Activity {
         root.addView(header, matchWrap());
 
         TextView title = new TextView(this);
-        title.setText("用眼时间");
+        title.setText(R.string.app_main_title);
         title.setTextSize(30);
         title.setTextColor(COLOR_TEXT);
         title.setTypeface(AppFonts.bold(this));
         title.setIncludeFontPadding(false);
         header.addView(title, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        TextView startButton = lightTopButton("启动");
+        TextView startButton = lightTopButton(getString(R.string.common_start));
         startButton.setOnClickListener(v -> startTrackerService());
         header.addView(startButton, new LinearLayout.LayoutParams(dp(76), dp(38)));
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("亮屏时计入统计");
+        subtitle.setText(R.string.main_subtitle_android);
         subtitle.setTextSize(14);
         subtitle.setTextColor(COLOR_MUTED);
         AppFonts.apply(subtitle, false);
@@ -167,10 +167,10 @@ public final class MainActivity extends Activity {
         cards.setUseDefaultMargins(false);
         LinearLayout.LayoutParams cardsParams = matchWrapTop(26);
         root.addView(cards, cardsParams);
-        addCard(cards, buildMetricCard("昨天", yesterdayValue = cardValueText(), null), 0, 0);
-        addCard(cards, buildMetricCard("本周", weekValue = cardValueText(), null), 0, 1);
-        addCard(cards, buildMetricCard("本月", monthValue = cardValueText(), null), 1, 0);
-        addCard(cards, buildMetricCard("提醒", reminderValue = cardValueText(), v -> showReminderDialog()), 1, 1);
+        addCard(cards, buildMetricCard(getString(R.string.main_card_yesterday), yesterdayValue = cardValueText(), null), 0, 0);
+        addCard(cards, buildMetricCard(getString(R.string.main_card_week), weekValue = cardValueText(), null), 0, 1);
+        addCard(cards, buildMetricCard(getString(R.string.main_card_month), monthValue = cardValueText(), null), 1, 0);
+        addCard(cards, buildMetricCard(getString(R.string.main_card_reminder), reminderValue = cardValueText(), v -> showReminderDialog()), 1, 1);
 
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
@@ -178,12 +178,12 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams actionsParams = matchWrapTop(24);
         root.addView(actions, actionsParams);
 
-        TextView statsButton = actionButton("统计页", true);
+        TextView statsButton = actionButton(getString(R.string.common_stats_page), true);
         statsButton.setOnClickListener(v -> startActivity(new Intent(this, StatsActivity.class)));
         actions.addView(statsButton, centeredButtonParams());
 
-        root.addView(helpText("1. 将手机和电脑配对，共同统计注视两块屏幕的时间，有统计到重合时段的会删除重复统计，但可能会有部分误差；"), matchWrapTop(18));
-        root.addView(helpText("2. 使用手机几秒内会自动开始统计，如果没有开始，点击右上角的“启动”。"), matchWrapTop(8));
+        root.addView(helpText(getString(R.string.main_help_sync)), matchWrapTop(18));
+        root.addView(helpText(getString(R.string.main_help_auto_start)), matchWrapTop(8));
         return scroll;
     }
 
@@ -193,7 +193,7 @@ public final class MainActivity extends Activity {
         row.setGravity(Gravity.CENTER_VERTICAL);
 
         TextView label = new TextView(this);
-        label.setText("今天");
+        label.setText(R.string.common_today);
         label.setTextSize(18);
         label.setTextColor(COLOR_MUTED);
         AppFonts.apply(label, false);
@@ -209,7 +209,7 @@ public final class MainActivity extends Activity {
         row.addView(statusDot, dotParams);
 
         statusValue = new TextView(this);
-        statusValue.setText("统计中");
+        statusValue.setText(R.string.main_status_tracking);
         statusValue.setTextSize(18);
         statusValue.setTextColor(COLOR_MUTED);
         AppFonts.apply(statusValue, false);
@@ -217,7 +217,7 @@ public final class MainActivity extends Activity {
         statusValue.setIncludeFontPadding(false);
         row.addView(statusValue, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        pairingButton = statusActionButton("\u624b\u673a\u914d\u5bf9");
+        pairingButton = statusActionButton(getString(R.string.pair_pc_title));
         pairingButton.setOnClickListener(v -> {
             if (store.getSyncSettings().isPaired) {
                 showDisconnectDialog();
@@ -338,16 +338,20 @@ public final class MainActivity extends Activity {
     private void refresh() {
         LocalDate today = LocalDate.now();
         long todaySeconds = store.displayTodaySeconds(today);
-        todayValue.setText(DurationFormatter.format(todaySeconds));
+        todayValue.setText(DurationFormatter.format(this, todaySeconds));
         todayValue.setTextColor(colorForTone(TodayTone.fromSeconds(todaySeconds)));
-        yesterdayValue.setText(DurationFormatter.formatMainCard(store.displayYesterdaySeconds(today)));
-        weekValue.setText(DurationFormatter.formatMainCard(store.displayWeekSeconds(today)));
-        monthValue.setText(DurationFormatter.formatMainCard(store.displayMonthSeconds(today)));
-        reminderValue.setText(ReminderThreshold.format(store.getReminderMinutes()));
+        yesterdayValue.setText(DurationFormatter.formatMainCard(this, store.displayYesterdaySeconds(today)));
+        weekValue.setText(DurationFormatter.formatMainCard(this, store.displayWeekSeconds(today)));
+        monthValue.setText(DurationFormatter.formatMainCard(this, store.displayMonthSeconds(today)));
+        reminderValue.setText(ReminderThreshold.format(this, store.getReminderMinutes()));
         SyncSettings syncSettings = store.getSyncSettings();
-        statusValue.setText(ConnectionStatusText.format("统计中", syncSettings.isPaired, syncSettings.lastError == null || syncSettings.lastError.trim().isEmpty(), "电脑"));
+        statusValue.setText(formatConnectionStatus(
+                getString(R.string.main_status_tracking),
+                syncSettings.isPaired,
+                syncSettings.lastError == null || syncSettings.lastError.trim().isEmpty(),
+                getString(R.string.common_pc)));
         if (pairingButton != null) {
-            pairingButton.setText(syncSettings.isPaired ? "\u65ad\u5f00" : "\u624b\u673a\u914d\u5bf9");
+            pairingButton.setText(syncSettings.isPaired ? getString(R.string.common_disconnect) : getString(R.string.pair_pc_title));
             ViewGroup.LayoutParams buttonParams = pairingButton.getLayoutParams();
             if (buttonParams != null) {
                 buttonParams.width = syncSettings.isPaired ? dp(68) : dp(104);
@@ -379,6 +383,17 @@ public final class MainActivity extends Activity {
         }, "EyeTimeConnectionCheck").start();
     }
 
+    private String formatConnectionStatus(String baseStatus, boolean isPaired, boolean isOnline, String peerName) {
+        if (!isPaired || peerName == null || peerName.trim().isEmpty()) {
+            return baseStatus;
+        }
+
+        int templateId = isOnline ? R.string.main_status_connected : R.string.main_status_offline;
+        return getString(templateId)
+                .replace("{status}", baseStatus)
+                .replace("{device}", peerName);
+    }
+
     private void showReminderDialog() {
         Dialog dialog = new Dialog(this);
         LinearLayout panel = new LinearLayout(this);
@@ -396,7 +411,7 @@ public final class MainActivity extends Activity {
         head.addView(titleBlock, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
         TextView title = new TextView(this);
-        title.setText("提醒时间");
+        title.setText(R.string.reminder_title);
         title.setTextSize(24);
         title.setTextColor(COLOR_TEXT);
         title.setTypeface(AppFonts.bold(this));
@@ -404,7 +419,7 @@ public final class MainActivity extends Activity {
         titleBlock.addView(title, matchWrap());
 
         TextView hint = new TextView(this);
-        hint.setText("单位：分钟（" + ReminderThreshold.formatEquivalent(store.getReminderMinutes()) + "）");
+        hint.setText(reminderUnitHint(store.getReminderMinutes()));
         hint.setTextSize(14);
         hint.setTextColor(COLOR_MUTED);
         AppFonts.apply(hint, false);
@@ -443,7 +458,7 @@ public final class MainActivity extends Activity {
         field.addView(input, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
         TextView unit = new TextView(this);
-        unit.setText("分钟");
+        unit.setText(R.string.reminder_unit_minute);
         unit.setTextSize(22);
         unit.setTextColor(COLOR_MUTED);
         AppFonts.apply(unit, false);
@@ -460,7 +475,7 @@ public final class MainActivity extends Activity {
         repeatRow.addView(repeatSwitch, wrapWrap());
 
         TextView repeatLabel = new TextView(this);
-        repeatLabel.setText(ReminderThreshold.formatRepeatLabel(store.getReminderMinutes()));
+        repeatLabel.setText(ReminderThreshold.formatRepeatLabel(this, store.getReminderMinutes()));
         repeatLabel.setTextSize(11);
         repeatLabel.setTextColor(COLOR_MUTED);
         AppFonts.apply(repeatLabel, false);
@@ -478,8 +493,8 @@ public final class MainActivity extends Activity {
 
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
                 int minutes = parseMinutes(s.toString(), store.getReminderMinutes());
-                hint.setText("单位：分钟（" + ReminderThreshold.formatEquivalent(minutes) + "）");
-                repeatLabel.setText(ReminderThreshold.formatRepeatLabel(minutes));
+                hint.setText(reminderUnitHint(minutes));
+                repeatLabel.setText(ReminderThreshold.formatRepeatLabel(MainActivity.this, minutes));
             }
 
             @Override public void afterTextChanged(Editable s) {
@@ -491,17 +506,17 @@ public final class MainActivity extends Activity {
         actions.setGravity(Gravity.CENTER);
         panel.addView(actions, matchWrapTop(16));
 
-        TextView cancel = actionButton("取消", false);
+        TextView cancel = actionButton(getString(R.string.common_cancel), false);
         cancel.setOnClickListener(v -> dialog.dismiss());
         actions.addView(cancel, weightedButtonParams(0, dp(6)));
 
-        TextView save = actionButton("保存", true);
+        TextView save = actionButton(getString(R.string.common_save), true);
         save.setOnClickListener(v -> {
             int minutes = parseMinutes(input.getText().toString(), ReminderThreshold.DEFAULT_MINUTES);
             store.saveReminderSettings(minutes, repeatSwitch.isChecked());
             refresh();
             dialog.dismiss();
-            Toast.makeText(this, "提醒时间已保存", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.reminder_saved, Toast.LENGTH_SHORT).show();
             runSyncAfterSettingsChange();
         });
         actions.addView(save, weightedButtonParams(dp(6), 0));
@@ -521,6 +536,11 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private String reminderUnitHint(int minutes) {
+        return getString(R.string.reminder_unit_hint)
+                .replace("{equivalent}", ReminderThreshold.formatEquivalent(this, minutes));
+    }
+
     private void showPairingDialog() {
         Dialog dialog = new Dialog(this);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -534,7 +554,7 @@ public final class MainActivity extends Activity {
         panel.setBackground(rounded(Color.WHITE, dp(26), Color.rgb(229, 235, 232), 1));
 
         TextView title = new TextView(this);
-        title.setText("\u624b\u673a\u914d\u5bf9");
+        title.setText(R.string.pair_android_title);
         title.setTextSize(24);
         title.setTextColor(COLOR_TEXT);
         title.setTypeface(AppFonts.bold(this));
@@ -542,7 +562,7 @@ public final class MainActivity extends Activity {
         panel.addView(title, matchWrap());
 
         TextView hint = new TextView(this);
-        hint.setText("\u5148\u5728\u7535\u8111\u4e0a\u70b9\u51fb\u201c\u624b\u673a\u914d\u5bf9\u201d\uff0c\u8f93\u5165\u4e0b\u9762\u7684 6 \u4f4d\u7801\u3002\u624b\u673a\u4f1a\u81ea\u52a8\u5bfb\u627e\u7535\u8111\uff0c\u627e\u4e0d\u5230\u65f6\u518d\u624b\u52a8\u586b\u5730\u5740\u3002");
+        hint.setText(R.string.pair_android_instruction);
         hint.setTextSize(14);
         hint.setTextColor(COLOR_MUTED);
         hint.setLineSpacing(0f, 1.12f);
@@ -561,7 +581,7 @@ public final class MainActivity extends Activity {
         panel.addView(code, codeParams);
 
         EditText hostInput = new EditText(this);
-        hostInput.setHint("\u7535\u8111 IP \u5730\u5740\uff0c\u4f8b\u5982 192.168.1.8");
+        hostInput.setHint(R.string.pair_android_host_hint);
         hostInput.setText(currentSettings.peerHost);
         hostInput.setTextSize(16);
         hostInput.setSingleLine(true);
@@ -571,7 +591,7 @@ public final class MainActivity extends Activity {
         panel.addView(hostInput, matchWrapTop(18));
 
         EditText portInput = new EditText(this);
-        portInput.setHint("\u7aef\u53e3");
+        portInput.setHint(R.string.pair_android_port_hint);
         portInput.setText(String.valueOf(currentSettings.peerPort > 0 ? currentSettings.peerPort : 17420));
         portInput.setTextSize(16);
         portInput.setSingleLine(true);
@@ -581,14 +601,14 @@ public final class MainActivity extends Activity {
         panel.addView(portInput, matchWrapTop(10));
 
         TextView status = new TextView(this);
-        status.setText("\u6b63\u5728\u540c\u4e00\u4e2a WiFi \u91cc\u5bfb\u627e\u7535\u8111\u2026");
+        status.setText(R.string.pair_android_searching);
         status.setTextSize(13);
         status.setTextColor(COLOR_MUTED);
         status.setLineSpacing(0f, 1.1f);
         panel.addView(status, matchWrapTop(12));
 
         final TextView[] pairButton = new TextView[1];
-        TextView manual = lightTopButton("\u627e\u4e0d\u5230\u7535\u8111\uff1f\u624b\u52a8\u586b\u5199");
+        TextView manual = lightTopButton(getString(R.string.pair_android_manual_question));
         manual.setOnClickListener(v -> {
             pairingStopped.set(true);
             hostInput.setVisibility(View.VISIBLE);
@@ -596,9 +616,9 @@ public final class MainActivity extends Activity {
             manual.setVisibility(View.GONE);
             if (pairButton[0] != null) {
                 pairButton[0].setEnabled(true);
-                pairButton[0].setText("\u624b\u52a8\u8fde\u63a5");
+                pairButton[0].setText(R.string.pair_android_manual);
             }
-            status.setText("\u8bf7\u8f93\u5165\u7535\u8111 IP \u5730\u5740\uff0c\u7136\u540e\u70b9\u51fb\u624b\u52a8\u8fde\u63a5\u3002");
+            status.setText(R.string.pair_android_manual_hint);
         });
         panel.addView(manual, matchWrapTop(12));
 
@@ -607,28 +627,28 @@ public final class MainActivity extends Activity {
         actions.setGravity(Gravity.CENTER);
         panel.addView(actions, matchWrapTop(20));
 
-        TextView cancel = actionButton("\u53d6\u6d88", false);
+        TextView cancel = actionButton(getString(R.string.common_cancel), false);
         cancel.setOnClickListener(v -> dialog.dismiss());
         actions.addView(cancel, weightedButtonParams(0, dp(6)));
 
-        TextView pair = actionButton("\u7b49\u5f85\u7535\u8111\u786e\u8ba4", true);
+        TextView pair = actionButton(getString(R.string.pair_android_wait_confirm), true);
         pairButton[0] = pair;
         pair.setEnabled(false);
         pair.setOnClickListener(v -> {
             String manualHost = hostInput.getText().toString().trim();
             int manualPort = parsePort(portInput.getText().toString(), 17420);
             if (manualHost.isEmpty()) {
-                Toast.makeText(this, "\u8bf7\u8f93\u5165\u7535\u8111 IP \u5730\u5740", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, R.string.pair_android_host_required, Toast.LENGTH_SHORT).show();
                 return;
             }
             if (manualPort <= 0 || manualPort > 65535) {
-                Toast.makeText(this, "\u8bf7\u8f93\u5165\u6b63\u786e\u7aef\u53e3", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, R.string.pair_android_port_required, Toast.LENGTH_SHORT).show();
                 return;
             }
 
             pair.setEnabled(false);
-            pair.setText("\u8fde\u63a5\u4e2d");
-            status.setText("\u6b63\u5728\u8fde\u63a5\u7535\u8111\u2026");
+            pair.setText(R.string.pair_android_connecting_short);
+            status.setText(R.string.pair_android_connecting);
             new Thread(() -> {
                 SyncSettings settings = store.getSyncSettings();
                 settings.peerHost = manualHost;
@@ -638,11 +658,11 @@ public final class MainActivity extends Activity {
                 store.saveSyncSettings(settings);
                 handler.post(() -> {
                     pair.setEnabled(true);
-                    pair.setText("\u624b\u52a8\u8fde\u63a5");
-                    status.setText(paired ? "\u5df2\u548c\u7535\u8111\u914d\u5bf9\u3002" : "\u914d\u5bf9\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u914d\u5bf9\u7801\u548c\u7535\u8111\u662f\u5426\u5728\u540c\u4e00 WiFi\u3002");
+                    pair.setText(R.string.pair_android_manual);
+                    status.setText(paired ? getString(R.string.pair_android_connected) : getString(R.string.pair_android_failed));
                     Toast.makeText(
                             this,
-                            paired ? "\u5df2\u548c\u7535\u8111\u914d\u5bf9" : "\u914d\u5bf9\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u914d\u5bf9\u7801\u548c\u7535\u8111\u72b6\u6001",
+                            paired ? getString(R.string.pair_android_connected_toast) : getString(R.string.pair_android_failed_short),
                             Toast.LENGTH_SHORT).show();
                     if (paired) {
                         refresh();
@@ -674,7 +694,7 @@ public final class MainActivity extends Activity {
         panel.setBackground(rounded(Color.WHITE, dp(26), Color.rgb(229, 235, 232), 1));
 
         TextView title = new TextView(this);
-        title.setText("\u65ad\u5f00\u8fde\u63a5");
+        title.setText(R.string.disconnect_title);
         title.setTextSize(24);
         title.setTextColor(COLOR_TEXT);
         title.setTypeface(AppFonts.bold(this));
@@ -682,7 +702,7 @@ public final class MainActivity extends Activity {
         panel.addView(title, matchWrap());
 
         TextView message = new TextView(this);
-        message.setText("\u65ad\u5f00\u540e\uff0c\u4e0b\u6b21\u8fde\u63a5\u9700\u8981\u91cd\u65b0\u914d\u5bf9\u3002");
+        message.setText(R.string.disconnect_message);
         message.setTextSize(15);
         message.setTextColor(COLOR_MUTED);
         message.setLineSpacing(0f, 1.15f);
@@ -693,17 +713,17 @@ public final class MainActivity extends Activity {
         actions.setGravity(Gravity.CENTER);
         panel.addView(actions, matchWrapTop(22));
 
-        TextView cancel = actionButton("\u53d6\u6d88", false);
+        TextView cancel = actionButton(getString(R.string.common_cancel), false);
         cancel.setOnClickListener(v -> dialog.dismiss());
         actions.addView(cancel, weightedButtonParams(0, dp(6)));
 
-        TextView disconnect = actionButton("\u65ad\u5f00", true);
+        TextView disconnect = actionButton(getString(R.string.common_disconnect), true);
         disconnect.setOnClickListener(v -> {
             disconnect.setEnabled(false);
             SyncDisconnectPlan plan = SyncDisconnectPlan.create(store.getSyncSettings());
             store.saveSyncSettings(plan.localSettings);
             refresh();
-            Toast.makeText(this, "\u5df2\u65ad\u5f00\u7535\u8111", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.disconnect_android_toast, Toast.LENGTH_SHORT).show();
             dialog.dismiss();
             new Thread(() -> {
                 new AndroidPairingClient().disconnect(plan.peerNotificationSettings, store.getDeviceId());
@@ -741,7 +761,7 @@ public final class MainActivity extends Activity {
                     if (attempt == 2) {
                         handler.post(() -> {
                             if (!stopped.get()) {
-                                status.setText("\u8fd8\u5728\u5bfb\u627e\u7535\u8111\u3002\u8bf7\u786e\u8ba4\u7535\u8111\u5df2\u6253\u5f00\u201c\u624b\u673a\u914d\u5bf9\u201d\u7a97\u53e3\u3002");
+                                status.setText(R.string.pair_android_not_found);
                             }
                         });
                     }
@@ -757,8 +777,8 @@ public final class MainActivity extends Activity {
                 if (paired) {
                     stopped.set(true);
                     handler.post(() -> {
-                        status.setText("\u5df2\u548c\u7535\u8111\u914d\u5bf9\u3002");
-                        Toast.makeText(this, "\u5df2\u548c\u7535\u8111\u914d\u5bf9", Toast.LENGTH_SHORT).show();
+                        status.setText(R.string.pair_android_connected);
+                        Toast.makeText(this, R.string.pair_android_connected_toast, Toast.LENGTH_SHORT).show();
                         refresh();
                         dialog.dismiss();
                     });
@@ -767,7 +787,7 @@ public final class MainActivity extends Activity {
 
                 handler.post(() -> {
                     if (!stopped.get()) {
-                        status.setText("\u5df2\u627e\u5230\u7535\u8111\uff0c\u7b49\u5f85\u7535\u8111\u786e\u8ba4\u914d\u5bf9\u7801\u2026");
+                        status.setText(R.string.pair_android_found);
                     }
                 });
                 sleepPairingInterval(stopped);
@@ -776,11 +796,11 @@ public final class MainActivity extends Activity {
             handler.post(() -> {
                 if (!stopped.get()) {
                     pair.setEnabled(true);
-                    pair.setText("\u624b\u52a8\u8fde\u63a5");
+                    pair.setText(R.string.pair_android_manual);
                     hostInput.setVisibility(View.VISIBLE);
                     portInput.setVisibility(View.VISIBLE);
                     manual.setVisibility(View.GONE);
-                    status.setText("\u6682\u65f6\u6ca1\u6709\u81ea\u52a8\u8fde\u4e0a\u3002\u53ef\u4ee5\u624b\u52a8\u586b\u5199\u7535\u8111 IP \u5730\u5740\u540e\u518d\u8fde\u63a5\u3002");
+                    status.setText(R.string.pair_android_manual_fallback);
                 }
             });
         }, "EyeTimeAutoPairing").start();
@@ -807,7 +827,7 @@ public final class MainActivity extends Activity {
         content.setBackground(rounded(Color.WHITE, dp(28), COLOR_LINE, 1));
 
         TextView title = new TextView(this);
-        title.setText(ReminderAlert.title());
+        title.setText(ReminderAlert.title(this));
         title.setTextSize(26);
         title.setTextColor(COLOR_TEXT);
         title.setTypeface(AppFonts.bold(this));
@@ -815,14 +835,14 @@ public final class MainActivity extends Activity {
         content.addView(title, matchWrap());
 
         TextView message = new TextView(this);
-        message.setText(ReminderAlert.message(reminderMinutes, repeatReminder, reminderStep));
+        message.setText(ReminderAlert.message(this, reminderMinutes, repeatReminder, reminderStep));
         message.setTextSize(18);
         message.setTextColor(COLOR_MUTED);
         message.setLineSpacing(0f, 1.15f);
         LinearLayout.LayoutParams messageParams = matchWrapTop(20);
         content.addView(message, messageParams);
 
-        TextView okButton = actionButton("\u6211\u77e5\u9053\u4e86", true);
+        TextView okButton = actionButton(getString(R.string.common_got_it), true);
         okButton.setOnClickListener(v -> dialog.dismiss());
         LinearLayout.LayoutParams buttonParams = matchWrapTop(26);
         content.addView(okButton, buttonParams);

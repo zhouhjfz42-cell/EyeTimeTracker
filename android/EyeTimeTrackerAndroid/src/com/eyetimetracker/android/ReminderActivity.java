@@ -46,7 +46,7 @@ public final class ReminderActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView title = new TextView(this);
-        title.setText(ReminderAlert.title());
+        title.setText(ReminderAlert.title(this));
         title.setTextSize(28);
         title.setTextColor(COLOR_TEXT);
         title.setTypeface(AppFonts.bold(this));
@@ -54,7 +54,7 @@ public final class ReminderActivity extends Activity {
         card.addView(title, matchWrap());
 
         TextView message = new TextView(this);
-        message.setText(ReminderAlert.message(reminderMinutes, repeatReminder, reminderStep));
+        message.setText(ReminderAlert.message(this, reminderMinutes, repeatReminder, reminderStep));
         message.setTextSize(18);
         message.setTextColor(COLOR_MUTED);
         message.setLineSpacing(0f, 1.15f);
@@ -63,7 +63,7 @@ public final class ReminderActivity extends Activity {
         card.addView(message, messageParams);
 
         TextView okButton = new TextView(this);
-        okButton.setText("\u6211\u77e5\u9053\u4e86");
+        okButton.setText(R.string.common_got_it);
         okButton.setTextSize(18);
         okButton.setTypeface(AppFonts.bold(this));
         okButton.setGravity(Gravity.CENTER);

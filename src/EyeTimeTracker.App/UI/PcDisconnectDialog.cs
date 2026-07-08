@@ -1,4 +1,5 @@
 using System.Drawing.Drawing2D;
+using EyeTimeTracker.App.Localization;
 
 namespace EyeTimeTracker.App.UI;
 
@@ -12,7 +13,7 @@ public sealed class PcDisconnectDialog : Form
     public PcDisconnectDialog(Icon? icon)
     {
         AutoScaleMode = AutoScaleMode.None;
-        Text = "\u65ad\u5f00\u8fde\u63a5";
+        Text = AppText.Get("disconnect.title");
         if (icon is not null)
         {
             Icon = (Icon)icon.Clone();
@@ -30,7 +31,7 @@ public sealed class PcDisconnectDialog : Form
 
         Controls.Add(new StaticText
         {
-            Text = "\u65ad\u5f00",
+            Text = AppText.Get("common.disconnect"),
             Bounds = new Rectangle(28, 24, 300, 58),
             Font = AppFonts.Create(19F, FontStyle.Bold, GraphicsUnit.Point),
             ForeColor = TextPrimary,
@@ -51,7 +52,7 @@ public sealed class PcDisconnectDialog : Form
 
         Controls.Add(new StaticText
         {
-            Text = "\u65ad\u5f00\u540e\uff0c\u624b\u673a\u548c\u7535\u8111\u5c06\u505c\u6b62\u540c\u6b65\u3002\r\n\u4e0b\u6b21\u8fde\u63a5\u9700\u8981\u91cd\u65b0\u914d\u5bf9\u3002",
+            Text = AppText.Get("disconnect.pcMessage"),
             Bounds = new Rectangle(28, 94, 414, 72),
             Font = AppFonts.Create(11F, FontStyle.Regular, GraphicsUnit.Point),
             ForeColor = TextSecondary,
@@ -61,7 +62,7 @@ public sealed class PcDisconnectDialog : Form
 
         var cancelButton = new RoundedButton
         {
-            Text = "\u53d6\u6d88",
+            Text = AppText.Get("common.cancel"),
             Bounds = new Rectangle(28, 214, 190, 48),
             ButtonColor = Color.FromArgb(242, 244, 247),
             HoverColor = Color.FromArgb(232, 236, 240),
@@ -77,7 +78,7 @@ public sealed class PcDisconnectDialog : Form
 
         var disconnectButton = new RoundedButton
         {
-            Text = "\u65ad\u5f00\u8fde\u63a5",
+            Text = AppText.Get("disconnect.title"),
             Bounds = new Rectangle(238, 214, 204, 48),
             ButtonColor = AccentGreen,
             HoverColor = Color.FromArgb(19, 145, 111),
