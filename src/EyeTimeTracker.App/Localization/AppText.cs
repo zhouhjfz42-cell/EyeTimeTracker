@@ -47,14 +47,21 @@ public static class AppText
 
     private static string FindLocaleFile(string locale)
     {
-        var relativePath = Path.Combine("i18n", "source", locale + ".json");
+        var generatedPath = Path.Combine("i18n", "generated", "dotnet", locale + ".json");
+        var sourcePath = Path.Combine("i18n", "source", locale + ".json");
 
         foreach (var root in CandidateRoots())
         {
-            var path = Path.Combine(root, relativePath);
-            if (File.Exists(path))
+            var generated = Path.Combine(root, generatedPath);
+            if (File.Exists(generated))
             {
-                return path;
+                return generated;
+            }
+
+            var source = Path.Combine(root, sourcePath);
+            if (File.Exists(source))
+            {
+                return source;
             }
         }
 

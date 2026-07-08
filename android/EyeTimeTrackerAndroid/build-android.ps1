@@ -27,15 +27,21 @@ $apksigner = Join-Path $buildTools 'apksigner.bat'
 $javac = Join-Path $javaHome 'bin\javac.exe'
 $keytool = Join-Path $javaHome 'bin\keytool.exe'
 $build = Join-Path $project 'build'
+$mergedRes = Join-Path $build 'res'
 $gen = Join-Path $build 'gen'
 $resCompiled = Join-Path $build 'compiled'
 $classes = Join-Path $build 'classes'
 $dex = Join-Path $build 'dex'
 $outDir = Join-Path $root 'outputs\android'
 Remove-Item -LiteralPath $build -Recurse -Force -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Force -Path $gen, $resCompiled, $classes, $dex, $outDir | Out-Null
+New-Item -ItemType Directory -Force -Path $mergedRes, $gen, $resCompiled, $classes, $dex, $outDir | Out-Null
 
-Invoke-Checked { & $aapt2 compile --dir (Join-Path $project 'res') -o $resCompiled }
+$i18nScript = Join-Path $root 'i18n\tools\Update-I18nResources.ps1'
+Invoke-Checked { & powershell -NoProfile -ExecutionPolicy Bypass -File $i18nScript }
+Copy-Item -Path (Join-Path $project 'res\*') -Destination $mergedRes -Recurse -Force
+Copy-Item -Path (Join-Path $root 'i18n\generated\android\*') -Destination $mergedRes -Recurse -Force
+
+Invoke-Checked { & $aapt2 compile --dir $mergedRes -o $resCompiled }
 $unsigned = Join-Path $build 'unsigned.apk'
 $manifest = Join-Path $project 'AndroidManifest.xml'
 $compiledResources = Get-ChildItem -Path $resCompiled -Filter *.flat -Recurse | ForEach-Object { $_.FullName }

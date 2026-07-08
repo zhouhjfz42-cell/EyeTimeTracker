@@ -4,6 +4,7 @@ public sealed class AppState
 {
     public string DeviceId { get; set; } = Guid.NewGuid().ToString("N");
     public string Platform { get; set; } = "windows";
+    public bool StartWithWindowsDefaultApplied { get; set; }
     public TrackerSettings Settings { get; set; } = TrackerSettings.Default;
     public List<DailyRecord> Records { get; set; } = new();
     public List<UsageSegment> Segments { get; set; } = new();
@@ -46,6 +47,12 @@ public sealed class AppState
     public static void Normalize(AppState state)
     {
         state.Settings ??= TrackerSettings.Default;
+        if (!state.StartWithWindowsDefaultApplied)
+        {
+            state.Settings = state.Settings with { StartWithWindows = true };
+            state.StartWithWindowsDefaultApplied = true;
+        }
+
         state.Records ??= new List<DailyRecord>();
         state.Segments ??= new List<UsageSegment>();
         state.Sync ??= SyncSettings.Unpaired;

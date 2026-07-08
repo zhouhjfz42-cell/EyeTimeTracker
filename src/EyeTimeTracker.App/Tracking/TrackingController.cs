@@ -396,6 +396,7 @@ public sealed class TrackingController : IDisposable
         {
             DeviceId = _state.DeviceId,
             Platform = _state.Platform,
+            StartWithWindowsDefaultApplied = _state.StartWithWindowsDefaultApplied,
             Settings = _state.Settings,
             Records = _state.Records
                 .Select(CloneRecord)

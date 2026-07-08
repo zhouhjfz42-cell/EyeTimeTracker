@@ -13,7 +13,7 @@ i18n/
     android/          # 生成给 Android 使用的资源
     dotnet/           # 生成给 PC/.NET 使用的资源
   tools/
-    generate-i18n.*   # 文案生成脚本
+    Update-I18nResources.ps1   # 文案检查和生成脚本
 ```
 
 ## 使用原则
@@ -27,6 +27,16 @@ i18n/
 ## 当前状态
 
 目前已经建立多语言基础结构，并开始把部分 PC 和 Android 文案接入集中管理。
+
+已经完成：
+
+- `source/zh-CN.json` 和 `source/en-US.json` 使用同一套键名。
+- `tools/Update-I18nResources.ps1` 会检查两套语言键名是否一致。
+- 生成脚本会检查 `{minutes}`、`{duration}` 这类占位符是否一致。
+- Android 资源生成到 `generated/android/values*/strings.xml`。
+- PC 资源生成到 `generated/dotnet/*.json`。
+- PC 端优先读取 `generated/dotnet`，找不到时再回退到 `source`。
+- Android 构建 APK 时会先生成文案资源，并把生成后的 Android strings 合入临时构建资源。
 
 仍需要继续推进：
 
@@ -50,12 +60,25 @@ i18n/
 
 ## 生成与检查
 
-修改 `source` 下文案后，应重新生成平台资源，并检查：
+修改 `source` 下文案后，应重新生成平台资源：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File i18n\tools\Update-I18nResources.ps1
+```
+
+如果只想检查生成文件是否已经是最新：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File i18n\tools\Update-I18nResources.ps1 -Check
+```
+
+脚本会检查：
 
 - 是否有缺失键。
 - 是否有中文和英文键名不一致。
+- 是否有占位符不一致。
 - 英文按钮是否超出按钮范围。
 - 弹窗说明是否换行正常。
 - 图表标签和卡片文字是否遮挡。
 
-文案生成属于构建前的准备步骤。后续如果语言资源继续扩大，应把生成检查加入测试或构建流程。
+其中“是否遮挡”仍然需要真实界面检查；脚本只负责文案结构和生成结果。

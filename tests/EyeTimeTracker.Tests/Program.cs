@@ -405,6 +405,11 @@ static void TestAppTextLoadsReminderCopy()
         nameof(TestAppTextLoadsReminderCopy) + " body");
 }
 
+static void TestAppTextLoadsGeneratedDotNetCopy()
+{
+    AssertEqual("\u7528\u773c\u65f6\u95f4\u8bb0\u5f55", AppText.Get("app.name"), nameof(TestAppTextLoadsGeneratedDotNetCopy));
+}
+
 static void TestMainFormStartupControlsDoNotOverlapSubtitle()
 {
     AssertEqual(
@@ -447,6 +452,7 @@ static void TestJsonStateRoundTrip()
     {
         DeviceId = "pc-test",
         Platform = "windows",
+        StartWithWindowsDefaultApplied = true,
         Settings = TrackerSettings.Default with
         {
             IdleThresholdSeconds = 240,
@@ -532,6 +538,52 @@ static void TestInvalidJsonReturnsDefaultState()
 
     AssertEqual(TrackerSettings.Default, loaded.Settings, nameof(TestInvalidJsonReturnsDefaultState) + " settings");
     AssertEqual(0, loaded.Records.Count, nameof(TestInvalidJsonReturnsDefaultState) + " records count");
+}
+
+static void TestLegacyStartupOffMigratesToOnOnce()
+{
+    var path = Path.Combine(Path.GetTempPath(), "eye-time-tracker-tests", $"{Guid.NewGuid()}.json");
+    Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+    File.WriteAllText(path, """
+        {
+          "Settings": {
+            "IdleThresholdSeconds": 180,
+            "CountAudio": true,
+            "ReminderThresholdSeconds": 19800,
+            "StartWithWindows": false,
+            "RepeatReminder": false
+          }
+        }
+        """);
+    var store = new JsonStateStore(path);
+
+    var loaded = store.Load();
+
+    AssertEqual(true, loaded.Settings.StartWithWindows, nameof(TestLegacyStartupOffMigratesToOnOnce) + " enabled");
+    AssertEqual(true, loaded.StartWithWindowsDefaultApplied, nameof(TestLegacyStartupOffMigratesToOnOnce) + " applied");
+}
+
+static void TestStartupOffRemainsOffAfterDefaultMigrationApplied()
+{
+    var path = Path.Combine(Path.GetTempPath(), "eye-time-tracker-tests", $"{Guid.NewGuid()}.json");
+    Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+    File.WriteAllText(path, """
+        {
+          "StartWithWindowsDefaultApplied": true,
+          "Settings": {
+            "IdleThresholdSeconds": 180,
+            "CountAudio": true,
+            "ReminderThresholdSeconds": 19800,
+            "StartWithWindows": false,
+            "RepeatReminder": false
+          }
+        }
+        """);
+    var store = new JsonStateStore(path);
+
+    var loaded = store.Load();
+
+    AssertEqual(false, loaded.Settings.StartWithWindows, nameof(TestStartupOffRemainsOffAfterDefaultMigrationApplied));
 }
 
 static void TestOldJsonWithoutRepeatReminderFieldsLoadsSafely()
@@ -933,6 +985,44 @@ static void TestPcSyncCoordinatorCanUseInMemoryStateGateway()
     AssertEqual(1, current.Segments.Count, nameof(TestPcSyncCoordinatorCanUseInMemoryStateGateway) + " saved count");
     AssertEqual(androidSegment.SegmentId, current.Segments[0].SegmentId, nameof(TestPcSyncCoordinatorCanUseInMemoryStateGateway) + " segment");
     AssertEqual(3600, current.Settings.ReminderThresholdSeconds, nameof(TestPcSyncCoordinatorCanUseInMemoryStateGateway) + " settings");
+}
+
+static void TestPcSyncCoordinatorPreservesPcStartupSetting()
+{
+    var current = new AppState
+    {
+        DeviceId = "pc-test",
+        Platform = "windows",
+        StartWithWindowsDefaultApplied = true,
+        Settings = TrackerSettings.Default with
+        {
+            StartWithWindows = true,
+            ReminderThresholdSeconds = 19800
+        },
+        Sync = new SyncSettings
+        {
+            IsPaired = true,
+            PeerDeviceId = "phone-test",
+            PeerPlatform = "android",
+            SharedSecret = "shared-secret"
+        }
+    };
+    var coordinator = new PcSyncCoordinator(() => current, state => current = state, () => 1_783_000_000);
+
+    var response = coordinator.HandleSync(SignedSyncRequest(new SyncRequest
+    {
+        DeviceId = "phone-test",
+        Platform = "android",
+        Settings = TrackerSettings.Default with
+        {
+            StartWithWindows = false,
+            ReminderThresholdSeconds = 3600
+        }
+    }));
+
+    AssertEqual(true, response.Accepted, nameof(TestPcSyncCoordinatorPreservesPcStartupSetting) + " accepted");
+    AssertEqual(true, current.Settings.StartWithWindows, nameof(TestPcSyncCoordinatorPreservesPcStartupSetting) + " startup");
+    AssertEqual(3600, current.Settings.ReminderThresholdSeconds, nameof(TestPcSyncCoordinatorPreservesPcStartupSetting) + " reminder");
 }
 
 static void TestPcSyncCoordinatorPairsWithCorrectCode()
@@ -1429,12 +1519,15 @@ TestConnectionStatusFormatting();
 TestSyncPeerConnectionState();
 TestReminderMessageText();
 TestAppTextLoadsReminderCopy();
+TestAppTextLoadsGeneratedDotNetCopy();
 TestMainFormStartupControlsDoNotOverlapSubtitle();
 TestMainFormStartupControlsAlignWithTitleAndDisconnectButton();
 TestJsonStateRoundTrip();
 TestGetOrCreateRecordReusesExistingRecord();
 TestMissingJsonReturnsDefaultState();
 TestInvalidJsonReturnsDefaultState();
+TestLegacyStartupOffMigratesToOnOnce();
+TestStartupOffRemainsOffAfterDefaultMigrationApplied();
 TestOldJsonWithoutRepeatReminderFieldsLoadsSafely();
 TestUsageSegmentIdIsStable();
 TestAppStateNormalizesSegmentsAndDeviceId();
@@ -1447,6 +1540,7 @@ TestPcSyncCoordinatorBackfillsLegacyDailyRecordsWhenDateHasModernSegment();
 TestLegacyBackfillSubtractsModernSegmentsInSameHour();
 TestEffectiveSegmentsIgnoreStoredOwnLegacyAndUseLocalRecord();
 TestPcSyncCoordinatorCanUseInMemoryStateGateway();
+TestPcSyncCoordinatorPreservesPcStartupSetting();
 TestPcSyncCoordinatorPairsWithCorrectCode();
 TestPcSyncCoordinatorRejectsWrongPairingCode();
 TestPcSyncCoordinatorDisconnectsKnownPeer();

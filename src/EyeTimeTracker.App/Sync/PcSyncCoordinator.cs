@@ -35,7 +35,7 @@ public sealed class PcSyncCoordinator
 
         MergeSegments(state, request.Segments);
         state.Sync.PeerReminderState = CloneReminderState(request.ReminderState);
-        state.Settings = request.Settings;
+        state.Settings = MergeSyncedSettings(state.Settings, request.Settings);
         state.Sync.LastSyncUnixSeconds = _unixClock();
         state.Sync.LastError = string.Empty;
         _saveState(state);
@@ -229,6 +229,14 @@ public sealed class PcSyncCoordinator
             .Where(segment => string.Equals(segment.DeviceId, state.DeviceId, StringComparison.Ordinal))
             .Select(CloneSegment)
             .ToList();
+    }
+
+    private static TrackerSettings MergeSyncedSettings(TrackerSettings local, TrackerSettings incoming)
+    {
+        return incoming with
+        {
+            StartWithWindows = local.StartWithWindows
+        };
     }
 
     private static UsageSegment CloneSegment(UsageSegment segment)

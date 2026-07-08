@@ -21,7 +21,7 @@ public sealed class JsonStateStore
     {
         if (!File.Exists(_path))
         {
-            return new AppState();
+            return Normalize(new AppState());
         }
 
         try
