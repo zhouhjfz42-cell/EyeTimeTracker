@@ -132,6 +132,10 @@ EyeTimeTracker 商业版的核心定位是“用眼健康管理”，而不是�
 
 目标是在 Android 手机和平板上，在现有个人护眼能力基础上完成家庭护眼最小可用闭环。
 
+v1 范围见：
+
+- `docs/superpowers/specs/2026-07-08-android-family-eye-mode-v1-scope.md`
+
 范围：
 
 - 读取 App 使用时长。

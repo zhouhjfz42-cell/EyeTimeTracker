@@ -117,6 +117,7 @@ git status --short --branch
 - `docs/compliance/2026-07-08-child-control-compliance-draft.md`
 - `docs/market/2026-07-08-child-control-competitor-analysis.md`
 - `docs/superpowers/specs/2026-07-08-child-commercial-edition-roadmap-design.md`
+- `docs/superpowers/specs/2026-07-08-android-family-eye-mode-v1-scope.md`
 - `README.md`
 - `docs/WIFI_SYNC.md`
 - `i18n/README.md`
@@ -171,7 +172,8 @@ Android：
 
 1. 继续统一“同一 App 的个人护眼模式 + 家庭护眼模式”口径。
 2. 用真机应用商店核验家庭护眼和儿童控制类竞品，尤其是华为、小米、OPPO、vivo。
-3. 依据合规底稿和竞品分析，确定 Android 家庭护眼核心能力的第一版功能范围。
-4. 进入账号、支付、后台管理前，先评估 ShipAny 模板、Sa-Token、Shiro 等可复用资源。
-5. 不急着写最终隐私政策、用户协议或应用商店数据安全表，等核心功能和第三方服务稳定后再定稿。
-6. 继续维护现有 PC + Android 个人护眼模式稳定性，但不要把 Windows 做成孩子设备限制主平台。
+3. 依据 Android 家庭护眼核心能力 v1 范围，反查现有 Android 代码，确认已有能力和新增能力。
+4. 设计家庭护眼模式的数据字段和本地存储结构。
+5. 进入账号、支付、后台管理前，先评估 ShipAny 模板、Sa-Token、Shiro 等可复用资源。
+6. 不急着写最终隐私政策、用户协议或应用商店数据安全表，等核心功能和第三方服务稳定后再定稿。
+7. 继续维护现有 PC + Android 个人护眼模式稳定性，但不要把 Windows 做成孩子设备限制主平台。
