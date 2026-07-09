@@ -45,6 +45,8 @@ public final class MainActivity extends Activity {
     private static final int COLOR_SOFT = Color.rgb(237, 248, 244);
     private static final int COLOR_LINE = Color.rgb(223, 240, 233);
     private static final int COLOR_BUTTON_SOFT = Color.rgb(241, 244, 243);
+    private static final long REFRESH_INTERVAL_MS = 10_000L;
+    private static final long CONNECTION_CHECK_INTERVAL_MS = 60_000L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private EyeTimeStore store;
@@ -75,7 +77,7 @@ public final class MainActivity extends Activity {
     private final Runnable refreshRunnable = new Runnable() {
         @Override public void run() {
             refresh();
-            handler.postDelayed(this, 1000L);
+            handler.postDelayed(this, REFRESH_INTERVAL_MS);
         }
     };
 
@@ -85,7 +87,6 @@ public final class MainActivity extends Activity {
         requestNotificationPermission();
         setContentView(buildUi());
         startTrackerService();
-        refresh();
     }
 
     @Override protected void onResume() {
@@ -99,9 +100,10 @@ public final class MainActivity extends Activity {
             registerReceiver(receiver, filter);
         }
         receiverRegistered = true;
-        handler.post(refreshRunnable);
+        handler.removeCallbacks(refreshRunnable);
         nextSyncStatusCheckMillis = 0L;
         refresh();
+        handler.postDelayed(refreshRunnable, REFRESH_INTERVAL_MS);
     }
 
     @Override protected void onPause() {
@@ -373,9 +375,10 @@ public final class MainActivity extends Activity {
         }
 
         syncStatusCheckInFlight = true;
-        nextSyncStatusCheckMillis = now + 5000L;
+        nextSyncStatusCheckMillis = now + CONNECTION_CHECK_INTERVAL_MS;
         new Thread(() -> {
             new AndroidSyncRunner(store).syncOnce();
+            store.warmPastDailyStatsCache(LocalDate.now());
             handler.post(() -> {
                 syncStatusCheckInFlight = false;
                 refresh();

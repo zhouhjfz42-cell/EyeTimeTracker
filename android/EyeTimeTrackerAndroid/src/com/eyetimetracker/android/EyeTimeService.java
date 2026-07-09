@@ -56,6 +56,7 @@ public final class EyeTimeService extends Service implements SensorEventListener
     private PowerManager powerManager;
     private long lastMotionAt;
     private long lastTickAt;
+    private LocalDate lastStatsCacheWarmDate;
     private boolean hasLastSensor;
     private float lastX;
     private float lastY;
@@ -63,6 +64,7 @@ public final class EyeTimeService extends Service implements SensorEventListener
     private boolean counting;
     private long currentSessionStartedUnixSeconds;
     private boolean syncInFlight;
+    private boolean statsCacheWarmInFlight;
 
     @Override public void onCreate() {
         super.onCreate();
@@ -84,6 +86,7 @@ public final class EyeTimeService extends Service implements SensorEventListener
             return START_NOT_STICKY;
         }
         startForeground(FOREGROUND_ID, buildStatusNotification(getString(R.string.sync_service_running)));
+        maybeWarmPastDailyStatsCache(LocalDate.now());
         handler.removeCallbacks(tickRunnable);
         handler.post(tickRunnable);
         return START_STICKY;
@@ -149,6 +152,7 @@ public final class EyeTimeService extends Service implements SensorEventListener
             store.finishCurrentSession(LocalDate.now());
         }
         LocalDate todayDate = LocalDate.now();
+        maybeWarmPastDailyStatsCache(todayDate);
         DailySummary today = store.getDay(todayDate);
         int reminderMinutes = store.getReminderMinutes();
         boolean repeatReminder = store.isRepeatReminderEnabled();
@@ -181,6 +185,27 @@ public final class EyeTimeService extends Service implements SensorEventListener
         maybeRunSync(now, countedThisTick, upcomingReminderSync);
     }
 
+    private void maybeWarmPastDailyStatsCache(LocalDate today) {
+        if (store == null || today == null || statsCacheWarmInFlight || today.equals(lastStatsCacheWarmDate)) {
+            return;
+        }
+        statsCacheWarmInFlight = true;
+        lastStatsCacheWarmDate = today;
+        new Thread(() -> {
+            try {
+                try {
+                    Thread.sleep(1500L);
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+                store.warmPastDailyStatsCache(today);
+            } finally {
+                statsCacheWarmInFlight = false;
+            }
+        }, "EyeTimeDailyStatsCache").start();
+    }
+
     private void maybeRunSync(long now, boolean allowLocalChangeSync, boolean allowUpcomingReminderSync) {
         SyncSettings settings = store.getSyncSettings();
         if (!settings.isPaired || syncInFlight) {
@@ -197,6 +222,7 @@ public final class EyeTimeService extends Service implements SensorEventListener
         new Thread(() -> {
             try {
                 syncRunner.syncOnce();
+                store.warmPastDailyStatsCache(LocalDate.now());
             } finally {
                 syncInFlight = false;
             }

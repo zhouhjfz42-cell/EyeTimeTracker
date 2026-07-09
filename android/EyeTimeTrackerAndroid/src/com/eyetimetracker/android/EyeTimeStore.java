@@ -9,8 +9,10 @@ import org.json.JSONObject;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -18,6 +20,7 @@ public final class EyeTimeStore {
     private static final String DIAG_TAG = "EyeTimeDiag";
     private static final String PREFS = "eye_time_tracker";
     private static final String STATE = "state_json";
+    private static final String DAILY_STATS_CACHE = "dailyStatsCache";
     private static final String DEVICE_ID = "device_id";
     private static final String REMINDER_MINUTES = "reminder_minutes";
     private static final String REPEAT_REMINDER = "repeat_reminder";
@@ -59,14 +62,15 @@ public final class EyeTimeStore {
     public synchronized DailySummary getDay(LocalDate date) {
         try {
             JSONObject state = loadState();
-            JSONObject record = getOrCreateRecord(state, date.toString());
-            DailySummary legacy = readLegacyDailySummary(date.toString(), record);
-            List<UsageSegment> segments = readEffectiveSegments(state, date, date);
-            if (!segments.isEmpty()) {
-                DailySummary merged = UsageSegmentMerger.buildDailySummary(date.toString(), segments);
-                return DailySummaryReconciler.useSegmentSummaryForSyncedDay(legacy, merged);
+            DailyStatsSnapshot cached = readCachedDailyStats(state, date);
+            if (cached != null) {
+                return cached.summary;
             }
-            return legacy;
+            DailyStatsSnapshot snapshot = buildDailyStatsSnapshot(state, date, null);
+            if (cacheDailyStatsIfStable(state, date, snapshot)) {
+                saveState(state);
+            }
+            return snapshot.summary;
         } catch (JSONException ex) {
             return new DailySummary(date.toString(), 0L, false, 0);
         }
@@ -90,6 +94,7 @@ public final class EyeTimeStore {
             record.put("currentSessionSeconds", record.optLong("currentSessionSeconds", 0L) + secondsToAdd);
             record.put("updatedAt", System.currentTimeMillis());
             addSegment(state, createSegment(date, secondsToAdd, endUnixSeconds, source));
+            removeDailyStatsCache(state, date.toString());
             saveState(state);
         } catch (JSONException ignored) {
         }
@@ -99,6 +104,9 @@ public final class EyeTimeStore {
         try {
             JSONObject state = loadState();
             addSegment(state, segment);
+            if (segment != null) {
+                removeDailyStatsCache(state, segment.localDate);
+            }
             saveState(state);
         } catch (JSONException ignored) {
         }
@@ -109,6 +117,9 @@ public final class EyeTimeStore {
             JSONObject state = loadState();
             int changed = mergeSegments(state, newSegments);
             if (changed > 0) {
+                for (String date : segmentDates(newSegments)) {
+                    removeDailyStatsCache(state, date);
+                }
                 saveState(state);
             }
             return changed;
@@ -126,41 +137,352 @@ public final class EyeTimeStore {
     }
 
     public synchronized DeviceUsageBreakdown getDeviceBreakdown(LocalDate date) {
-        try {
-            return DeviceUsageBreakdown.build(date.toString(), readEffectiveSegments(loadState(), date, date));
-        } catch (JSONException ignored) {
-            return new DeviceUsageBreakdown(0L, 0L);
-        }
+        List<DeviceUsageBreakdown> values = getDeviceBreakdowns(date, date);
+        return values.isEmpty() ? new DeviceUsageBreakdown(0L, 0L) : values.get(0);
     }
 
-    public synchronized void finishCurrentSession(LocalDate date) {
+    public synchronized List<DeviceUsageBreakdown> getDeviceBreakdowns(LocalDate start, LocalDate end) {
+        List<DeviceUsageBreakdown> values = new ArrayList<>();
         try {
             JSONObject state = loadState();
-            JSONObject record = getOrCreateRecord(state, date.toString());
-            long currentSessionSeconds = record.optLong("currentSessionSeconds", 0L);
-            if (currentSessionSeconds > 0L) {
-                JSONArray sessions = ensureSessionSeconds(record);
-                sessions.put(currentSessionSeconds);
-                record.put("currentSessionSeconds", 0L);
-                record.put("updatedAt", System.currentTimeMillis());
-                saveState(state);
+            boolean hasMissing = false;
+            for (LocalDate cursor = start; !cursor.isAfter(end); cursor = cursor.plusDays(1)) {
+                DailyStatsSnapshot cached = readCachedDailyStats(state, cursor);
+                if (cached != null) {
+                    values.add(cached.breakdown);
+                } else {
+                    values.add(null);
+                    hasMissing = true;
+                }
+            }
+            if (hasMissing) {
+                Map<String, List<UsageSegment>> segmentsByDate = groupSegmentsByDate(readEffectiveSegments(state, start, end));
+                boolean changedCache = false;
+                int index = 0;
+                for (LocalDate cursor = start; !cursor.isAfter(end); cursor = cursor.plusDays(1)) {
+                    if (values.get(index) == null) {
+                        DailyStatsSnapshot snapshot = buildDailyStatsSnapshot(state, cursor, segmentsByDate.get(cursor.toString()));
+                        values.set(index, snapshot.breakdown);
+                        changedCache |= cacheDailyStatsIfStable(state, cursor, snapshot);
+                    }
+                    index++;
+                }
+                if (changedCache) {
+                    saveState(state);
+                }
             }
         } catch (JSONException ignored) {
+            values.clear();
         }
+        if (values.isEmpty()) {
+            values.add(new DeviceUsageBreakdown(0L, 0L));
+        }
+        return values;
     }
 
     public synchronized List<DailySummary> getDays(LocalDate start, LocalDate end) {
         long startedAt = System.currentTimeMillis();
         List<DailySummary> summaries = new ArrayList<>();
-        LocalDate cursor = start;
-        while (!cursor.isAfter(end)) {
-            summaries.add(getDay(cursor));
-            cursor = cursor.plusDays(1);
+        try {
+            JSONObject state = loadState();
+            boolean hasMissing = false;
+            for (LocalDate cursor = start; !cursor.isAfter(end); cursor = cursor.plusDays(1)) {
+                DailyStatsSnapshot cached = readCachedDailyStats(state, cursor);
+                if (cached != null) {
+                    summaries.add(cached.summary);
+                } else {
+                    summaries.add(null);
+                    hasMissing = true;
+                }
+            }
+            if (hasMissing) {
+                Map<String, List<UsageSegment>> segmentsByDate = groupSegmentsByDate(readEffectiveSegments(state, start, end));
+                boolean changedCache = false;
+                int index = 0;
+                for (LocalDate cursor = start; !cursor.isAfter(end); cursor = cursor.plusDays(1)) {
+                    if (summaries.get(index) == null) {
+                        DailyStatsSnapshot snapshot = buildDailyStatsSnapshot(state, cursor, segmentsByDate.get(cursor.toString()));
+                        summaries.set(index, snapshot.summary);
+                        changedCache |= cacheDailyStatsIfStable(state, cursor, snapshot);
+                    }
+                    index++;
+                }
+                if (changedCache) {
+                    saveState(state);
+                }
+            }
+        } catch (JSONException ignored) {
+            summaries.clear();
         }
         Log.i(DIAG_TAG, "EyeTimeStore getDays range=" + start + ".." + end
                 + " days=" + summaries.size()
                 + " ms=" + elapsed(startedAt));
         return summaries;
+    }
+
+    public synchronized void warmPastDailyStatsCache(LocalDate today) {
+        long startedAt = System.currentTimeMillis();
+        try {
+            JSONObject state = loadState();
+            Set<String> dates = collectPastDates(state, today);
+            if (dates.isEmpty()) {
+                return;
+            }
+
+            LocalDate start = null;
+            LocalDate end = null;
+            List<LocalDate> missingDates = new ArrayList<>();
+            for (String dateValue : dates) {
+                LocalDate date = parseDateOrNull(dateValue);
+                if (date == null || readCachedDailyStats(state, date) != null) {
+                    continue;
+                }
+                missingDates.add(date);
+                if (start == null || date.isBefore(start)) {
+                    start = date;
+                }
+                if (end == null || date.isAfter(end)) {
+                    end = date;
+                }
+            }
+
+            if (missingDates.isEmpty() || start == null || end == null) {
+                return;
+            }
+
+            Map<String, List<UsageSegment>> segmentsByDate = groupSegmentsByDate(readEffectiveSegments(state, start, end));
+            boolean changedCache = false;
+            for (LocalDate date : missingDates) {
+                DailyStatsSnapshot snapshot = buildDailyStatsSnapshot(state, date, segmentsByDate.get(date.toString()));
+                changedCache |= cacheDailyStatsIfStable(state, date, snapshot);
+            }
+            if (changedCache) {
+                saveState(state);
+            }
+            Log.i(DIAG_TAG, "EyeTimeStore warmPastDailyStatsCache dates=" + missingDates.size()
+                    + " range=" + start + ".." + end
+                    + " ms=" + elapsed(startedAt));
+        } catch (JSONException ignored) {
+        }
+    }
+
+    private DailyStatsSnapshot buildDailyStatsSnapshot(
+            JSONObject state,
+            LocalDate date,
+            List<UsageSegment> effectiveSegments) throws JSONException {
+        String dateValue = date.toString();
+        JSONObject record = getOrCreateRecord(state, dateValue);
+        DailySummary legacy = readLegacyDailySummary(dateValue, record);
+        List<UsageSegment> segments = effectiveSegments == null
+                ? readEffectiveSegments(state, date, date)
+                : effectiveSegments;
+        DailySummary summary = legacy;
+        if (!segments.isEmpty()) {
+            DailySummary merged = UsageSegmentMerger.buildDailySummary(dateValue, segments);
+            summary = DailySummaryReconciler.useSegmentSummaryForSyncedDay(legacy, merged);
+        }
+        return new DailyStatsSnapshot(summary, DeviceUsageBreakdown.build(dateValue, segments));
+    }
+
+    private DailyStatsSnapshot readCachedDailyStats(JSONObject state, LocalDate date) throws JSONException {
+        if (!isStableCacheDate(date)) {
+            return null;
+        }
+        JSONArray cache = state.optJSONArray(DAILY_STATS_CACHE);
+        if (cache == null) {
+            return null;
+        }
+        String dateValue = date.toString();
+        for (int i = 0; i < cache.length(); i++) {
+            JSONObject item = cache.optJSONObject(i);
+            if (item != null && dateValue.equals(item.optString("date"))) {
+                return dailyStatsFromJson(item);
+            }
+        }
+        return null;
+    }
+
+    private boolean cacheDailyStatsIfStable(JSONObject state, LocalDate date, DailyStatsSnapshot snapshot) throws JSONException {
+        if (!isStableCacheDate(date) || snapshot == null) {
+            return false;
+        }
+        removeDailyStatsCache(state, date.toString());
+        JSONArray cache = state.optJSONArray(DAILY_STATS_CACHE);
+        if (cache == null) {
+            cache = new JSONArray();
+            state.put(DAILY_STATS_CACHE, cache);
+        }
+        cache.put(dailyStatsToJson(snapshot));
+        return true;
+    }
+
+    private static boolean isStableCacheDate(LocalDate date) {
+        return date != null && date.isBefore(LocalDate.now());
+    }
+
+    private static void removeDailyStatsCache(JSONObject state, String date) throws JSONException {
+        if (state == null || date == null || date.trim().isEmpty()) {
+            return;
+        }
+        JSONArray cache = state.optJSONArray(DAILY_STATS_CACHE);
+        if (cache == null) {
+            return;
+        }
+        JSONArray kept = new JSONArray();
+        for (int i = 0; i < cache.length(); i++) {
+            JSONObject item = cache.optJSONObject(i);
+            if (item != null && !date.equals(item.optString("date"))) {
+                kept.put(item);
+            }
+        }
+        state.put(DAILY_STATS_CACHE, kept);
+    }
+
+    private static Set<String> segmentDates(List<UsageSegment> segments) {
+        Set<String> dates = new HashSet<>();
+        if (segments == null) {
+            return dates;
+        }
+        for (UsageSegment segment : segments) {
+            if (segment != null && segment.localDate != null && !segment.localDate.trim().isEmpty()) {
+                dates.add(segment.localDate);
+            }
+        }
+        return dates;
+    }
+
+    private static Set<String> collectPastDates(JSONObject state, LocalDate today) throws JSONException {
+        Set<String> dates = new HashSet<>();
+        collectPastRecordDates(state, today, dates);
+        collectPastSegmentDates(state, today, dates);
+        return dates;
+    }
+
+    private static void collectPastRecordDates(JSONObject state, LocalDate today, Set<String> dates) throws JSONException {
+        JSONArray records = state.getJSONArray("records");
+        for (int i = 0; i < records.length(); i++) {
+            JSONObject record = records.optJSONObject(i);
+            if (record == null) {
+                continue;
+            }
+            addPastDate(record.optString("date", ""), today, dates);
+        }
+    }
+
+    private static void collectPastSegmentDates(JSONObject state, LocalDate today, Set<String> dates) throws JSONException {
+        JSONArray segments = ensureSegments(state);
+        for (int i = 0; i < segments.length(); i++) {
+            JSONObject json = segments.optJSONObject(i);
+            if (json == null) {
+                continue;
+            }
+            addPastDate(json.optString("localDate", ""), today, dates);
+        }
+    }
+
+    private static void addPastDate(String dateValue, LocalDate today, Set<String> dates) {
+        LocalDate date = parseDateOrNull(dateValue);
+        if (date != null && today != null && date.isBefore(today)) {
+            dates.add(date.toString());
+        }
+    }
+
+    private static LocalDate parseDateOrNull(String dateValue) {
+        if (dateValue == null || dateValue.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(dateValue);
+        } catch (RuntimeException ignored) {
+            return null;
+        }
+    }
+
+    private static JSONObject dailyStatsToJson(DailyStatsSnapshot snapshot) throws JSONException {
+        JSONObject json = new JSONObject();
+        DailySummary summary = snapshot.summary;
+        DeviceUsageBreakdown breakdown = snapshot.breakdown;
+        json.put("date", summary.date);
+        json.put("totalSeconds", summary.totalSeconds);
+        json.put("hourlySeconds", longArrayToJson(summary.hourlySeconds));
+        json.put("sessionSeconds", longArrayToJson(summary.sessionSeconds));
+        json.put("currentSessionSeconds", summary.currentSessionSeconds);
+        json.put("reminderShown", summary.reminderShown);
+        json.put("lastReminderStep", summary.lastReminderStep);
+        json.put("pcSeconds", breakdown.pcSeconds);
+        json.put("phoneSeconds", breakdown.phoneSeconds);
+        json.put("pcHourlySeconds", longArrayToJson(breakdown.pcHourlySeconds));
+        json.put("phoneHourlySeconds", longArrayToJson(breakdown.phoneHourlySeconds));
+        return json;
+    }
+
+    private static DailyStatsSnapshot dailyStatsFromJson(JSONObject json) {
+        String date = json.optString("date");
+        DailySummary summary = new DailySummary(
+                date,
+                json.optLong("totalSeconds", 0L),
+                longArrayFromJson(json.optJSONArray("hourlySeconds"), 24),
+                longArrayFromJson(json.optJSONArray("sessionSeconds"), -1),
+                json.optLong("currentSessionSeconds", 0L),
+                json.optBoolean("reminderShown", false),
+                json.optInt("lastReminderStep", 0));
+        DeviceUsageBreakdown breakdown = new DeviceUsageBreakdown(
+                json.optLong("pcSeconds", 0L),
+                json.optLong("phoneSeconds", 0L),
+                longArrayFromJson(json.optJSONArray("pcHourlySeconds"), 24),
+                longArrayFromJson(json.optJSONArray("phoneHourlySeconds"), 24));
+        return new DailyStatsSnapshot(summary, breakdown);
+    }
+
+    private static JSONArray longArrayToJson(long[] values) {
+        JSONArray json = new JSONArray();
+        if (values != null) {
+            for (long value : values) {
+                json.put(value);
+            }
+        }
+        return json;
+    }
+
+    private static long[] longArrayFromJson(JSONArray json, int fixedLength) {
+        int length = fixedLength >= 0 ? fixedLength : (json == null ? 0 : json.length());
+        long[] values = new long[length];
+        if (json == null) {
+            return values;
+        }
+        for (int i = 0; i < values.length && i < json.length(); i++) {
+            values[i] = json.optLong(i, 0L);
+        }
+        return values;
+    }
+
+    private static final class DailyStatsSnapshot {
+        final DailySummary summary;
+        final DeviceUsageBreakdown breakdown;
+
+        DailyStatsSnapshot(DailySummary summary, DeviceUsageBreakdown breakdown) {
+            this.summary = summary;
+            this.breakdown = breakdown;
+        }
+    }
+
+    private static Map<String, List<UsageSegment>> groupSegmentsByDate(List<UsageSegment> segments) {
+        Map<String, List<UsageSegment>> grouped = new HashMap<>();
+        if (segments == null) {
+            return grouped;
+        }
+        for (UsageSegment segment : segments) {
+            if (segment == null || segment.localDate == null || segment.localDate.trim().isEmpty()) {
+                continue;
+            }
+            List<UsageSegment> values = grouped.get(segment.localDate);
+            if (values == null) {
+                values = new ArrayList<>();
+                grouped.put(segment.localDate, values);
+            }
+            values.add(segment);
+        }
+        return grouped;
     }
 
     public synchronized boolean isReminderShown(LocalDate date) {
@@ -231,6 +553,22 @@ public final class EyeTimeStore {
         settings.lastError = prefs.getString(SYNC_LAST_ERROR, "");
         settings.peerReminderState = getPeerReminderState();
         return settings;
+    }
+
+    public synchronized void finishCurrentSession(LocalDate date) {
+        try {
+            JSONObject state = loadState();
+            JSONObject record = getOrCreateRecord(state, date.toString());
+            long currentSessionSeconds = record.optLong("currentSessionSeconds", 0L);
+            if (currentSessionSeconds > 0L) {
+                JSONArray sessions = ensureSessionSeconds(record);
+                sessions.put(currentSessionSeconds);
+                record.put("currentSessionSeconds", 0L);
+                record.put("updatedAt", System.currentTimeMillis());
+                saveState(state);
+            }
+        } catch (JSONException ignored) {
+        }
     }
 
     public synchronized ReminderRuntimeState getLocalReminderState() {
@@ -365,10 +703,8 @@ public final class EyeTimeStore {
 
     public synchronized long sumRange(LocalDate start, LocalDate end) {
         long total = 0L;
-        LocalDate cursor = start;
-        while (!cursor.isAfter(end)) {
-            total += getDay(cursor).totalSeconds;
-            cursor = cursor.plusDays(1);
+        for (DailySummary summary : getDays(start, end)) {
+            total += summary.totalSeconds;
         }
         return total;
     }

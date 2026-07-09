@@ -94,10 +94,7 @@ public final class StatsActivity extends Activity {
         DeviceUsageBreakdown summaryBreakdown = store.getDeviceBreakdown(summaryDate);
         List<DailySummary> week = store.getDays(selectedWeekStart, selectedWeekStart.plusDays(6));
         stepStartedAt = logStep("StatsActivity get week summaries", stepStartedAt);
-        List<DeviceUsageBreakdown> weekBreakdowns = new ArrayList<>();
-        for (int i = 0; i < 7; i++) {
-            weekBreakdowns.add(store.getDeviceBreakdown(selectedWeekStart.plusDays(i)));
-        }
+        List<DeviceUsageBreakdown> weekBreakdowns = store.getDeviceBreakdowns(selectedWeekStart, selectedWeekStart.plusDays(6));
         stepStartedAt = logStep("StatsActivity get week breakdowns", stepStartedAt);
         LocalDate monthEnd = selectedMonthStart.getYear() == today.getYear() && selectedMonthStart.getMonthValue() == today.getMonthValue()
                 ? today
