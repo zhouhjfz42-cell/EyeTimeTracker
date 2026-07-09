@@ -45,6 +45,8 @@ public final class MainActivity extends Activity {
     private static final int COLOR_SOFT = Color.rgb(237, 248, 244);
     private static final int COLOR_LINE = Color.rgb(223, 240, 233);
     private static final int COLOR_BUTTON_SOFT = Color.rgb(241, 244, 243);
+    private static final int COLOR_DISABLED_BUTTON = Color.rgb(230, 235, 233);
+    private static final int COLOR_DISABLED_TEXT = Color.rgb(152, 162, 160);
     private static final long REFRESH_INTERVAL_MS = 10_000L;
     private static final long CONNECTION_CHECK_INTERVAL_MS = 60_000L;
 
@@ -150,12 +152,13 @@ public final class MainActivity extends Activity {
         subtitle.setTextSize(14);
         subtitle.setTextColor(COLOR_MUTED);
         AppFonts.apply(subtitle, false);
+        subtitle.setIncludeFontPadding(false);
         subtitle.setLineSpacing(0f, 1.1f);
         LinearLayout.LayoutParams subtitleParams = matchWrap();
-        subtitleParams.topMargin = dp(12);
+        subtitleParams.topMargin = dp(4);
         root.addView(subtitle, subtitleParams);
 
-        root.addView(buildDayRow(), matchWrapTop(28));
+        root.addView(buildDayRow(), matchWrapTop(12));
 
         todayValue = new TextView(this);
         todayValue.setTextSize(56);
@@ -175,7 +178,7 @@ public final class MainActivity extends Activity {
         addCard(cards, buildMetricCard(getString(R.string.main_card_reminder), reminderValue = cardValueText(), v -> showReminderDialog()), 1, 1);
 
         LinearLayout actions = new LinearLayout(this);
-        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setOrientation(LinearLayout.VERTICAL);
         actions.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams actionsParams = matchWrapTop(24);
         root.addView(actions, actionsParams);
@@ -184,8 +187,13 @@ public final class MainActivity extends Activity {
         statsButton.setOnClickListener(v -> startActivity(new Intent(this, StatsActivity.class)));
         actions.addView(statsButton, centeredButtonParams());
 
+        boolean familyModeAvailable = isFamilyEyeModeAvailable();
+        TextView familyButton = familyEyeModeButton(getString(R.string.family_eye_mode), familyModeAvailable);
+        familyButton.setOnClickListener(v -> openFamilyEyeMode());
+        actions.addView(familyButton, centeredButtonTopParams(12));
+
         root.addView(helpText(getString(R.string.main_help_sync)), matchWrapTop(18));
-        root.addView(helpText(getString(R.string.main_help_auto_start)), matchWrapTop(8));
+        root.addView(helpText(getString(R.string.main_help_auto_start)), matchWrapTop(2));
         return scroll;
     }
 
@@ -240,6 +248,7 @@ public final class MainActivity extends Activity {
         text.setTextSize(12);
         text.setTextColor(COLOR_MUTED);
         AppFonts.apply(text, false);
+        text.setIncludeFontPadding(false);
         text.setLineSpacing(0f, 1.15f);
         return text;
     }
@@ -294,6 +303,15 @@ public final class MainActivity extends Activity {
         button.setBackground(rounded(primary ? COLOR_GREEN : COLOR_BUTTON_SOFT, dp(999), Color.TRANSPARENT, 0));
         button.setClickable(true);
         button.setFocusable(true);
+        return button;
+    }
+
+    private TextView familyEyeModeButton(String label, boolean available) {
+        TextView button = actionButton(label, available);
+        if (!available) {
+            button.setTextColor(COLOR_DISABLED_TEXT);
+            button.setBackground(rounded(COLOR_DISABLED_BUTTON, dp(999), Color.TRANSPARENT, 0));
+        }
         return button;
     }
 
@@ -907,6 +925,15 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private boolean isFamilyEyeModeAvailable() {
+        return false;
+    }
+
+    private void openFamilyEyeMode() {
+        boolean configured = store.getProductMode() == ProductMode.FAMILY && store.getActiveChildProfile() != null;
+        startActivity(new Intent(this, configured ? FamilyHomeActivity.class : FamilySetupActivity.class));
+    }
+
     private int colorForTone(TodayTone tone) {
         if (tone == TodayTone.DANGER) {
             return COLOR_RED;
@@ -957,6 +984,12 @@ public final class MainActivity extends Activity {
 
     private LinearLayout.LayoutParams centeredButtonParams() {
         return new LinearLayout.LayoutParams(dp(260), dp(54));
+    }
+
+    private LinearLayout.LayoutParams centeredButtonTopParams(int topMargin) {
+        LinearLayout.LayoutParams params = centeredButtonParams();
+        params.topMargin = dp(topMargin);
+        return params;
     }
 
     private int dp(int value) {

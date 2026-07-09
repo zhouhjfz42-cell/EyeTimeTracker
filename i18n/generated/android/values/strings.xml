@@ -46,6 +46,57 @@
     <string name="duration_hours_minutes_padded" formatted="false">{hours}小时{minutes:00}分</string>
     <string name="duration_minutes" formatted="false">{minutes}分钟</string>
     <string name="duration_zero_minutes" formatted="false">0分钟</string>
+    <string name="family_eye_mode" formatted="false">家庭护眼</string>
+    <string name="family_eye_mode_unavailable" formatted="false">当前模式未包含家庭护眼</string>
+    <string name="family_home_child_note" formatted="false">这台设备已加入家庭护眼。家庭设置由家长管理。</string>
+    <string name="family_home_child_profile" formatted="false">孩子档案</string>
+    <string name="family_home_child_profile_desc" formatted="false">昵称、年龄段</string>
+    <string name="family_home_device_role" formatted="false">设备角色</string>
+    <string name="family_home_device_role_desc" formatted="false">当前设备在家庭护眼里的用途</string>
+    <string name="family_home_exit" formatted="false">退出家庭护眼</string>
+    <string name="family_home_exit_desc" formatted="false">保留个人用眼统计</string>
+    <string name="family_home_not_enabled" formatted="false">暂未开启</string>
+    <string name="family_home_parent_note" formatted="false">家庭护眼已启用。需要修改孩子档案、保护密码或规则时，进入右上角设置。</string>
+    <string name="family_home_passcode" formatted="false">保护密码</string>
+    <string name="family_home_passcode_desc" formatted="false">用于保护家庭设置</string>
+    <string name="family_home_passcode_not_set" formatted="false">未设置</string>
+    <string name="family_home_passcode_set" formatted="false">已设置</string>
+    <string name="family_home_rules" formatted="false">规则</string>
+    <string name="family_home_rules_desc" formatted="false">设置休息、可用时段和限制</string>
+    <string name="family_home_settings" formatted="false">设置</string>
+    <string name="family_home_settings_note" formatted="false">修改孩子档案、保护密码或退出家庭护眼时，需要输入保护密码。</string>
+    <string name="family_home_settings_title" formatted="false">家庭设置</string>
+    <string name="family_home_title" formatted="false">家庭护眼</string>
+    <string name="family_home_unknown_child" formatted="false">孩子</string>
+    <string name="family_role_child" formatted="false">孩子设备</string>
+    <string name="family_role_parent" formatted="false">家长手机</string>
+    <string name="family_role_pc" formatted="false">电脑伴随设备</string>
+    <string name="family_role_personal" formatted="false">个人设备</string>
+    <string name="family_setup_age_band" formatted="false">年龄段</string>
+    <string name="family_setup_age_skip" formatted="false">跳过</string>
+    <string name="family_setup_child_lead" formatted="false">填一个你看得懂的名字就可以。年龄段可以不选。</string>
+    <string name="family_setup_child_nickname" formatted="false">孩子昵称</string>
+    <string name="family_setup_child_nickname_hint" formatted="false">例如：小明</string>
+    <string name="family_setup_child_title" formatted="false">孩子怎么称呼？</string>
+    <string name="family_setup_clear" formatted="false">清除</string>
+    <string name="family_setup_complete" formatted="false">完成并进入家庭护眼</string>
+    <string name="family_setup_continue_child" formatted="false">继续，设置孩子档案</string>
+    <string name="family_setup_continue_protection" formatted="false">继续，设置保护方式</string>
+    <string name="family_setup_delete" formatted="false">退格</string>
+    <string name="family_setup_nickname_required" formatted="false">请先填写孩子昵称</string>
+    <string name="family_setup_passcode_required" formatted="false">请设置 4 位保护密码</string>
+    <string name="family_setup_protection_lead" formatted="false">以后修改家庭护眼设置时需要输入它。</string>
+    <string name="family_setup_protection_notice" formatted="false">这个密码不常用，建议先记在家长手机里。</string>
+    <string name="family_setup_protection_title" formatted="false">设置 4 位保护密码</string>
+    <string name="family_setup_role_child" formatted="false">这是孩子手机或平板</string>
+    <string name="family_setup_role_child_desc" formatted="false">这台设备主要给孩子使用。</string>
+    <string name="family_setup_role_lead" formatted="false">选错也没关系，进入家庭护眼后可以再改。</string>
+    <string name="family_setup_role_parent" formatted="false">这是家长手机</string>
+    <string name="family_setup_role_parent_desc" formatted="false">我会在这台手机上查看和管理孩子的用眼设置。</string>
+    <string name="family_setup_role_title" formatted="false">这台设备是谁在用？</string>
+    <string name="family_setup_saved" formatted="false">家庭护眼设置已保存</string>
+    <string name="family_setup_step" formatted="false">{current}/3</string>
+    <string name="family_setup_title" formatted="false">家庭护眼</string>
     <string name="main_autostart" formatted="false">开机启动</string>
     <string name="main_card_month" formatted="false">本月</string>
     <string name="main_card_reminder" formatted="false">提醒</string>

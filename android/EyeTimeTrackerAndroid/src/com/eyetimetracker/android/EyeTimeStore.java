@@ -6,21 +6,35 @@ import android.util.Log;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
+import java.security.spec.InvalidKeySpecException;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
 
 public final class EyeTimeStore {
     private static final String DIAG_TAG = "EyeTimeDiag";
     private static final String PREFS = "eye_time_tracker";
     private static final String STATE = "state_json";
     private static final String DAILY_STATS_CACHE = "dailyStatsCache";
+    private static final String PRODUCT_MODE = "productMode";
+    private static final String DEVICE_ROLE = "deviceRole";
+    private static final String CHILD_PROFILES = "childProfiles";
+    private static final String ACTIVE_CHILD_ID = "activeChildId";
+    private static final String PARENT_PASSCODE_HASH = "parentPasscodeHash";
+    private static final String PARENT_PASSCODE_SALT = "parentPasscodeSalt";
+    private static final String PARENT_PASSCODE_UPDATED_AT = "parentPasscodeUpdatedAtUnixSeconds";
     private static final String DEVICE_ID = "device_id";
     private static final String REMINDER_MINUTES = "reminder_minutes";
     private static final String REPEAT_REMINDER = "repeat_reminder";
@@ -47,8 +61,13 @@ public final class EyeTimeStore {
     private static final String RESET_MONTH_SECONDS = "display_reset_month_seconds";
     private static final String MAIN_ACTIVITY_VISIBLE = "main_activity_visible";
     private static final String PLATFORM = "android";
+    private static final int PARENT_PASSCODE_SALT_BYTES = 16;
+    private static final int PARENT_PASSCODE_ITERATIONS = 120_000;
+    private static final int PARENT_PASSCODE_HASH_BITS = 256;
+    private static final String PARENT_PASSCODE_ALGORITHM = "PBKDF2WithHmacSHA256";
 
     private final SharedPreferences prefs;
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     public EyeTimeStore(Context context) {
         prefs = context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
@@ -541,6 +560,103 @@ public final class EyeTimeStore {
         return prefs.getBoolean(MAIN_ACTIVITY_VISIBLE, false);
     }
 
+    public synchronized ProductMode getProductMode() {
+        try {
+            return readProductMode(loadState());
+        } catch (JSONException ignored) {
+            return ProductMode.PERSONAL;
+        }
+    }
+
+    public synchronized void saveProductMode(ProductMode mode) {
+        try {
+            JSONObject state = loadState();
+            writeProductMode(state, mode);
+            saveState(state);
+        } catch (JSONException ignored) {
+        }
+    }
+
+    public synchronized DeviceRole getDeviceRole() {
+        try {
+            return readDeviceRole(loadState());
+        } catch (JSONException ignored) {
+            return DeviceRole.PERSONAL_DEVICE;
+        }
+    }
+
+    public synchronized void saveDeviceRole(DeviceRole role) {
+        try {
+            JSONObject state = loadState();
+            writeDeviceRole(state, role);
+            saveState(state);
+        } catch (JSONException ignored) {
+        }
+    }
+
+    public synchronized List<ChildProfile> getChildProfiles() {
+        try {
+            return readChildProfiles(loadState());
+        } catch (JSONException ignored) {
+            return new ArrayList<>();
+        }
+    }
+
+    public synchronized String getActiveChildId() {
+        try {
+            return readActiveChildId(loadState());
+        } catch (JSONException ignored) {
+            return "";
+        }
+    }
+
+    public synchronized ChildProfile getActiveChildProfile() {
+        String activeChildId = getActiveChildId();
+        for (ChildProfile profile : getChildProfiles()) {
+            if (profile.childId.equals(activeChildId)) {
+                return profile;
+            }
+        }
+        return null;
+    }
+
+    public synchronized void saveChildProfiles(List<ChildProfile> profiles, String activeChildId) {
+        try {
+            JSONObject state = loadState();
+            writeChildProfiles(state, profiles, activeChildId);
+            saveState(state);
+        } catch (JSONException ignored) {
+        }
+    }
+
+    public synchronized boolean hasParentPasscode() {
+        try {
+            return hasParentPasscode(loadState());
+        } catch (JSONException ignored) {
+            return false;
+        }
+    }
+
+    public synchronized void saveParentPasscode(String passcode) {
+        if (passcode == null || passcode.trim().isEmpty()) {
+            return;
+        }
+        try {
+            JSONObject state = loadState();
+            writeParentPasscode(state, createParentPasscode(passcode, System.currentTimeMillis() / 1000L));
+            saveState(state);
+        } catch (JSONException ignored) {
+        }
+    }
+
+    public synchronized boolean verifyParentPasscode(String passcode) {
+        try {
+            return verifyParentPasscode(readParentPasscode(loadState()), passcode);
+        } catch (JSONException ignored) {
+            return false;
+        }
+    }
+
     public synchronized SyncSettings getSyncSettings() {
         SyncSettings settings = new SyncSettings();
         settings.isPaired = prefs.getBoolean(SYNC_IS_PAIRED, false);
@@ -726,6 +842,7 @@ public final class EyeTimeStore {
             state.put("platform", PLATFORM);
             state.put("records", new JSONArray());
             state.put("segments", new JSONArray());
+            ensureFamilyModeState(state);
             return state;
         }
         JSONObject state = new JSONObject(raw);
@@ -735,6 +852,7 @@ public final class EyeTimeStore {
         if (!state.has("segments")) {
             state.put("segments", new JSONArray());
         }
+        ensureFamilyModeState(state);
         return state;
     }
 
@@ -960,6 +1078,195 @@ public final class EyeTimeStore {
 
     private static String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private static void ensureFamilyModeState(JSONObject state) throws JSONException {
+        if (!state.has(PRODUCT_MODE)) {
+            writeProductMode(state, ProductMode.PERSONAL);
+        }
+        if (!state.has(DEVICE_ROLE)) {
+            writeDeviceRole(state, DeviceRole.PERSONAL_DEVICE);
+        }
+    }
+
+    static ProductMode readProductMode(JSONObject state) {
+        if (state == null) {
+            return ProductMode.PERSONAL;
+        }
+        return ProductMode.fromStorageValue(state.optString(PRODUCT_MODE, ProductMode.PERSONAL.storageValue()));
+    }
+
+    static void writeProductMode(JSONObject state, ProductMode mode) throws JSONException {
+        if (state == null) {
+            return;
+        }
+        ProductMode safeMode = mode == null ? ProductMode.PERSONAL : mode;
+        state.put(PRODUCT_MODE, safeMode.storageValue());
+    }
+
+    static DeviceRole readDeviceRole(JSONObject state) {
+        if (state == null) {
+            return DeviceRole.PERSONAL_DEVICE;
+        }
+        return DeviceRole.fromStorageValue(state.optString(DEVICE_ROLE, DeviceRole.PERSONAL_DEVICE.storageValue()));
+    }
+
+    static void writeDeviceRole(JSONObject state, DeviceRole role) throws JSONException {
+        if (state == null) {
+            return;
+        }
+        DeviceRole safeRole = role == null ? DeviceRole.PERSONAL_DEVICE : role;
+        state.put(DEVICE_ROLE, safeRole.storageValue());
+    }
+
+    static List<ChildProfile> readChildProfiles(JSONObject state) {
+        List<ChildProfile> profiles = new ArrayList<>();
+        if (state == null) {
+            return profiles;
+        }
+        JSONArray raw = state.optJSONArray(CHILD_PROFILES);
+        if (raw == null) {
+            return profiles;
+        }
+        for (int i = 0; i < raw.length(); i++) {
+            JSONObject json = raw.optJSONObject(i);
+            if (json == null) {
+                continue;
+            }
+            ChildProfile profile = childProfileFromJson(json);
+            if (profile.isValid()) {
+                profiles.add(profile);
+            }
+        }
+        return profiles;
+    }
+
+    static void writeChildProfiles(JSONObject state, List<ChildProfile> profiles, String activeChildId) throws JSONException {
+        if (state == null) {
+            return;
+        }
+        JSONArray raw = new JSONArray();
+        String firstChildId = "";
+        boolean hasActiveChild = false;
+        String safeActiveChildId = safe(activeChildId).trim();
+        if (profiles != null) {
+            for (ChildProfile profile : profiles) {
+                if (profile == null || !profile.isValid()) {
+                    continue;
+                }
+                raw.put(childProfileToJson(profile));
+                if (firstChildId.isEmpty()) {
+                    firstChildId = profile.childId;
+                }
+                if (profile.childId.equals(safeActiveChildId)) {
+                    hasActiveChild = true;
+                }
+            }
+        }
+        state.put(CHILD_PROFILES, raw);
+        state.put(ACTIVE_CHILD_ID, hasActiveChild ? safeActiveChildId : firstChildId);
+    }
+
+    static String readActiveChildId(JSONObject state) {
+        if (state == null) {
+            return "";
+        }
+        return safe(state.optString(ACTIVE_CHILD_ID, "")).trim();
+    }
+
+    private static JSONObject childProfileToJson(ChildProfile profile) throws JSONException {
+        JSONObject json = new JSONObject();
+        json.put("childId", profile.childId);
+        json.put("nickname", profile.nickname);
+        json.put("ageBand", profile.ageBand);
+        json.put("createdAtUnixSeconds", profile.createdAtUnixSeconds);
+        json.put("updatedAtUnixSeconds", profile.updatedAtUnixSeconds);
+        return json;
+    }
+
+    private static ChildProfile childProfileFromJson(JSONObject json) {
+        return new ChildProfile(
+                json.optString("childId", ""),
+                json.optString("nickname", ""),
+                json.optString("ageBand", ChildProfile.AGE_BAND_UNKNOWN),
+                json.optLong("createdAtUnixSeconds", 0L),
+                json.optLong("updatedAtUnixSeconds", 0L));
+    }
+
+    static ParentPasscode createParentPasscode(String passcode, long updatedAtUnixSeconds) {
+        byte[] salt = new byte[PARENT_PASSCODE_SALT_BYTES];
+        SECURE_RANDOM.nextBytes(salt);
+        return createParentPasscode(passcode, salt, updatedAtUnixSeconds);
+    }
+
+    static ParentPasscode createParentPasscode(String passcode, byte[] salt, long updatedAtUnixSeconds) {
+        byte[] safeSalt = salt == null ? new byte[0] : salt.clone();
+        return new ParentPasscode(
+                hashParentPasscode(passcode, safeSalt),
+                Base64.getEncoder().encodeToString(safeSalt),
+                updatedAtUnixSeconds);
+    }
+
+    static boolean hasParentPasscode(JSONObject state) {
+        ParentPasscode passcode = readParentPasscode(state);
+        return passcode != null && passcode.isConfigured();
+    }
+
+    static ParentPasscode readParentPasscode(JSONObject state) {
+        if (state == null) {
+            return null;
+        }
+        ParentPasscode passcode = new ParentPasscode(
+                state.optString(PARENT_PASSCODE_HASH, ""),
+                state.optString(PARENT_PASSCODE_SALT, ""),
+                state.optLong(PARENT_PASSCODE_UPDATED_AT, 0L));
+        return passcode.isConfigured() ? passcode : null;
+    }
+
+    static void writeParentPasscode(JSONObject state, ParentPasscode passcode) throws JSONException {
+        if (state == null || passcode == null || !passcode.isConfigured()) {
+            return;
+        }
+        state.put(PARENT_PASSCODE_HASH, passcode.hash);
+        state.put(PARENT_PASSCODE_SALT, passcode.salt);
+        state.put(PARENT_PASSCODE_UPDATED_AT, passcode.updatedAtUnixSeconds);
+    }
+
+    static boolean verifyParentPasscode(ParentPasscode parentPasscode, String passcode) {
+        if (parentPasscode == null || !parentPasscode.isConfigured() || passcode == null) {
+            return false;
+        }
+        byte[] salt;
+        try {
+            salt = Base64.getDecoder().decode(parentPasscode.salt);
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
+        String candidateHash = hashParentPasscode(passcode, salt);
+        return MessageDigest.isEqual(
+                parentPasscode.hash.getBytes(StandardCharsets.UTF_8),
+                candidateHash.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String hashParentPasscode(String passcode, byte[] salt) {
+        try {
+            PBEKeySpec spec = new PBEKeySpec(
+                    safe(passcode).toCharArray(),
+                    salt == null ? new byte[0] : salt,
+                    PARENT_PASSCODE_ITERATIONS,
+                    PARENT_PASSCODE_HASH_BITS);
+            try {
+                byte[] hash = SecretKeyFactory
+                        .getInstance(PARENT_PASSCODE_ALGORITHM)
+                        .generateSecret(spec)
+                        .getEncoded();
+                return Base64.getEncoder().encodeToString(hash);
+            } finally {
+                spec.clearPassword();
+            }
+        } catch (InvalidKeySpecException | java.security.NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("Parent passcode hashing is unavailable.", ex);
+        }
     }
 
     private static long elapsed(long startedAt) {

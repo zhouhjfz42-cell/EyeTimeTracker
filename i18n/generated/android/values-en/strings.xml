@@ -46,6 +46,57 @@
     <string name="duration_hours_minutes_padded" formatted="false">{hours} hr {minutes:00} min</string>
     <string name="duration_minutes" formatted="false">{minutes} min</string>
     <string name="duration_zero_minutes" formatted="false">0 min</string>
+    <string name="family_eye_mode" formatted="false">Family eye care</string>
+    <string name="family_eye_mode_unavailable" formatted="false">Family eye care is not included in the current mode.</string>
+    <string name="family_home_child_note" formatted="false">This device is part of Family Eye Care. Family settings are managed by the parent.</string>
+    <string name="family_home_child_profile" formatted="false">Child profile</string>
+    <string name="family_home_child_profile_desc" formatted="false">Nickname, age band</string>
+    <string name="family_home_device_role" formatted="false">Device role</string>
+    <string name="family_home_device_role_desc" formatted="false">How this device is used in Family Eye Care</string>
+    <string name="family_home_exit" formatted="false">Leave Family Eye Care</string>
+    <string name="family_home_exit_desc" formatted="false">Keep personal screen-time stats</string>
+    <string name="family_home_not_enabled" formatted="false">Not enabled</string>
+    <string name="family_home_parent_note" formatted="false">Family Eye Care is on. To change the child profile, protection code, or rules, open Settings in the top right.</string>
+    <string name="family_home_passcode" formatted="false">Protection code</string>
+    <string name="family_home_passcode_desc" formatted="false">Protects Family Eye Care settings</string>
+    <string name="family_home_passcode_not_set" formatted="false">Not set</string>
+    <string name="family_home_passcode_set" formatted="false">Set</string>
+    <string name="family_home_rules" formatted="false">Rules</string>
+    <string name="family_home_rules_desc" formatted="false">Set breaks, available times, and limits</string>
+    <string name="family_home_settings" formatted="false">Settings</string>
+    <string name="family_home_settings_note" formatted="false">Changing the child profile, protection code, or leaving Family Eye Care requires the protection code.</string>
+    <string name="family_home_settings_title" formatted="false">Family Settings</string>
+    <string name="family_home_title" formatted="false">Family Eye Care</string>
+    <string name="family_home_unknown_child" formatted="false">Child</string>
+    <string name="family_role_child" formatted="false">Child device</string>
+    <string name="family_role_parent" formatted="false">Parent phone</string>
+    <string name="family_role_pc" formatted="false">PC companion</string>
+    <string name="family_role_personal" formatted="false">Personal device</string>
+    <string name="family_setup_age_band" formatted="false">Age band</string>
+    <string name="family_setup_age_skip" formatted="false">Skip</string>
+    <string name="family_setup_child_lead" formatted="false">Use a name you recognize. The age band is optional.</string>
+    <string name="family_setup_child_nickname" formatted="false">Child nickname</string>
+    <string name="family_setup_child_nickname_hint" formatted="false">Example: Alex</string>
+    <string name="family_setup_child_title" formatted="false">What should we call the child?</string>
+    <string name="family_setup_clear" formatted="false">Clear</string>
+    <string name="family_setup_complete" formatted="false">Finish and enter Family Eye Care</string>
+    <string name="family_setup_continue_child" formatted="false">Continue to child profile</string>
+    <string name="family_setup_continue_protection" formatted="false">Continue to protection</string>
+    <string name="family_setup_delete" formatted="false">Delete</string>
+    <string name="family_setup_nickname_required" formatted="false">Enter the child nickname first</string>
+    <string name="family_setup_passcode_required" formatted="false">Set a 4-digit protection code</string>
+    <string name="family_setup_protection_lead" formatted="false">You will enter it before changing Family Eye Care settings.</string>
+    <string name="family_setup_protection_notice" formatted="false">This code is not used often. Consider saving it on the parent\'s phone.</string>
+    <string name="family_setup_protection_title" formatted="false">Set a 4-digit protection code</string>
+    <string name="family_setup_role_child" formatted="false">This is the child\'s phone or tablet</string>
+    <string name="family_setup_role_child_desc" formatted="false">This device is mainly used by the child.</string>
+    <string name="family_setup_role_lead" formatted="false">You can change this later in Family Eye Care.</string>
+    <string name="family_setup_role_parent" formatted="false">This is the parent\'s phone</string>
+    <string name="family_setup_role_parent_desc" formatted="false">I will use this phone to view and manage my child\'s eye-care settings.</string>
+    <string name="family_setup_role_title" formatted="false">Who uses this device?</string>
+    <string name="family_setup_saved" formatted="false">Family Eye Care settings saved</string>
+    <string name="family_setup_step" formatted="false">{current}/3</string>
+    <string name="family_setup_title" formatted="false">Family Eye Care</string>
     <string name="main_autostart" formatted="false">Start on login</string>
     <string name="main_card_month" formatted="false">This Month</string>
     <string name="main_card_reminder" formatted="false">Reminder</string>
