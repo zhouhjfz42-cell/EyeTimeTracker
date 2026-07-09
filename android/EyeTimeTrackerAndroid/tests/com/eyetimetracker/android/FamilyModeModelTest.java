@@ -8,6 +8,9 @@ public final class FamilyModeModelTest {
         shouldStoreParentPasscodeWithoutPlaintext();
         shouldVerifyParentPasscode();
         shouldUseRandomSaltForParentPasscode();
+        shouldCreateAndConsumeFamilyBindingInvite();
+        shouldCreateParentSetupDraftWithChildProfile();
+        shouldCreateChildBindingDraftWithoutChildProfileInput();
         shouldBuildFamilySetupDraftForSaving();
         shouldRejectFamilySetupDraftWithoutNickname();
         shouldBuildFamilyHomeStateForParentDevice();
@@ -108,6 +111,52 @@ public final class FamilyModeModelTest {
             assertEquals(false, first.hash.equals(second.hash), "same passcode creates different hashes");
         } catch (Exception ex) {
             throw new AssertionError("parent passcode random salt test failed", ex);
+        }
+    }
+
+    private static void shouldCreateAndConsumeFamilyBindingInvite() {
+        try {
+            org.json.JSONObject state = new org.json.JSONObject();
+            ChildProfile child = new ChildProfile("local-child-1", "mumu", "3-6", 1783000800L, 1783000800L);
+            FamilyBindingInvite invite = FamilyBindingInvite.create("local-family-1", child, 1783000800L);
+
+            EyeTimeStore.writeFamilyBindingInvite(state, invite);
+            FamilyBindingInvite saved = EyeTimeStore.readFamilyBindingInvite(state);
+
+            assertEquals(invite.bindingCode, saved.bindingCode, "binding code round trips");
+            assertEquals("local-child-1", saved.childProfile.childId, "invite keeps child id");
+            assertEquals("mumu", saved.childProfile.nickname, "invite keeps child nickname");
+            assertEquals(true, EyeTimeStore.consumeFamilyBindingCode(state, invite.bindingCode), "correct code consumes invite");
+            assertEquals(DeviceRole.CHILD_DEVICE, EyeTimeStore.readDeviceRole(state), "child device role is saved after consume");
+            assertEquals(ProductMode.FAMILY, EyeTimeStore.readProductMode(state), "family mode is saved after consume");
+            assertEquals("local-child-1", EyeTimeStore.readActiveChildId(state), "active child id is saved after consume");
+            assertEquals(true, EyeTimeStore.readFamilyBindingInvite(state) == null, "invite is cleared after consume");
+        } catch (Exception ex) {
+            throw new AssertionError("family binding invite consume test failed", ex);
+        }
+    }
+
+    private static void shouldCreateParentSetupDraftWithChildProfile() {
+        try {
+            FamilySetupDraft draft = FamilySetupDraft.createParent("mumu", "3-6", "2468", 1783000900L);
+
+            assertEquals(ProductMode.FAMILY, draft.productMode, "parent draft switches to family mode");
+            assertEquals(DeviceRole.PARENT_DEVICE, draft.deviceRole, "parent draft uses parent role");
+            assertEquals("mumu", draft.childProfile.nickname, "parent draft owns child nickname");
+            assertEquals("3-6", draft.childProfile.ageBand, "parent draft owns child age band");
+            assertEquals("2468", draft.passcode, "parent draft stores passcode");
+        } catch (Exception ex) {
+            throw new AssertionError("parent setup draft test failed", ex);
+        }
+    }
+
+    private static void shouldCreateChildBindingDraftWithoutChildProfileInput() {
+        try {
+            FamilyBindingDraft draft = FamilyBindingDraft.create("428 916");
+
+            assertEquals("428916", draft.bindingCode, "child binding keeps normalized code");
+        } catch (Exception ex) {
+            throw new AssertionError("child binding draft test failed", ex);
         }
     }
 

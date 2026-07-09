@@ -30,6 +30,8 @@ public final class EyeTimeStore {
     private static final String DAILY_STATS_CACHE = "dailyStatsCache";
     private static final String PRODUCT_MODE = "productMode";
     private static final String DEVICE_ROLE = "deviceRole";
+    private static final String FAMILY_ID = "familyId";
+    private static final String PENDING_FAMILY_BINDING_INVITE = "pendingFamilyBindingInvite";
     private static final String CHILD_PROFILES = "childProfiles";
     private static final String ACTIVE_CHILD_ID = "activeChildId";
     private static final String PARENT_PASSCODE_HASH = "parentPasscodeHash";
@@ -629,6 +631,36 @@ public final class EyeTimeStore {
         }
     }
 
+    public synchronized FamilyBindingInvite getFamilyBindingInvite() {
+        try {
+            return readFamilyBindingInvite(loadState());
+        } catch (JSONException ignored) {
+            return null;
+        }
+    }
+
+    public synchronized void saveFamilyBindingInvite(FamilyBindingInvite invite) {
+        try {
+            JSONObject state = loadState();
+            writeFamilyBindingInvite(state, invite);
+            saveState(state);
+        } catch (JSONException ignored) {
+        }
+    }
+
+    public synchronized boolean consumeFamilyBindingCode(String bindingCode) {
+        try {
+            JSONObject state = loadState();
+            boolean consumed = consumeFamilyBindingCode(state, bindingCode);
+            if (consumed) {
+                saveState(state);
+            }
+            return consumed;
+        } catch (JSONException ignored) {
+            return false;
+        }
+    }
+
     public synchronized boolean hasParentPasscode() {
         try {
             return hasParentPasscode(loadState());
@@ -1172,6 +1204,56 @@ public final class EyeTimeStore {
             return "";
         }
         return safe(state.optString(ACTIVE_CHILD_ID, "")).trim();
+    }
+
+    static FamilyBindingInvite readFamilyBindingInvite(JSONObject state) {
+        if (state == null) {
+            return null;
+        }
+        JSONObject raw = state.optJSONObject(PENDING_FAMILY_BINDING_INVITE);
+        if (raw == null) {
+            return null;
+        }
+        JSONObject childJson = raw.optJSONObject("childProfile");
+        if (childJson == null) {
+            return null;
+        }
+        FamilyBindingInvite invite = new FamilyBindingInvite(
+                state.optString(FAMILY_ID, raw.optString(FAMILY_ID, "")),
+                raw.optString("bindingCode", ""),
+                childProfileFromJson(childJson),
+                raw.optLong("createdAtUnixSeconds", 0L));
+        return invite.isValid() ? invite : null;
+    }
+
+    static void writeFamilyBindingInvite(JSONObject state, FamilyBindingInvite invite) throws JSONException {
+        if (state == null || invite == null || !invite.isValid()) {
+            return;
+        }
+        state.put(FAMILY_ID, invite.familyId);
+        JSONObject raw = new JSONObject();
+        raw.put("familyId", invite.familyId);
+        raw.put("bindingCode", invite.bindingCode);
+        raw.put("createdAtUnixSeconds", invite.createdAtUnixSeconds);
+        raw.put("childProfile", childProfileToJson(invite.childProfile));
+        state.put(PENDING_FAMILY_BINDING_INVITE, raw);
+    }
+
+    static boolean consumeFamilyBindingCode(JSONObject state, String bindingCode) throws JSONException {
+        FamilyBindingInvite invite = readFamilyBindingInvite(state);
+        if (state == null || invite == null) {
+            return false;
+        }
+        String normalized = FamilyBindingInvite.normalizeBindingCode(bindingCode);
+        if (!invite.bindingCode.equals(normalized)) {
+            return false;
+        }
+        writeProductMode(state, ProductMode.FAMILY);
+        writeDeviceRole(state, DeviceRole.CHILD_DEVICE);
+        writeChildProfiles(state, java.util.Collections.singletonList(invite.childProfile), invite.childProfile.childId);
+        state.put(FAMILY_ID, invite.familyId);
+        state.put(PENDING_FAMILY_BINDING_INVITE, null);
+        return true;
     }
 
     private static JSONObject childProfileToJson(ChildProfile profile) throws JSONException {

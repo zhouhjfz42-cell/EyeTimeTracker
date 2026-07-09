@@ -3,7 +3,6 @@ package com.eyetimetracker.android;
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
-import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.text.InputType;
@@ -30,18 +29,15 @@ public final class FamilySetupActivity extends Activity {
 
     private EyeTimeStore store;
     private LinearLayout root;
-    private LinearLayout progress;
-    private TextView stepLabel;
-    private TextView title;
-    private TextView backButton;
-    private int step;
     private DeviceRole selectedRole = DeviceRole.PARENT_DEVICE;
     private String selectedAgeBand = ChildProfile.AGE_BAND_UNKNOWN;
     private String childNickname = "";
     private EditText nicknameInput;
+    private EditText bindingCodeInput;
     private final StringBuilder passcode = new StringBuilder();
     private LinearLayout passcodeDots;
-    private TextView completeButton;
+    private FamilyBindingInvite pendingInvite;
+    private int step;
 
     @Override protected void onCreate(Bundle bundle) {
         super.onCreate(bundle);
@@ -70,10 +66,12 @@ public final class FamilySetupActivity extends Activity {
         root.addView(buildProgress(), matchWrapTop(16));
         if (step == 0) {
             renderRoleStep();
+        } else if (selectedRole == DeviceRole.CHILD_DEVICE) {
+            renderChildBindingStep();
         } else if (step == 1) {
-            renderChildStep();
+            renderParentSetupStep();
         } else {
-            renderPasscodeStep();
+            renderParentBindingStep();
         }
     }
 
@@ -82,8 +80,8 @@ public final class FamilySetupActivity extends Activity {
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
 
-        backButton = new TextView(this);
-        backButton.setText("‹");
+        TextView backButton = new TextView(this);
+        backButton.setText("<");
         backButton.setTextSize(26);
         backButton.setTextColor(COLOR_GREEN);
         backButton.setTypeface(AppFonts.bold(this));
@@ -93,7 +91,7 @@ public final class FamilySetupActivity extends Activity {
         backButton.setOnClickListener(v -> goBack());
         header.addView(backButton, new LinearLayout.LayoutParams(dp(40), dp(40)));
 
-        title = new TextView(this);
+        TextView title = new TextView(this);
         title.setText(R.string.family_setup_title);
         title.setTextSize(26);
         title.setTextColor(COLOR_TEXT);
@@ -103,8 +101,10 @@ public final class FamilySetupActivity extends Activity {
         titleParams.leftMargin = dp(14);
         header.addView(title, titleParams);
 
-        stepLabel = new TextView(this);
-        stepLabel.setText(getString(R.string.family_setup_step).replace("{current}", String.valueOf(step + 1)).replace("{total}", "3"));
+        TextView stepLabel = new TextView(this);
+        stepLabel.setText(getString(R.string.family_setup_step)
+                .replace("{current}", String.valueOf(step + 1))
+                .replace("{total}", String.valueOf(totalSteps())));
         stepLabel.setTextSize(15);
         stepLabel.setTextColor(COLOR_MUTED);
         stepLabel.setTypeface(AppFonts.bold(this));
@@ -115,10 +115,11 @@ public final class FamilySetupActivity extends Activity {
     }
 
     private View buildProgress() {
-        progress = new LinearLayout(this);
+        LinearLayout progress = new LinearLayout(this);
         progress.setOrientation(LinearLayout.HORIZONTAL);
         progress.setGravity(Gravity.CENTER_VERTICAL);
-        for (int i = 0; i < 3; i++) {
+        int total = totalSteps();
+        for (int i = 0; i < total; i++) {
             View segment = new View(this);
             segment.setBackground(rounded(i <= step ? COLOR_GREEN : Color.rgb(229, 238, 234), dp(999), Color.TRANSPARENT, 0));
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(5), 1f);
@@ -140,17 +141,16 @@ public final class FamilySetupActivity extends Activity {
                 DeviceRole.CHILD_DEVICE,
                 getString(R.string.family_setup_role_child),
                 getString(R.string.family_setup_role_child_desc)), matchWrapTop(12));
-        root.addView(primaryButton(getString(R.string.family_setup_continue_child), v -> {
+        root.addView(primaryButton(getString(R.string.family_setup_continue), v -> {
             step = 1;
             render();
         }), matchWrapTop(28));
     }
 
-    private void renderChildStep() {
+    private void renderParentSetupStep() {
         addPageTitle(R.string.family_setup_child_title, R.string.family_setup_child_lead);
 
-        TextView nicknameLabel = fieldLabel(getString(R.string.family_setup_child_nickname));
-        root.addView(nicknameLabel, matchWrapTop(24));
+        root.addView(fieldLabel(getString(R.string.family_setup_child_nickname)), matchWrapTop(24));
         nicknameInput = new EditText(this);
         nicknameInput.setTextColor(COLOR_TEXT);
         nicknameInput.setTextSize(17);
@@ -170,23 +170,28 @@ public final class FamilySetupActivity extends Activity {
         chips.addView(ageRow("13-15", "16-17", ChildProfile.AGE_BAND_UNKNOWN), matchWrapTop(8));
         root.addView(chips, matchWrapTop(8));
 
-        root.addView(primaryButton(getString(R.string.family_setup_continue_protection), v -> {
+        addPasscodeControls();
+
+        root.addView(primaryButton(getString(R.string.family_setup_generate_binding), v -> {
             if (nicknameInput.getText().toString().trim().isEmpty()) {
                 Toast.makeText(this, R.string.family_setup_nickname_required, Toast.LENGTH_SHORT).show();
                 return;
             }
+            if (passcode.length() != 4) {
+                Toast.makeText(this, R.string.family_setup_passcode_required, Toast.LENGTH_SHORT).show();
+                return;
+            }
             childNickname = nicknameInput.getText().toString().trim();
-            step = 2;
-            render();
-        }), matchWrapTop(26));
+            saveParentAndShowBinding();
+        }), matchWrapTop(24));
     }
 
-    private void renderPasscodeStep() {
-        addPageTitle(R.string.family_setup_protection_title, R.string.family_setup_protection_lead);
+    private void addPasscodeControls() {
+        root.addView(fieldLabel(getString(R.string.family_setup_protection_title)), matchWrapTop(18));
         passcodeDots = new LinearLayout(this);
         passcodeDots.setGravity(Gravity.CENTER);
         passcodeDots.setOrientation(LinearLayout.HORIZONTAL);
-        root.addView(passcodeDots, matchWrapTop(28));
+        root.addView(passcodeDots, matchWrapTop(12));
         refreshPasscodeDots();
 
         GridLayout keypad = new GridLayout(this);
@@ -207,10 +212,77 @@ public final class FamilySetupActivity extends Activity {
         TextView notice = helpText(getString(R.string.family_setup_protection_notice));
         notice.setGravity(Gravity.CENTER);
         root.addView(notice, matchWrapTop(14));
+    }
 
-        completeButton = primaryButton(getString(R.string.family_setup_complete), v -> saveAndFinish());
-        root.addView(completeButton, matchWrapTop(24));
-        refreshCompleteButton();
+    private void renderParentBindingStep() {
+        FamilyBindingInvite invite = pendingInvite == null ? store.getFamilyBindingInvite() : pendingInvite;
+        addPageTitle(R.string.family_binding_waiting_title, R.string.family_binding_waiting_desc);
+
+        if (invite == null) {
+            root.addView(helpText(getString(R.string.family_binding_missing_invite)), matchWrapTop(24));
+            root.addView(primaryButton(getString(R.string.family_binding_enter_home), v -> openFamilyHome()), matchWrapTop(28));
+            return;
+        }
+
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setGravity(Gravity.CENTER);
+        card.setPadding(dp(18), dp(22), dp(18), dp(22));
+        card.setBackground(rounded(Color.WHITE, dp(8), COLOR_LINE, 1));
+
+        TextView qr = new TextView(this);
+        qr.setText("# # #\n ##  \n#  ##");
+        qr.setTextSize(36);
+        qr.setTextColor(COLOR_TEXT);
+        qr.setGravity(Gravity.CENTER);
+        qr.setTypeface(AppFonts.bold(this));
+        qr.setIncludeFontPadding(false);
+        card.addView(qr, matchWrap());
+
+        TextView label = fieldLabel(getString(R.string.family_binding_code_label));
+        label.setGravity(Gravity.CENTER);
+        card.addView(label, matchWrapTop(18));
+
+        TextView code = new TextView(this);
+        code.setText(formatBindingCode(invite.bindingCode));
+        code.setTextSize(40);
+        code.setTextColor(COLOR_GREEN);
+        code.setTypeface(AppFonts.bold(this));
+        code.setGravity(Gravity.CENTER);
+        code.setIncludeFontPadding(false);
+        card.addView(code, matchWrapTop(8));
+        root.addView(card, matchWrapTop(24));
+
+        root.addView(helpText(getString(R.string.family_binding_once_help)), matchWrapTop(14));
+        root.addView(disabledStatus(getString(R.string.family_binding_waiting_status)), matchWrapTop(22));
+        root.addView(primaryButton(getString(R.string.family_binding_enter_home), v -> openFamilyHome()), matchWrapTop(12));
+    }
+
+    private void renderChildBindingStep() {
+        addPageTitle(R.string.family_binding_child_title, R.string.family_binding_child_desc);
+
+        bindingCodeInput = new EditText(this);
+        bindingCodeInput.setTextColor(COLOR_TEXT);
+        bindingCodeInput.setTextSize(22);
+        bindingCodeInput.setSingleLine(true);
+        bindingCodeInput.setHint(R.string.family_binding_input_hint);
+        bindingCodeInput.setInputType(InputType.TYPE_CLASS_NUMBER);
+        bindingCodeInput.setGravity(Gravity.CENTER);
+        bindingCodeInput.setBackground(rounded(Color.rgb(244, 250, 247), dp(8), COLOR_LINE, 1));
+        bindingCodeInput.setPadding(dp(14), 0, dp(14), 0);
+        root.addView(bindingCodeInput, fixedHeightTop(56, 28));
+
+        root.addView(secondaryButton(getString(R.string.family_binding_scan), v ->
+                Toast.makeText(this, R.string.family_binding_scan_unavailable, Toast.LENGTH_SHORT).show()), matchWrapTop(14));
+
+        FamilyBindingInvite invite = store.getFamilyBindingInvite();
+        if (invite != null) {
+            root.addView(bindingSummary(invite), matchWrapTop(18));
+        } else {
+            root.addView(helpText(getString(R.string.family_binding_missing_invite)), matchWrapTop(18));
+        }
+
+        root.addView(primaryButton(getString(R.string.family_binding_join), v -> joinFamilyByCode()), matchWrapTop(24));
     }
 
     private View roleOption(DeviceRole role, String optionTitle, String description) {
@@ -221,6 +293,7 @@ public final class FamilySetupActivity extends Activity {
         card.setBackground(rounded(selected ? COLOR_SOFT : Color.WHITE, dp(8), selected ? COLOR_GREEN : COLOR_LINE, 1));
         card.setOnClickListener(v -> {
             selectedRole = role;
+            step = 0;
             render();
         });
 
@@ -260,6 +333,9 @@ public final class FamilySetupActivity extends Activity {
         chip.setBackground(rounded(selected ? COLOR_GREEN : Color.WHITE, dp(999), COLOR_LINE, 1));
         chip.setOnClickListener(v -> {
             selectedAgeBand = ChildProfile.normalizeAgeBand(ageBand);
+            if (nicknameInput != null) {
+                childNickname = nicknameInput.getText().toString();
+            }
             render();
         });
         return chip;
@@ -288,7 +364,6 @@ public final class FamilySetupActivity extends Activity {
             passcode.append(key);
         }
         refreshPasscodeDots();
-        refreshCompleteButton();
     }
 
     private void refreshPasscodeDots() {
@@ -307,38 +382,46 @@ public final class FamilySetupActivity extends Activity {
         }
     }
 
-    private void refreshCompleteButton() {
-        if (completeButton == null) {
-            return;
-        }
-        boolean enabled = passcode.length() == 4;
-        completeButton.setEnabled(enabled);
-        completeButton.setTextColor(enabled ? Color.WHITE : COLOR_DISABLED_TEXT);
-        completeButton.setBackground(rounded(enabled ? COLOR_GREEN : COLOR_DISABLED, dp(999), Color.TRANSPARENT, 0));
-    }
-
-    private void saveAndFinish() {
-        if (passcode.length() != 4) {
-            Toast.makeText(this, R.string.family_setup_passcode_required, Toast.LENGTH_SHORT).show();
-            return;
-        }
+    private void saveParentAndShowBinding() {
         try {
-            FamilySetupDraft draft = FamilySetupDraft.create(
-                    selectedRole,
+            long now = System.currentTimeMillis() / 1000L;
+            FamilySetupDraft draft = FamilySetupDraft.createParent(
                     childNickname,
                     selectedAgeBand,
                     passcode.toString(),
-                    System.currentTimeMillis() / 1000L);
+                    now);
+            pendingInvite = FamilyBindingInvite.create(null, draft.childProfile, now);
             store.saveProductMode(draft.productMode);
             store.saveDeviceRole(draft.deviceRole);
             store.saveChildProfiles(Collections.singletonList(draft.childProfile), draft.childProfile.childId);
             store.saveParentPasscode(draft.passcode);
+            store.saveFamilyBindingInvite(pendingInvite);
             Toast.makeText(this, R.string.family_setup_saved, Toast.LENGTH_SHORT).show();
-            startActivity(new Intent(this, FamilyHomeActivity.class));
-            finish();
+            step = 2;
+            render();
         } catch (IllegalArgumentException ex) {
             Toast.makeText(this, R.string.family_setup_nickname_required, Toast.LENGTH_SHORT).show();
         }
+    }
+
+    private void joinFamilyByCode() {
+        String enteredCode = bindingCodeInput == null ? "" : bindingCodeInput.getText().toString();
+        try {
+            FamilyBindingDraft draft = FamilyBindingDraft.create(enteredCode);
+            boolean consumed = store.consumeFamilyBindingCode(draft.bindingCode);
+            if (!consumed) {
+                Toast.makeText(this, R.string.family_binding_invalid, Toast.LENGTH_SHORT).show();
+                return;
+            }
+            openFamilyHome();
+        } catch (IllegalArgumentException ex) {
+            Toast.makeText(this, R.string.family_binding_invalid, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void openFamilyHome() {
+        startActivity(new Intent(this, FamilyHomeActivity.class));
+        finish();
     }
 
     private void addPageTitle(int titleId, int leadId) {
@@ -354,6 +437,39 @@ public final class FamilySetupActivity extends Activity {
         TextView leadView = helpText(getString(leadId));
         leadView.setTextSize(17);
         root.addView(leadView, matchWrapTop(14));
+    }
+
+    private View bindingSummary(FamilyBindingInvite invite) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(16), dp(14), dp(16), dp(14));
+        card.setBackground(rounded(Color.WHITE, dp(8), COLOR_LINE, 1));
+
+        LinearLayout textBlock = new LinearLayout(this);
+        textBlock.setOrientation(LinearLayout.VERTICAL);
+        card.addView(textBlock, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView label = new TextView(this);
+        label.setText(R.string.family_binding_will_join);
+        label.setTextSize(17);
+        label.setTextColor(COLOR_TEXT);
+        label.setTypeface(AppFonts.bold(this));
+        label.setIncludeFontPadding(false);
+        textBlock.addView(label, matchWrap());
+
+        TextView child = helpText(invite.childProfile.nickname);
+        textBlock.addView(child, matchWrapTop(6));
+
+        TextView role = new TextView(this);
+        role.setText(R.string.family_role_child);
+        role.setTextSize(15);
+        role.setTextColor(COLOR_TEXT);
+        role.setTypeface(AppFonts.bold(this));
+        role.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        role.setIncludeFontPadding(false);
+        card.addView(role, wrapWrap());
+        return card;
     }
 
     private TextView fieldLabel(String label) {
@@ -390,6 +506,46 @@ public final class FamilySetupActivity extends Activity {
         button.setAutoSizeTextTypeUniformWithConfiguration(13, 17, 1, TypedValue.COMPLEX_UNIT_SP);
         button.setOnClickListener(listener);
         return button;
+    }
+
+    private TextView secondaryButton(String label, View.OnClickListener listener) {
+        TextView button = new TextView(this);
+        button.setText(label);
+        button.setTextSize(17);
+        button.setTextColor(COLOR_GREEN);
+        button.setTypeface(AppFonts.bold(this));
+        button.setGravity(Gravity.CENTER);
+        button.setIncludeFontPadding(false);
+        button.setBackground(rounded(COLOR_SOFT, dp(999), COLOR_LINE, 1));
+        button.setMinHeight(dp(54));
+        button.setAutoSizeTextTypeUniformWithConfiguration(13, 17, 1, TypedValue.COMPLEX_UNIT_SP);
+        button.setOnClickListener(listener);
+        return button;
+    }
+
+    private TextView disabledStatus(String label) {
+        TextView text = new TextView(this);
+        text.setText(label);
+        text.setTextSize(15);
+        text.setTextColor(COLOR_DISABLED_TEXT);
+        text.setTypeface(AppFonts.bold(this));
+        text.setGravity(Gravity.CENTER);
+        text.setIncludeFontPadding(false);
+        text.setBackground(rounded(COLOR_DISABLED, dp(999), Color.TRANSPARENT, 0));
+        text.setMinHeight(dp(46));
+        return text;
+    }
+
+    private String formatBindingCode(String code) {
+        String normalized = FamilyBindingInvite.normalizeBindingCode(code);
+        if (normalized.length() == 6) {
+            return normalized.substring(0, 3) + " " + normalized.substring(3);
+        }
+        return normalized;
+    }
+
+    private int totalSteps() {
+        return selectedRole == DeviceRole.CHILD_DEVICE ? 2 : 3;
     }
 
     private void goBack() {

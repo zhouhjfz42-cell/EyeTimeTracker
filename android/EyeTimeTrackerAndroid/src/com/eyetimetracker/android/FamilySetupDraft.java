@@ -19,6 +19,17 @@ public final class FamilySetupDraft {
             String ageBand,
             String passcode,
             long nowUnixSeconds) {
+        if (deviceRole != null && deviceRole != DeviceRole.PARENT_DEVICE) {
+            throw new IllegalArgumentException("Family setup draft only creates parent-owned child profiles.");
+        }
+        return createParent(childNickname, ageBand, passcode, nowUnixSeconds);
+    }
+
+    public static FamilySetupDraft createParent(
+            String childNickname,
+            String ageBand,
+            String passcode,
+            long nowUnixSeconds) {
         String nickname = safe(childNickname).trim();
         if (nickname.isEmpty()) {
             throw new IllegalArgumentException("Child nickname is required.");
@@ -36,7 +47,7 @@ public final class FamilySetupDraft {
                 timestamp);
         return new FamilySetupDraft(
                 ProductMode.FAMILY,
-                deviceRole == null ? DeviceRole.PARENT_DEVICE : deviceRole,
+                DeviceRole.PARENT_DEVICE,
                 childProfile,
                 safePasscode);
     }

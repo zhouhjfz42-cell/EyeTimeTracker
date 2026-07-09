@@ -46,6 +46,21 @@
     <string name="duration_hours_minutes_padded" formatted="false">{hours}小时{minutes:00}分</string>
     <string name="duration_minutes" formatted="false">{minutes}分钟</string>
     <string name="duration_zero_minutes" formatted="false">0分钟</string>
+    <string name="family_binding_child_desc" formatted="false">加入后，这台设备会按家长设置记录和提醒。</string>
+    <string name="family_binding_child_title" formatted="false">输入家长手机上的绑定码</string>
+    <string name="family_binding_code_label" formatted="false">绑定码</string>
+    <string name="family_binding_enter_home" formatted="false">进入家庭护眼首页</string>
+    <string name="family_binding_input_hint" formatted="false">6 位绑定码</string>
+    <string name="family_binding_invalid" formatted="false">绑定码不正确或已失效</string>
+    <string name="family_binding_join" formatted="false">加入家庭护眼</string>
+    <string name="family_binding_missing_invite" formatted="false">请在家长手机上生成绑定码后再加入。</string>
+    <string name="family_binding_once_help" formatted="false">二维码和数字码只用于添加这一次设备。</string>
+    <string name="family_binding_scan" formatted="false">扫码加入</string>
+    <string name="family_binding_scan_unavailable" formatted="false">当前版本先使用数字码加入</string>
+    <string name="family_binding_waiting_desc" formatted="false">让孩子设备扫描二维码，或输入下面的数字码。</string>
+    <string name="family_binding_waiting_status" formatted="false">等待孩子设备加入...</string>
+    <string name="family_binding_waiting_title" formatted="false">在孩子设备上加入</string>
+    <string name="family_binding_will_join" formatted="false">将加入</string>
     <string name="family_eye_mode" formatted="false">家庭护眼</string>
     <string name="family_eye_mode_unavailable" formatted="false">当前模式未包含家庭护眼</string>
     <string name="family_home_child_note" formatted="false">这台设备已加入家庭护眼。家庭设置由家长管理。</string>
@@ -80,22 +95,24 @@
     <string name="family_setup_child_title" formatted="false">孩子怎么称呼？</string>
     <string name="family_setup_clear" formatted="false">清除</string>
     <string name="family_setup_complete" formatted="false">完成并进入家庭护眼</string>
+    <string name="family_setup_continue" formatted="false">继续</string>
     <string name="family_setup_continue_child" formatted="false">继续，设置孩子档案</string>
     <string name="family_setup_continue_protection" formatted="false">继续，设置保护方式</string>
     <string name="family_setup_delete" formatted="false">退格</string>
+    <string name="family_setup_generate_binding" formatted="false">生成绑定码</string>
     <string name="family_setup_nickname_required" formatted="false">请先填写孩子昵称</string>
     <string name="family_setup_passcode_required" formatted="false">请设置 4 位保护密码</string>
     <string name="family_setup_protection_lead" formatted="false">以后修改家庭护眼设置时需要输入它。</string>
     <string name="family_setup_protection_notice" formatted="false">这个密码不常用，建议先记在家长手机里。</string>
     <string name="family_setup_protection_title" formatted="false">设置 4 位保护密码</string>
-    <string name="family_setup_role_child" formatted="false">这是孩子手机或平板</string>
-    <string name="family_setup_role_child_desc" formatted="false">这台设备主要给孩子使用。</string>
-    <string name="family_setup_role_lead" formatted="false">选错也没关系，进入家庭护眼后可以再改。</string>
-    <string name="family_setup_role_parent" formatted="false">这是家长手机</string>
-    <string name="family_setup_role_parent_desc" formatted="false">我会在这台手机上查看和管理孩子的用眼设置。</string>
-    <string name="family_setup_role_title" formatted="false">这台设备是谁在用？</string>
+    <string name="family_setup_role_child" formatted="false">这是孩子设备</string>
+    <string name="family_setup_role_child_desc" formatted="false">加入家长已经创建好的档案。</string>
+    <string name="family_setup_role_lead" formatted="false">家长手机用来管理，孩子设备用来记录和提醒。</string>
+    <string name="family_setup_role_parent" formatted="false">我是家长</string>
+    <string name="family_setup_role_parent_desc" formatted="false">创建孩子档案，之后添加孩子设备。</string>
+    <string name="family_setup_role_title" formatted="false">这台设备给谁用？</string>
     <string name="family_setup_saved" formatted="false">家庭护眼设置已保存</string>
-    <string name="family_setup_step" formatted="false">{current}/3</string>
+    <string name="family_setup_step" formatted="false">{current}/{total}</string>
     <string name="family_setup_title" formatted="false">家庭护眼</string>
     <string name="main_autostart" formatted="false">开机启动</string>
     <string name="main_card_month" formatted="false">本月</string>

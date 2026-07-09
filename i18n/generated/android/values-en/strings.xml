@@ -46,6 +46,21 @@
     <string name="duration_hours_minutes_padded" formatted="false">{hours} hr {minutes:00} min</string>
     <string name="duration_minutes" formatted="false">{minutes} min</string>
     <string name="duration_zero_minutes" formatted="false">0 min</string>
+    <string name="family_binding_child_desc" formatted="false">After joining, this device will record and remind based on the parent settings.</string>
+    <string name="family_binding_child_title" formatted="false">Enter the code on the parent phone</string>
+    <string name="family_binding_code_label" formatted="false">Binding code</string>
+    <string name="family_binding_enter_home" formatted="false">Enter Family Eye Care</string>
+    <string name="family_binding_input_hint" formatted="false">6-digit binding code</string>
+    <string name="family_binding_invalid" formatted="false">The binding code is incorrect or expired</string>
+    <string name="family_binding_join" formatted="false">Join Family Eye Care</string>
+    <string name="family_binding_missing_invite" formatted="false">Generate a binding code on the parent phone first.</string>
+    <string name="family_binding_once_help" formatted="false">The QR code and number code are only used to add this device once.</string>
+    <string name="family_binding_scan" formatted="false">Scan to join</string>
+    <string name="family_binding_scan_unavailable" formatted="false">Use the number code in this version</string>
+    <string name="family_binding_waiting_desc" formatted="false">Scan the QR code on the child device, or enter the code below.</string>
+    <string name="family_binding_waiting_status" formatted="false">Waiting for the child device...</string>
+    <string name="family_binding_waiting_title" formatted="false">Join on the child device</string>
+    <string name="family_binding_will_join" formatted="false">Will join</string>
     <string name="family_eye_mode" formatted="false">Family eye care</string>
     <string name="family_eye_mode_unavailable" formatted="false">Family eye care is not included in the current mode.</string>
     <string name="family_home_child_note" formatted="false">This device is part of Family Eye Care. Family settings are managed by the parent.</string>
@@ -80,22 +95,24 @@
     <string name="family_setup_child_title" formatted="false">What should we call the child?</string>
     <string name="family_setup_clear" formatted="false">Clear</string>
     <string name="family_setup_complete" formatted="false">Finish and enter Family Eye Care</string>
+    <string name="family_setup_continue" formatted="false">Continue</string>
     <string name="family_setup_continue_child" formatted="false">Continue to child profile</string>
     <string name="family_setup_continue_protection" formatted="false">Continue to protection</string>
     <string name="family_setup_delete" formatted="false">Delete</string>
+    <string name="family_setup_generate_binding" formatted="false">Generate binding code</string>
     <string name="family_setup_nickname_required" formatted="false">Enter the child nickname first</string>
     <string name="family_setup_passcode_required" formatted="false">Set a 4-digit protection code</string>
     <string name="family_setup_protection_lead" formatted="false">You will enter it before changing Family Eye Care settings.</string>
     <string name="family_setup_protection_notice" formatted="false">This code is not used often. Consider saving it on the parent\'s phone.</string>
     <string name="family_setup_protection_title" formatted="false">Set a 4-digit protection code</string>
-    <string name="family_setup_role_child" formatted="false">This is the child\'s phone or tablet</string>
-    <string name="family_setup_role_child_desc" formatted="false">This device is mainly used by the child.</string>
-    <string name="family_setup_role_lead" formatted="false">You can change this later in Family Eye Care.</string>
-    <string name="family_setup_role_parent" formatted="false">This is the parent\'s phone</string>
-    <string name="family_setup_role_parent_desc" formatted="false">I will use this phone to view and manage my child\'s eye-care settings.</string>
+    <string name="family_setup_role_child" formatted="false">This is the child device</string>
+    <string name="family_setup_role_child_desc" formatted="false">Join a profile already created by the parent.</string>
+    <string name="family_setup_role_lead" formatted="false">The parent phone manages settings. The child device records and reminds.</string>
+    <string name="family_setup_role_parent" formatted="false">I am the parent</string>
+    <string name="family_setup_role_parent_desc" formatted="false">Create the child profile, then add the child device.</string>
     <string name="family_setup_role_title" formatted="false">Who uses this device?</string>
     <string name="family_setup_saved" formatted="false">Family Eye Care settings saved</string>
-    <string name="family_setup_step" formatted="false">{current}/3</string>
+    <string name="family_setup_step" formatted="false">{current}/{total}</string>
     <string name="family_setup_title" formatted="false">Family Eye Care</string>
     <string name="main_autostart" formatted="false">Start on login</string>
     <string name="main_card_month" formatted="false">This Month</string>

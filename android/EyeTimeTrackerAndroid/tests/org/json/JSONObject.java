@@ -18,6 +18,21 @@ public class JSONObject {
         return this;
     }
 
+    public JSONObject put(String key, int value) {
+        values.put(key, Integer.valueOf(value));
+        return this;
+    }
+
+    public JSONObject put(String key, long value) {
+        values.put(key, Long.valueOf(value));
+        return this;
+    }
+
+    public JSONObject put(String key, boolean value) {
+        values.put(key, Boolean.valueOf(value));
+        return this;
+    }
+
     public boolean has(String key) {
         return values.containsKey(key);
     }
