@@ -28,9 +28,14 @@ public final class EyeTimeStore {
     private static final String PREFS = "eye_time_tracker";
     private static final String STATE = "state_json";
     private static final String DAILY_STATS_CACHE = "dailyStatsCache";
+    private static final String FAMILY_CHILD_DAILY_STATS_CACHE = "familyChildDailyStatsCache";
+    private static final String FAMILY_CHILD_DAILY_STATS_CACHE_CHANGED = "_familyChildDailyStatsCacheChanged";
     private static final String PRODUCT_MODE = "productMode";
     private static final String DEVICE_ROLE = "deviceRole";
     private static final String FAMILY_ID = "familyId";
+    private static final String FAMILY_CHILD_DEVICE_ID = "familyChildDeviceId";
+    private static final String FAMILY_CHILD_DEVICE_JOINED_AT_UNIX_SECONDS = "familyChildDeviceJoinedAtUnixSeconds";
+    private static final String FAMILY_CHILD_SEGMENTS = "familyChildSegments";
     private static final String PENDING_FAMILY_BINDING_INVITE = "pendingFamilyBindingInvite";
     private static final String CHILD_PROFILES = "childProfiles";
     private static final String ACTIVE_CHILD_ID = "activeChildId";
@@ -54,6 +59,9 @@ public final class EyeTimeStore {
     private static final String PEER_REMINDER_PLATFORM = "peer_reminder_platform";
     private static final String PEER_REMINDER_COUNTING = "peer_reminder_counting";
     private static final String PEER_REMINDER_SESSION_STARTED = "peer_reminder_session_started";
+    private static final String FAMILY_CHILD_REMINDER_DATE = "family_child_reminder_date";
+    private static final String FAMILY_CHILD_REMINDER_SHOWN = "family_child_reminder_shown";
+    private static final String FAMILY_CHILD_LAST_REMINDER_STEP = "family_child_last_reminder_step";
     private static final String RESET_DATE = "display_reset_date";
     private static final String RESET_TODAY_SECONDS = "display_reset_today_seconds";
     private static final String RESET_YESTERDAY_SECONDS = "display_reset_yesterday_seconds";
@@ -149,12 +157,85 @@ public final class EyeTimeStore {
         }
     }
 
+    public synchronized int addFamilyChildSegments(List<UsageSegment> newSegments) {
+        try {
+            JSONObject state = loadState();
+            int changed = mergeFamilyChildSegments(state, newSegments);
+            if (changed > 0) {
+                for (String date : segmentDates(newSegments)) {
+                    removeFamilyChildDailyStatsCache(state, date);
+                }
+                warmPastFamilyChildDailyStatsCache(state, LocalDate.now());
+                saveState(state);
+            }
+            return changed;
+        } catch (JSONException ignored) {
+            return 0;
+        }
+    }
+
     public synchronized List<UsageSegment> getSegments(LocalDate start, LocalDate end) {
         try {
             return readEffectiveSegments(loadState(), start, end);
         } catch (JSONException ignored) {
             return new ArrayList<>();
         }
+    }
+
+    public synchronized List<UsageSegment> getFamilyChildSegments(LocalDate start, LocalDate end) {
+        try {
+            return readFamilyChildSegments(loadState(), start, end);
+        } catch (JSONException ignored) {
+            return new ArrayList<>();
+        }
+    }
+
+    public synchronized DailySummary getFamilyChildDay(LocalDate date) {
+        List<DailySummary> values = getFamilyChildDays(date, date);
+        if (!values.isEmpty()) {
+            return values.get(0);
+        }
+        return new DailySummary(date.toString(), 0L, false, 0);
+    }
+
+    public synchronized List<DailySummary> getFamilyChildDays(LocalDate start, LocalDate end) {
+        long startedAt = System.currentTimeMillis();
+        List<DailySummary> values = new ArrayList<>();
+        try {
+            JSONObject state = loadState();
+            for (DailyStatsSnapshot snapshot : buildFamilyChildSnapshots(state, start, end)) {
+                values.add(snapshot.summary);
+            }
+            saveFamilyChildCacheIfChanged(state);
+        } catch (JSONException ignored) {
+            values.clear();
+        }
+        Log.i(DIAG_TAG, "EyeTimeStore getFamilyChildDays range=" + start + ".." + end
+                + " days=" + values.size()
+                + " ms=" + elapsed(startedAt));
+        return values;
+    }
+
+    public synchronized DeviceUsageBreakdown getFamilyChildDeviceBreakdown(LocalDate date) {
+        List<DeviceUsageBreakdown> values = getFamilyChildDeviceBreakdowns(date, date);
+        return values.isEmpty() ? new DeviceUsageBreakdown(0L, 0L) : values.get(0);
+    }
+
+    public synchronized List<DeviceUsageBreakdown> getFamilyChildDeviceBreakdowns(LocalDate start, LocalDate end) {
+        List<DeviceUsageBreakdown> values = new ArrayList<>();
+        try {
+            JSONObject state = loadState();
+            for (DailyStatsSnapshot snapshot : buildFamilyChildSnapshots(state, start, end)) {
+                values.add(snapshot.breakdown);
+            }
+            saveFamilyChildCacheIfChanged(state);
+        } catch (JSONException ignored) {
+            values.clear();
+        }
+        if (values.isEmpty()) {
+            values.add(new DeviceUsageBreakdown(0L, 0L));
+        }
+        return values;
     }
 
     public synchronized DeviceUsageBreakdown getDeviceBreakdown(LocalDate date) {
@@ -287,6 +368,55 @@ public final class EyeTimeStore {
         }
     }
 
+    public synchronized void warmPastFamilyChildDailyStatsCache(LocalDate today) {
+        long startedAt = System.currentTimeMillis();
+        try {
+            JSONObject state = loadState();
+            int cached = warmPastFamilyChildDailyStatsCache(state, today);
+            if (cached > 0) {
+                saveState(state);
+            }
+            Log.i(DIAG_TAG, "EyeTimeStore warmPastFamilyChildDailyStatsCache dates=" + cached
+                    + " ms=" + elapsed(startedAt));
+        } catch (JSONException ignored) {
+        }
+    }
+
+    private static int warmPastFamilyChildDailyStatsCache(JSONObject state, LocalDate today) throws JSONException {
+        Set<String> dates = collectPastFamilyChildDates(state, today);
+        if (dates.isEmpty()) {
+            return 0;
+        }
+        LocalDate start = null;
+        LocalDate end = null;
+        List<LocalDate> missingDates = new ArrayList<>();
+        for (String dateValue : dates) {
+            LocalDate date = parseDateOrNull(dateValue);
+            if (date == null || readCachedFamilyChildDailyStats(state, date) != null) {
+                continue;
+            }
+            missingDates.add(date);
+            if (start == null || date.isBefore(start)) {
+                start = date;
+            }
+            if (end == null || date.isAfter(end)) {
+                end = date;
+            }
+        }
+        if (missingDates.isEmpty() || start == null || end == null) {
+            return 0;
+        }
+        Map<String, List<UsageSegment>> segmentsByDate = groupSegmentsByDate(readFamilyChildSegments(state, start, end));
+        int changed = 0;
+        for (LocalDate date : missingDates) {
+            DailyStatsSnapshot snapshot = buildFamilyChildStatsSnapshot(state, date, segmentsByDate.get(date.toString()));
+            if (cacheFamilyChildDailyStatsIfStable(state, date, snapshot)) {
+                changed++;
+            }
+        }
+        return changed;
+    }
+
     private DailyStatsSnapshot buildDailyStatsSnapshot(
             JSONObject state,
             LocalDate date,
@@ -306,10 +436,18 @@ public final class EyeTimeStore {
     }
 
     private DailyStatsSnapshot readCachedDailyStats(JSONObject state, LocalDate date) throws JSONException {
+        return readCachedDailyStats(state, date, DAILY_STATS_CACHE);
+    }
+
+    private static DailyStatsSnapshot readCachedFamilyChildDailyStats(JSONObject state, LocalDate date) throws JSONException {
+        return readCachedDailyStats(state, date, FAMILY_CHILD_DAILY_STATS_CACHE);
+    }
+
+    private static DailyStatsSnapshot readCachedDailyStats(JSONObject state, LocalDate date, String cacheKey) throws JSONException {
         if (!isStableCacheDate(date)) {
             return null;
         }
-        JSONArray cache = state.optJSONArray(DAILY_STATS_CACHE);
+        JSONArray cache = state.optJSONArray(cacheKey);
         if (cache == null) {
             return null;
         }
@@ -324,14 +462,22 @@ public final class EyeTimeStore {
     }
 
     private boolean cacheDailyStatsIfStable(JSONObject state, LocalDate date, DailyStatsSnapshot snapshot) throws JSONException {
+        return cacheDailyStatsIfStable(state, date, snapshot, DAILY_STATS_CACHE);
+    }
+
+    private static boolean cacheFamilyChildDailyStatsIfStable(JSONObject state, LocalDate date, DailyStatsSnapshot snapshot) throws JSONException {
+        return cacheDailyStatsIfStable(state, date, snapshot, FAMILY_CHILD_DAILY_STATS_CACHE);
+    }
+
+    private static boolean cacheDailyStatsIfStable(JSONObject state, LocalDate date, DailyStatsSnapshot snapshot, String cacheKey) throws JSONException {
         if (!isStableCacheDate(date) || snapshot == null) {
             return false;
         }
-        removeDailyStatsCache(state, date.toString());
-        JSONArray cache = state.optJSONArray(DAILY_STATS_CACHE);
+        removeDailyStatsCache(state, date.toString(), cacheKey);
+        JSONArray cache = state.optJSONArray(cacheKey);
         if (cache == null) {
             cache = new JSONArray();
-            state.put(DAILY_STATS_CACHE, cache);
+            state.put(cacheKey, cache);
         }
         cache.put(dailyStatsToJson(snapshot));
         return true;
@@ -342,10 +488,18 @@ public final class EyeTimeStore {
     }
 
     private static void removeDailyStatsCache(JSONObject state, String date) throws JSONException {
+        removeDailyStatsCache(state, date, DAILY_STATS_CACHE);
+    }
+
+    private static void removeFamilyChildDailyStatsCache(JSONObject state, String date) throws JSONException {
+        removeDailyStatsCache(state, date, FAMILY_CHILD_DAILY_STATS_CACHE);
+    }
+
+    private static void removeDailyStatsCache(JSONObject state, String date, String cacheKey) throws JSONException {
         if (state == null || date == null || date.trim().isEmpty()) {
             return;
         }
-        JSONArray cache = state.optJSONArray(DAILY_STATS_CACHE);
+        JSONArray cache = state.optJSONArray(cacheKey);
         if (cache == null) {
             return;
         }
@@ -356,7 +510,7 @@ public final class EyeTimeStore {
                 kept.put(item);
             }
         }
-        state.put(DAILY_STATS_CACHE, kept);
+        state.put(cacheKey, kept);
     }
 
     private static Set<String> segmentDates(List<UsageSegment> segments) {
@@ -399,6 +553,19 @@ public final class EyeTimeStore {
             }
             addPastDate(json.optString("localDate", ""), today, dates);
         }
+    }
+
+    private static Set<String> collectPastFamilyChildDates(JSONObject state, LocalDate today) throws JSONException {
+        Set<String> dates = new HashSet<>();
+        JSONArray segments = ensureFamilyChildSegments(state);
+        for (int i = 0; i < segments.length(); i++) {
+            JSONObject json = segments.optJSONObject(i);
+            if (json == null) {
+                continue;
+            }
+            addPastDate(json.optString("localDate", ""), today, dates);
+        }
+        return dates;
     }
 
     private static void addPastDate(String dateValue, LocalDate today, Set<String> dates) {
@@ -522,6 +689,41 @@ public final class EyeTimeStore {
         }
     }
 
+    public synchronized boolean isFamilyChildReminderShown(LocalDate date) {
+        ensureFamilyChildReminderDate(date);
+        return prefs.getBoolean(FAMILY_CHILD_REMINDER_SHOWN, false);
+    }
+
+    public synchronized int getFamilyChildLastReminderStep(LocalDate date) {
+        ensureFamilyChildReminderDate(date);
+        return prefs.getInt(FAMILY_CHILD_LAST_REMINDER_STEP, 0);
+    }
+
+    public synchronized void markFamilyChildReminderShown(LocalDate date, int reminderStep) {
+        if (date == null) {
+            return;
+        }
+        prefs.edit()
+                .putString(FAMILY_CHILD_REMINDER_DATE, date.toString())
+                .putBoolean(FAMILY_CHILD_REMINDER_SHOWN, true)
+                .putInt(FAMILY_CHILD_LAST_REMINDER_STEP, Math.max(1, reminderStep))
+                .apply();
+    }
+
+    private void ensureFamilyChildReminderDate(LocalDate date) {
+        if (date == null) {
+            return;
+        }
+        String currentDate = date.toString();
+        if (!currentDate.equals(prefs.getString(FAMILY_CHILD_REMINDER_DATE, ""))) {
+            prefs.edit()
+                    .putString(FAMILY_CHILD_REMINDER_DATE, currentDate)
+                    .putBoolean(FAMILY_CHILD_REMINDER_SHOWN, false)
+                    .putInt(FAMILY_CHILD_LAST_REMINDER_STEP, 0)
+                    .apply();
+        }
+    }
+
     public synchronized int getReminderMinutes() {
         return ReminderThreshold.clampMinutes(prefs.getInt(REMINDER_MINUTES, ReminderThreshold.DEFAULT_MINUTES));
     }
@@ -567,6 +769,14 @@ public final class EyeTimeStore {
             return readProductMode(loadState());
         } catch (JSONException ignored) {
             return ProductMode.PERSONAL;
+        }
+    }
+
+    public synchronized FamilyHomeState getFamilyHomeState() {
+        try {
+            return readFamilyHomeState(loadState());
+        } catch (JSONException ignored) {
+            return FamilyHomeState.create(ProductMode.PERSONAL, DeviceRole.PERSONAL_DEVICE, null, false, false);
         }
     }
 
@@ -661,6 +871,67 @@ public final class EyeTimeStore {
         }
     }
 
+    public synchronized void saveRemoteFamilyChildBinding(String familyId, ChildProfile childProfile) {
+        saveRemoteFamilyChildBinding(familyId, childProfile, null);
+    }
+
+    public synchronized void saveRemoteFamilyChildBinding(String familyId, ChildProfile childProfile, ParentPasscode parentPasscode) {
+        if (childProfile == null || !childProfile.isValid()) {
+            return;
+        }
+        try {
+            JSONObject state = loadState();
+            writeRemoteFamilyChildBinding(state, familyId, childProfile, parentPasscode);
+            saveState(state);
+        } catch (JSONException ex) {
+            throw new IllegalStateException("Failed to save remote family child binding.", ex);
+        }
+    }
+
+    public synchronized void saveFamilyChildDeviceBinding(String childDeviceId) {
+        try {
+            JSONObject state = loadState();
+            writeFamilyChildDeviceBinding(state, childDeviceId, System.currentTimeMillis() / 1000L);
+            saveState(state);
+        } catch (JSONException ex) {
+            throw new IllegalStateException("Failed to save family child device binding.", ex);
+        }
+    }
+
+    public synchronized String getFamilyId() {
+        try {
+            return readFamilyId(loadState());
+        } catch (JSONException ignored) {
+            return "";
+        }
+    }
+
+    public synchronized String getFamilyChildDeviceId() {
+        try {
+            return readFamilyChildDeviceId(loadState());
+        } catch (JSONException ignored) {
+            return "";
+        }
+    }
+
+    public synchronized boolean hasFamilyChildDeviceBinding() {
+        try {
+            return hasFamilyChildDeviceBinding(loadState());
+        } catch (JSONException ignored) {
+            return false;
+        }
+    }
+
+    public synchronized void leaveFamilyMode() {
+        try {
+            JSONObject state = loadState();
+            writeLeaveFamilyMode(state);
+            saveState(state);
+        } catch (JSONException ex) {
+            throw new IllegalStateException("Failed to leave family mode.", ex);
+        }
+    }
+
     public synchronized boolean hasParentPasscode() {
         try {
             return hasParentPasscode(loadState());
@@ -673,9 +944,16 @@ public final class EyeTimeStore {
         if (passcode == null || passcode.trim().isEmpty()) {
             return;
         }
+        saveParentPasscode(createParentPasscode(passcode, System.currentTimeMillis() / 1000L));
+    }
+
+    public synchronized void saveParentPasscode(ParentPasscode passcode) {
+        if (passcode == null || !passcode.isConfigured()) {
+            return;
+        }
         try {
             JSONObject state = loadState();
-            writeParentPasscode(state, createParentPasscode(passcode, System.currentTimeMillis() / 1000L));
+            writeParentPasscode(state, passcode);
             saveState(state);
         } catch (JSONException ignored) {
         }
@@ -686,6 +964,14 @@ public final class EyeTimeStore {
             return verifyParentPasscode(readParentPasscode(loadState()), passcode);
         } catch (JSONException ignored) {
             return false;
+        }
+    }
+
+    public synchronized ParentPasscode getParentPasscode() {
+        try {
+            return readParentPasscode(loadState());
+        } catch (JSONException ignored) {
+            return null;
         }
     }
 
@@ -849,6 +1135,33 @@ public final class EyeTimeStore {
         return raw;
     }
 
+    public synchronized long displayFamilyChildTodaySeconds(LocalDate today) {
+        return displayFamilyChildHomeStats(today).todaySeconds;
+    }
+
+    public synchronized long displayFamilyChildYesterdaySeconds(LocalDate today) {
+        return displayFamilyChildHomeStats(today).yesterdaySeconds;
+    }
+
+    public synchronized long displayFamilyChildWeekSeconds(LocalDate today) {
+        return displayFamilyChildHomeStats(today).weekSeconds;
+    }
+
+    public synchronized long displayFamilyChildMonthSeconds(LocalDate today) {
+        return displayFamilyChildHomeStats(today).monthSeconds;
+    }
+
+    public synchronized HomeStatsSnapshot displayFamilyChildHomeStats(LocalDate today) {
+        try {
+            JSONObject state = loadState();
+            HomeStatsSnapshot snapshot = buildFamilyChildHomeStatsFromSnapshots(state, today);
+            saveFamilyChildCacheIfChanged(state);
+            return snapshot;
+        } catch (JSONException ignored) {
+            return HomeStatsSnapshot.empty();
+        }
+    }
+
     public synchronized long sumRange(LocalDate start, LocalDate end) {
         long total = 0L;
         for (DailySummary summary : getDays(start, end)) {
@@ -874,6 +1187,7 @@ public final class EyeTimeStore {
             state.put("platform", PLATFORM);
             state.put("records", new JSONArray());
             state.put("segments", new JSONArray());
+            state.put(FAMILY_CHILD_SEGMENTS, new JSONArray());
             ensureFamilyModeState(state);
             return state;
         }
@@ -884,12 +1198,22 @@ public final class EyeTimeStore {
         if (!state.has("segments")) {
             state.put("segments", new JSONArray());
         }
+        if (!state.has(FAMILY_CHILD_SEGMENTS)) {
+            state.put(FAMILY_CHILD_SEGMENTS, new JSONArray());
+        }
         ensureFamilyModeState(state);
         return state;
     }
 
     private void saveState(JSONObject state) {
         prefs.edit().putString(STATE, state.toString()).apply();
+    }
+
+    private void saveFamilyChildCacheIfChanged(JSONObject state) {
+        if (state != null && state.optBoolean(FAMILY_CHILD_DAILY_STATS_CACHE_CHANGED, false)) {
+            state.remove(FAMILY_CHILD_DAILY_STATS_CACHE_CHANGED);
+            saveState(state);
+        }
     }
 
     private JSONObject getOrCreateRecord(JSONObject state, String date) throws JSONException {
@@ -935,10 +1259,18 @@ public final class EyeTimeStore {
     }
 
     static int mergeSegments(JSONObject state, List<UsageSegment> newSegments) throws JSONException {
+        return mergeSegments(state, newSegments, "segments");
+    }
+
+    static int mergeFamilyChildSegments(JSONObject state, List<UsageSegment> newSegments) throws JSONException {
+        return mergeSegments(state, newSegments, FAMILY_CHILD_SEGMENTS);
+    }
+
+    private static int mergeSegments(JSONObject state, List<UsageSegment> newSegments, String key) throws JSONException {
         if (newSegments == null || newSegments.isEmpty()) {
             return 0;
         }
-        JSONArray segments = ensureSegments(state);
+        JSONArray segments = ensureSegments(state, key);
         Set<String> existingIds = new HashSet<>();
         for (int i = 0; i < segments.length(); i++) {
             JSONObject existing = segments.optJSONObject(i);
@@ -961,10 +1293,18 @@ public final class EyeTimeStore {
     }
 
     private static JSONArray ensureSegments(JSONObject state) throws JSONException {
-        JSONArray segments = state.optJSONArray("segments");
+        return ensureSegments(state, "segments");
+    }
+
+    private static JSONArray ensureFamilyChildSegments(JSONObject state) throws JSONException {
+        return ensureSegments(state, FAMILY_CHILD_SEGMENTS);
+    }
+
+    private static JSONArray ensureSegments(JSONObject state, String key) throws JSONException {
+        JSONArray segments = state.optJSONArray(key);
         if (segments == null) {
             segments = new JSONArray();
-            state.put("segments", segments);
+            state.put(key, segments);
         }
         return segments;
     }
@@ -996,8 +1336,16 @@ public final class EyeTimeStore {
                 json.optLong("updatedAtUnixSeconds", 0L));
     }
 
-    private static List<UsageSegment> readSegments(JSONObject state, LocalDate start, LocalDate end) throws JSONException {
-        JSONArray raw = ensureSegments(state);
+    static List<UsageSegment> readSegments(JSONObject state, LocalDate start, LocalDate end) throws JSONException {
+        return readSegments(state, start, end, "segments");
+    }
+
+    static List<UsageSegment> readFamilyChildSegments(JSONObject state, LocalDate start, LocalDate end) throws JSONException {
+        return readSegments(state, start, end, FAMILY_CHILD_SEGMENTS);
+    }
+
+    private static List<UsageSegment> readSegments(JSONObject state, LocalDate start, LocalDate end, String key) throws JSONException {
+        JSONArray raw = FAMILY_CHILD_SEGMENTS.equals(key) ? ensureFamilyChildSegments(state) : ensureSegments(state, key);
         List<UsageSegment> values = new ArrayList<>();
         for (int i = 0; i < raw.length(); i++) {
             JSONObject json = raw.optJSONObject(i);
@@ -1012,6 +1360,151 @@ public final class EyeTimeStore {
             if (!date.isBefore(start) && !date.isAfter(end)) {
                 values.add(segment);
             }
+        }
+        return values;
+    }
+
+    static long sumFamilyChildDay(JSONObject state, LocalDate date) throws JSONException {
+        if (state == null || date == null) {
+            return 0L;
+        }
+        return UsageSegmentMerger.buildDailySummary(date.toString(), readFamilyChildSegments(state, date, date)).totalSeconds;
+    }
+
+    static long sumFamilyChildRange(JSONObject state, LocalDate start, LocalDate end) throws JSONException {
+        if (state == null || start == null || end == null) {
+            return 0L;
+        }
+        LocalDate first = start.isAfter(end) ? end : start;
+        LocalDate last = start.isAfter(end) ? start : end;
+        long total = 0L;
+        for (LocalDate cursor = first; !cursor.isAfter(last); cursor = cursor.plusDays(1)) {
+            total += sumFamilyChildDay(state, cursor);
+        }
+        return total;
+    }
+
+    static DailySummary buildFamilyChildDay(JSONObject state, LocalDate date) throws JSONException {
+        if (state == null || date == null) {
+            return new DailySummary("", 0L, false, 0);
+        }
+        return UsageSegmentMerger.buildDailySummary(date.toString(), readFamilyChildSegments(state, date, date));
+    }
+
+    static List<DailySummary> buildFamilyChildDays(JSONObject state, LocalDate start, LocalDate end) throws JSONException {
+        List<DailySummary> values = new ArrayList<>();
+        if (state == null || start == null || end == null) {
+            return values;
+        }
+        LocalDate first = start.isAfter(end) ? end : start;
+        LocalDate last = start.isAfter(end) ? start : end;
+        Map<String, List<UsageSegment>> segmentsByDate = groupSegmentsByDate(readFamilyChildSegments(state, first, last));
+        for (LocalDate cursor = first; !cursor.isAfter(last); cursor = cursor.plusDays(1)) {
+            values.add(UsageSegmentMerger.buildDailySummary(cursor.toString(), segmentsByDate.get(cursor.toString())));
+        }
+        return values;
+    }
+
+    private static List<DailyStatsSnapshot> buildFamilyChildSnapshots(JSONObject state, LocalDate start, LocalDate end) throws JSONException {
+        List<DailyStatsSnapshot> values = new ArrayList<>();
+        if (state == null || start == null || end == null) {
+            return values;
+        }
+        LocalDate first = start.isAfter(end) ? end : start;
+        LocalDate last = start.isAfter(end) ? start : end;
+        boolean hasMissing = false;
+        for (LocalDate cursor = first; !cursor.isAfter(last); cursor = cursor.plusDays(1)) {
+            DailyStatsSnapshot cached = readCachedFamilyChildDailyStats(state, cursor);
+            if (cached != null) {
+                values.add(cached);
+            } else {
+                values.add(null);
+                hasMissing = true;
+            }
+        }
+        if (hasMissing) {
+            Map<String, List<UsageSegment>> segmentsByDate = groupSegmentsByDate(readFamilyChildSegments(state, first, last));
+            boolean changedCache = false;
+            int index = 0;
+            for (LocalDate cursor = first; !cursor.isAfter(last); cursor = cursor.plusDays(1)) {
+                if (values.get(index) == null) {
+                    DailyStatsSnapshot snapshot = buildFamilyChildStatsSnapshot(state, cursor, segmentsByDate.get(cursor.toString()));
+                    values.set(index, snapshot);
+                    changedCache |= cacheFamilyChildDailyStatsIfStable(state, cursor, snapshot);
+                }
+                index++;
+            }
+            if (changedCache) {
+                // Caller owns persistence so bulk reads can update the cache once.
+                state.put(FAMILY_CHILD_DAILY_STATS_CACHE_CHANGED, true);
+            }
+        }
+        return values;
+    }
+
+    private static DailyStatsSnapshot buildFamilyChildStatsSnapshot(
+            JSONObject state,
+            LocalDate date,
+            List<UsageSegment> segments) throws JSONException {
+        String dateValue = date.toString();
+        List<UsageSegment> safeSegments = segments == null
+                ? readFamilyChildSegments(state, date, date)
+                : segments;
+        DailySummary summary = UsageSegmentMerger.buildDailySummary(dateValue, safeSegments);
+        return new DailyStatsSnapshot(summary, DeviceUsageBreakdown.build(dateValue, safeSegments));
+    }
+
+    static HomeStatsSnapshot buildFamilyChildHomeStats(JSONObject state, LocalDate today) throws JSONException {
+        if (state == null || today == null) {
+            return HomeStatsSnapshot.empty();
+        }
+        LocalDate weekStart = weekStart(today);
+        LocalDate monthStart = today.withDayOfMonth(1);
+        LocalDate start = earliest(today.minusDays(1), weekStart, monthStart);
+        Map<String, Long> totals = dailyTotals(buildFamilyChildDays(state, start, today));
+        return new HomeStatsSnapshot(
+                dailyTotal(totals, today),
+                dailyTotal(totals, today.minusDays(1)),
+                sumDailyTotals(totals, weekStart, today),
+                sumDailyTotals(totals, monthStart, today));
+    }
+
+    private static HomeStatsSnapshot buildFamilyChildHomeStatsFromSnapshots(JSONObject state, LocalDate today) throws JSONException {
+        if (state == null || today == null) {
+            return HomeStatsSnapshot.empty();
+        }
+        LocalDate weekStart = weekStart(today);
+        LocalDate monthStart = today.withDayOfMonth(1);
+        LocalDate start = earliest(today.minusDays(1), weekStart, monthStart);
+        List<DailySummary> summaries = new ArrayList<>();
+        for (DailyStatsSnapshot snapshot : buildFamilyChildSnapshots(state, start, today)) {
+            summaries.add(snapshot.summary);
+        }
+        Map<String, Long> totals = dailyTotals(summaries);
+        return new HomeStatsSnapshot(
+                dailyTotal(totals, today),
+                dailyTotal(totals, today.minusDays(1)),
+                sumDailyTotals(totals, weekStart, today),
+                sumDailyTotals(totals, monthStart, today));
+    }
+
+    static DeviceUsageBreakdown buildFamilyChildDeviceBreakdown(JSONObject state, LocalDate date) throws JSONException {
+        if (state == null || date == null) {
+            return new DeviceUsageBreakdown(0L, 0L);
+        }
+        return DeviceUsageBreakdown.build(date.toString(), readFamilyChildSegments(state, date, date));
+    }
+
+    static List<DeviceUsageBreakdown> buildFamilyChildDeviceBreakdowns(JSONObject state, LocalDate start, LocalDate end) throws JSONException {
+        List<DeviceUsageBreakdown> values = new ArrayList<>();
+        if (state == null || start == null || end == null) {
+            return values;
+        }
+        LocalDate first = start.isAfter(end) ? end : start;
+        LocalDate last = start.isAfter(end) ? start : end;
+        Map<String, List<UsageSegment>> segmentsByDate = groupSegmentsByDate(readFamilyChildSegments(state, first, last));
+        for (LocalDate cursor = first; !cursor.isAfter(last); cursor = cursor.plusDays(1)) {
+            values.add(DeviceUsageBreakdown.build(cursor.toString(), segmentsByDate.get(cursor.toString())));
         }
         return values;
     }
@@ -1108,6 +1601,43 @@ public final class EyeTimeStore {
         return date.minusDays(date.getDayOfWeek().getValue() - DayOfWeek.MONDAY.getValue());
     }
 
+    private static LocalDate earliest(LocalDate first, LocalDate second, LocalDate third) {
+        LocalDate value = first;
+        if (second.isBefore(value)) {
+            value = second;
+        }
+        if (third.isBefore(value)) {
+            value = third;
+        }
+        return value;
+    }
+
+    private static Map<String, Long> dailyTotals(List<DailySummary> summaries) {
+        Map<String, Long> totals = new HashMap<>();
+        if (summaries == null) {
+            return totals;
+        }
+        for (DailySummary summary : summaries) {
+            if (summary != null && summary.date != null && !summary.date.trim().isEmpty()) {
+                totals.put(summary.date, summary.totalSeconds);
+            }
+        }
+        return totals;
+    }
+
+    private static long dailyTotal(Map<String, Long> totals, LocalDate date) {
+        Long value = totals.get(date.toString());
+        return value == null ? 0L : value;
+    }
+
+    private static long sumDailyTotals(Map<String, Long> totals, LocalDate start, LocalDate end) {
+        long total = 0L;
+        for (LocalDate cursor = start; !cursor.isAfter(end); cursor = cursor.plusDays(1)) {
+            total += dailyTotal(totals, cursor);
+        }
+        return total;
+    }
+
     private static String safe(String value) {
         return value == null ? "" : value;
     }
@@ -1126,6 +1656,25 @@ public final class EyeTimeStore {
             return ProductMode.PERSONAL;
         }
         return ProductMode.fromStorageValue(state.optString(PRODUCT_MODE, ProductMode.PERSONAL.storageValue()));
+    }
+
+    static FamilyHomeState readFamilyHomeState(JSONObject state) {
+        ProductMode productMode = readProductMode(state);
+        DeviceRole deviceRole = readDeviceRole(state);
+        String activeChildId = readActiveChildId(state);
+        ChildProfile activeChild = null;
+        for (ChildProfile profile : readChildProfiles(state)) {
+            if (profile.childId.equals(activeChildId)) {
+                activeChild = profile;
+                break;
+            }
+        }
+        return FamilyHomeState.create(
+                productMode,
+                deviceRole,
+                activeChild,
+                hasParentPasscode(state),
+                hasFamilyChildDeviceBinding(state));
     }
 
     static void writeProductMode(JSONObject state, ProductMode mode) throws JSONException {
@@ -1254,6 +1803,62 @@ public final class EyeTimeStore {
         state.put(FAMILY_ID, invite.familyId);
         state.put(PENDING_FAMILY_BINDING_INVITE, null);
         return true;
+    }
+
+    static void writeRemoteFamilyChildBinding(JSONObject state, String familyId, ChildProfile childProfile) throws JSONException {
+        writeRemoteFamilyChildBinding(state, familyId, childProfile, null);
+    }
+
+    static void writeRemoteFamilyChildBinding(JSONObject state, String familyId, ChildProfile childProfile, ParentPasscode parentPasscode) throws JSONException {
+        if (state == null || childProfile == null || !childProfile.isValid()) {
+            return;
+        }
+        writeProductMode(state, ProductMode.FAMILY);
+        writeDeviceRole(state, DeviceRole.CHILD_DEVICE);
+        writeChildProfiles(state, java.util.Collections.singletonList(childProfile), childProfile.childId);
+        state.put(FAMILY_ID, familyId == null ? "" : familyId.trim());
+        if (parentPasscode != null && parentPasscode.isConfigured()) {
+            writeParentPasscode(state, parentPasscode);
+        }
+        state.put(PENDING_FAMILY_BINDING_INVITE, null);
+    }
+
+    static void writeFamilyChildDeviceBinding(JSONObject state, String childDeviceId, long joinedAtUnixSeconds) throws JSONException {
+        if (state == null) {
+            return;
+        }
+        String safeChildDeviceId = safe(childDeviceId).trim();
+        state.put(FAMILY_CHILD_DEVICE_ID, safeChildDeviceId);
+        state.put(FAMILY_CHILD_DEVICE_JOINED_AT_UNIX_SECONDS, safeChildDeviceId.isEmpty() ? 0L : Math.max(0L, joinedAtUnixSeconds));
+    }
+
+    static boolean hasFamilyChildDeviceBinding(JSONObject state) {
+        return state != null && !safe(state.optString(FAMILY_CHILD_DEVICE_ID, "")).trim().isEmpty();
+    }
+
+    static String readFamilyId(JSONObject state) {
+        return state == null ? "" : safe(state.optString(FAMILY_ID, "")).trim();
+    }
+
+    static String readFamilyChildDeviceId(JSONObject state) {
+        return state == null ? "" : safe(state.optString(FAMILY_CHILD_DEVICE_ID, "")).trim();
+    }
+
+    static void writeLeaveFamilyMode(JSONObject state) throws JSONException {
+        if (state == null) {
+            return;
+        }
+        writeProductMode(state, ProductMode.PERSONAL);
+        writeDeviceRole(state, DeviceRole.PERSONAL_DEVICE);
+        writeChildProfiles(state, java.util.Collections.emptyList(), "");
+        state.put(FAMILY_ID, "");
+        state.put(FAMILY_CHILD_DEVICE_ID, "");
+        state.put(FAMILY_CHILD_DEVICE_JOINED_AT_UNIX_SECONDS, 0L);
+        state.put(FAMILY_CHILD_SEGMENTS, new JSONArray());
+        state.put(PENDING_FAMILY_BINDING_INVITE, null);
+        state.put(PARENT_PASSCODE_HASH, "");
+        state.put(PARENT_PASSCODE_SALT, "");
+        state.put(PARENT_PASSCODE_UPDATED_AT, 0L);
     }
 
     private static JSONObject childProfileToJson(ChildProfile profile) throws JSONException {

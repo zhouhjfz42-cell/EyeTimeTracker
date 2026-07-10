@@ -19,6 +19,7 @@
     <string name="calendar_weekday_wed" formatted="false">Wed</string>
     <string name="common_apply" formatted="false">Apply</string>
     <string name="common_cancel" formatted="false">Cancel</string>
+    <string name="common_confirm" formatted="false">Confirm</string>
     <string name="common_disconnect" formatted="false">Disconnect</string>
     <string name="common_got_it" formatted="false">Got it</string>
     <string name="common_main_page" formatted="false">Main</string>
@@ -47,35 +48,63 @@
     <string name="duration_minutes" formatted="false">{minutes} min</string>
     <string name="duration_zero_minutes" formatted="false">0 min</string>
     <string name="family_binding_child_desc" formatted="false">After joining, this device will record and remind based on the parent settings.</string>
+    <string name="family_binding_child_joined_status" formatted="false">Child device joined</string>
     <string name="family_binding_child_title" formatted="false">Enter the code on the parent phone</string>
     <string name="family_binding_code_label" formatted="false">Binding code</string>
     <string name="family_binding_enter_home" formatted="false">Enter Family Eye Care</string>
     <string name="family_binding_input_hint" formatted="false">6-digit binding code</string>
     <string name="family_binding_invalid" formatted="false">The binding code is incorrect or expired</string>
     <string name="family_binding_join" formatted="false">Join Family Eye Care</string>
+    <string name="family_binding_joined" formatted="false">Joined Family Eye Care</string>
     <string name="family_binding_missing_invite" formatted="false">Generate a binding code on the parent phone first.</string>
+    <string name="family_binding_not_found" formatted="false">Parent phone not found. Keep both phones on the same WiFi and leave the parent phone on the binding code screen.</string>
     <string name="family_binding_once_help" formatted="false">The QR code and number code are only used to add this device once.</string>
     <string name="family_binding_scan" formatted="false">Scan to join</string>
     <string name="family_binding_scan_unavailable" formatted="false">Use the number code in this version</string>
+    <string name="family_binding_searching" formatted="false">Looking for the parent phone</string>
     <string name="family_binding_waiting_desc" formatted="false">Scan the QR code on the child device, or enter the code below.</string>
     <string name="family_binding_waiting_status" formatted="false">Waiting for the child device...</string>
     <string name="family_binding_waiting_title" formatted="false">Join on the child device</string>
     <string name="family_binding_will_join" formatted="false">Will join</string>
     <string name="family_eye_mode" formatted="false">Family eye care</string>
     <string name="family_eye_mode_unavailable" formatted="false">Family eye care is not included in the current mode.</string>
+    <string name="family_home_add_child_device" formatted="false">Add child device</string>
+    <string name="family_home_add_child_device_desc" formatted="false">Show a binding code for the child device</string>
+    <string name="family_home_child_device_joined" formatted="false">Joined</string>
+    <string name="family_home_child_device_not_joined" formatted="false">Not joined</string>
     <string name="family_home_child_note" formatted="false">This device is part of Family Eye Care. Family settings are managed by the parent.</string>
     <string name="family_home_child_profile" formatted="false">Child profile</string>
     <string name="family_home_child_profile_desc" formatted="false">Nickname, age band</string>
+    <string name="family_home_child_reminder_body_once" formatted="false">{child} has reached {duration} of screen time today. It may be time for an eye break.</string>
+    <string name="family_home_child_reminder_body_repeat" formatted="false">{child} has reached {minutes} minutes for the {step} time today. It may be time for an eye break.</string>
+    <string name="family_home_child_reminder_title" formatted="false">{child} eye-care reminder</string>
+    <string name="family_home_child_settings_note" formatted="false">This is a child device. You can rebind or leave Family Eye Care; rules are still managed by the parent.</string>
     <string name="family_home_device_role" formatted="false">Device role</string>
     <string name="family_home_device_role_desc" formatted="false">How this device is used in Family Eye Care</string>
     <string name="family_home_exit" formatted="false">Leave Family Eye Care</string>
     <string name="family_home_exit_desc" formatted="false">Keep personal screen-time stats</string>
+    <string name="family_home_join_as_child_device" formatted="false">Join as child device</string>
+    <string name="family_home_join_as_child_device_desc" formatted="false">Enter the code shown on the parent phone</string>
+    <string name="family_home_leave_confirm_message" formatted="false">This device will return to personal mode. Existing screen-time stats will be kept.</string>
+    <string name="family_home_leave_confirm_title" formatted="false">Leave Family Eye Care?</string>
     <string name="family_home_not_enabled" formatted="false">Not enabled</string>
     <string name="family_home_parent_note" formatted="false">Family Eye Care is on. To change the child profile, protection code, or rules, open Settings in the top right.</string>
     <string name="family_home_passcode" formatted="false">Protection code</string>
+    <string name="family_home_passcode_change" formatted="false">Change</string>
+    <string name="family_home_passcode_change_message" formatted="false">Enter a new 4-digit protection code. The child device will update it on the next sync.</string>
+    <string name="family_home_passcode_change_title" formatted="false">Change protection code</string>
     <string name="family_home_passcode_desc" formatted="false">Protects Family Eye Care settings</string>
+    <string name="family_home_passcode_dialog_message" formatted="false">Enter the 4-digit code set by the parent before changing Family Eye Care settings on this child device.</string>
+    <string name="family_home_passcode_dialog_title" formatted="false">Enter protection code</string>
+    <string name="family_home_passcode_input_hint" formatted="false">4-digit code</string>
+    <string name="family_home_passcode_invalid" formatted="false">Enter 4 digits</string>
+    <string name="family_home_passcode_missing" formatted="false">This device does not have a protection code yet. Add it again from the parent phone.</string>
     <string name="family_home_passcode_not_set" formatted="false">Not set</string>
+    <string name="family_home_passcode_saved" formatted="false">Protection code saved</string>
     <string name="family_home_passcode_set" formatted="false">Set</string>
+    <string name="family_home_passcode_wrong" formatted="false">Protection code is incorrect</string>
+    <string name="family_home_rebind_child_device" formatted="false">Rebind</string>
+    <string name="family_home_rebind_child_device_desc" formatted="false">Enter a new parent binding code</string>
     <string name="family_home_rules" formatted="false">Rules</string>
     <string name="family_home_rules_desc" formatted="false">Set breaks, available times, and limits</string>
     <string name="family_home_settings" formatted="false">Settings</string>
@@ -185,6 +214,7 @@
     <string name="stats_daily_summary_peak_short" formatted="false">Peak {range}</string>
     <string name="stats_daily_summary_yesterday" formatted="false">Yesterday Summary</string>
     <string name="stats_daily_title" formatted="false">Daily View</string>
+    <string name="stats_family_child_subtitle" formatted="false">Child eye-care trends, distribution, and continuous use</string>
     <string name="stats_month_recorded_days" formatted="false">{count} days recorded this month</string>
     <string name="stats_month_title" formatted="false">Monthly Trend</string>
     <string name="stats_sessions_advice" formatted="false">Longest stretch: {duration}. Try to reduce sessions over 45 minutes.</string>

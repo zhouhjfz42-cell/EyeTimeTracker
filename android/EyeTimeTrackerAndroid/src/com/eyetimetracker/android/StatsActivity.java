@@ -29,6 +29,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class StatsActivity extends Activity {
+    public static final String EXTRA_FAMILY_CHILD_STATS = "com.eyetimetracker.android.FAMILY_CHILD_STATS";
+
     private static final String DIAG_TAG = "EyeTimeDiag";
     private static final int COLOR_BG = Color.rgb(248, 252, 250);
     private static final int COLOR_TEXT = Color.rgb(17, 24, 39);
@@ -46,10 +48,14 @@ public final class StatsActivity extends Activity {
     private LocalDate selectedMonthStart;
     private LocalDate rangeStart;
     private LocalDate rangeEnd;
+    private boolean familyChildStatsMode;
 
     @Override protected void onCreate(Bundle bundle) {
         super.onCreate(bundle);
         store = new EyeTimeStore(this);
+        familyChildStatsMode = getIntent().getBooleanExtra(EXTRA_FAMILY_CHILD_STATS, false)
+                && store.getProductMode() == ProductMode.FAMILY
+                && store.getDeviceRole() == DeviceRole.PARENT_DEVICE;
         LocalDate today = LocalDate.now();
         selectedDay = today;
         selectedWeekStart = startOfWeek(today);
@@ -61,6 +67,10 @@ public final class StatsActivity extends Activity {
     }
 
     private void runSyncOnOpen() {
+        if (familyChildStatsMode) {
+            Log.i(DIAG_TAG, "StatsActivity syncOnOpen skipped familyChildStatsMode=true");
+            return;
+        }
         SyncSettings settings = store.getSyncSettings();
         AndroidSyncTriggerPolicy policy = new AndroidSyncTriggerPolicy();
         if (!settings.isPaired || !policy.shouldSyncForStatsOpen()) {
@@ -85,25 +95,25 @@ public final class StatsActivity extends Activity {
                 + " range=" + rangeStart + ".." + rangeEnd
                 + " " + store.diagnosticSnapshot());
         LocalDate today = LocalDate.now();
-        DailySummary todaySummary = store.getDay(selectedDay);
+        DailySummary todaySummary = statsDay(selectedDay);
         stepStartedAt = logStep("StatsActivity get selected day", stepStartedAt);
-        DeviceUsageBreakdown deviceBreakdown = store.getDeviceBreakdown(selectedDay);
+        DeviceUsageBreakdown deviceBreakdown = statsDeviceBreakdown(selectedDay);
         stepStartedAt = logStep("StatsActivity get selected device breakdown", stepStartedAt);
         LocalDate summaryDate = selectedDay.equals(today) ? today.minusDays(1) : selectedDay;
-        DailySummary summary = store.getDay(summaryDate);
-        DeviceUsageBreakdown summaryBreakdown = store.getDeviceBreakdown(summaryDate);
-        List<DailySummary> week = store.getDays(selectedWeekStart, selectedWeekStart.plusDays(6));
+        DailySummary summary = statsDay(summaryDate);
+        DeviceUsageBreakdown summaryBreakdown = statsDeviceBreakdown(summaryDate);
+        List<DailySummary> week = statsDays(selectedWeekStart, selectedWeekStart.plusDays(6));
         stepStartedAt = logStep("StatsActivity get week summaries", stepStartedAt);
-        List<DeviceUsageBreakdown> weekBreakdowns = store.getDeviceBreakdowns(selectedWeekStart, selectedWeekStart.plusDays(6));
+        List<DeviceUsageBreakdown> weekBreakdowns = statsDeviceBreakdowns(selectedWeekStart, selectedWeekStart.plusDays(6));
         stepStartedAt = logStep("StatsActivity get week breakdowns", stepStartedAt);
         LocalDate monthEnd = selectedMonthStart.getYear() == today.getYear() && selectedMonthStart.getMonthValue() == today.getMonthValue()
                 ? today
                 : selectedMonthStart.plusMonths(1).minusDays(1);
-        List<DailySummary> month = store.getDays(selectedMonthStart, monthEnd);
+        List<DailySummary> month = statsDays(selectedMonthStart, monthEnd);
         stepStartedAt = logStep("StatsActivity get month summaries", stepStartedAt);
         LocalDate firstRange = rangeStart.isAfter(rangeEnd) ? rangeEnd : rangeStart;
         LocalDate lastRange = rangeStart.isAfter(rangeEnd) ? rangeStart : rangeEnd;
-        List<Long> sessions = collectSessions(store.getDays(firstRange, lastRange));
+        List<Long> sessions = collectSessions(statsDays(firstRange, lastRange));
         stepStartedAt = logStep("StatsActivity get range sessions", stepStartedAt);
 
         ScrollView scroll = new ScrollView(this);
@@ -118,7 +128,7 @@ public final class StatsActivity extends Activity {
         TextView title = text(getString(R.string.stats_title), 34, COLOR_TEXT, true);
         title.setIncludeFontPadding(false);
         root.addView(title, matchWrap());
-        TextView subtitle = text(getString(R.string.stats_subtitle), 16, COLOR_MUTED, false);
+        TextView subtitle = text(getString(familyChildStatsMode ? R.string.stats_family_child_subtitle : R.string.stats_subtitle), 16, COLOR_MUTED, false);
         root.addView(subtitle, matchWrapTop(10));
 
         LinearLayout dayPanel = panel();
@@ -201,6 +211,22 @@ public final class StatsActivity extends Activity {
 
     private static long elapsed(long startedAt) {
         return System.currentTimeMillis() - startedAt;
+    }
+
+    private DailySummary statsDay(LocalDate date) {
+        return familyChildStatsMode ? store.getFamilyChildDay(date) : store.getDay(date);
+    }
+
+    private List<DailySummary> statsDays(LocalDate start, LocalDate end) {
+        return familyChildStatsMode ? store.getFamilyChildDays(start, end) : store.getDays(start, end);
+    }
+
+    private DeviceUsageBreakdown statsDeviceBreakdown(LocalDate date) {
+        return familyChildStatsMode ? store.getFamilyChildDeviceBreakdown(date) : store.getDeviceBreakdown(date);
+    }
+
+    private List<DeviceUsageBreakdown> statsDeviceBreakdowns(LocalDate start, LocalDate end) {
+        return familyChildStatsMode ? store.getFamilyChildDeviceBreakdowns(start, end) : store.getDeviceBreakdowns(start, end);
     }
 
     private TextView addPanelHead(LinearLayout parent, String title, String pillText) {

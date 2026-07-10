@@ -19,6 +19,7 @@
     <string name="calendar_weekday_wed" formatted="false">三</string>
     <string name="common_apply" formatted="false">应用</string>
     <string name="common_cancel" formatted="false">取消</string>
+    <string name="common_confirm" formatted="false">确认</string>
     <string name="common_disconnect" formatted="false">断开</string>
     <string name="common_got_it" formatted="false">我知道了</string>
     <string name="common_main_page" formatted="false">主界面</string>
@@ -47,35 +48,63 @@
     <string name="duration_minutes" formatted="false">{minutes}分钟</string>
     <string name="duration_zero_minutes" formatted="false">0分钟</string>
     <string name="family_binding_child_desc" formatted="false">加入后，这台设备会按家长设置记录和提醒。</string>
+    <string name="family_binding_child_joined_status" formatted="false">孩子设备已加入</string>
     <string name="family_binding_child_title" formatted="false">输入家长手机上的绑定码</string>
     <string name="family_binding_code_label" formatted="false">绑定码</string>
     <string name="family_binding_enter_home" formatted="false">进入家庭护眼首页</string>
     <string name="family_binding_input_hint" formatted="false">6 位绑定码</string>
     <string name="family_binding_invalid" formatted="false">绑定码不正确或已失效</string>
     <string name="family_binding_join" formatted="false">加入家庭护眼</string>
+    <string name="family_binding_joined" formatted="false">已加入家庭护眼</string>
     <string name="family_binding_missing_invite" formatted="false">请在家长手机上生成绑定码后再加入。</string>
+    <string name="family_binding_not_found" formatted="false">没有找到家长手机。请确认两台手机在同一 WiFi，并停留在绑定码页面。</string>
     <string name="family_binding_once_help" formatted="false">二维码和数字码只用于添加这一次设备。</string>
     <string name="family_binding_scan" formatted="false">扫码加入</string>
     <string name="family_binding_scan_unavailable" formatted="false">当前版本先使用数字码加入</string>
+    <string name="family_binding_searching" formatted="false">正在查找家长手机</string>
     <string name="family_binding_waiting_desc" formatted="false">让孩子设备扫描二维码，或输入下面的数字码。</string>
     <string name="family_binding_waiting_status" formatted="false">等待孩子设备加入...</string>
     <string name="family_binding_waiting_title" formatted="false">在孩子设备上加入</string>
     <string name="family_binding_will_join" formatted="false">将加入</string>
     <string name="family_eye_mode" formatted="false">家庭护眼</string>
     <string name="family_eye_mode_unavailable" formatted="false">当前模式未包含家庭护眼</string>
+    <string name="family_home_add_child_device" formatted="false">添加孩子设备</string>
+    <string name="family_home_add_child_device_desc" formatted="false">显示绑定码，让孩子设备加入</string>
+    <string name="family_home_child_device_joined" formatted="false">已加入</string>
+    <string name="family_home_child_device_not_joined" formatted="false">未加入</string>
     <string name="family_home_child_note" formatted="false">这台设备已加入家庭护眼。家庭设置由家长管理。</string>
     <string name="family_home_child_profile" formatted="false">孩子档案</string>
     <string name="family_home_child_profile_desc" formatted="false">昵称、年龄段</string>
+    <string name="family_home_child_reminder_body_once" formatted="false">{child}今天用眼时间已达到 {duration}，建议提醒孩子休息一下眼睛。</string>
+    <string name="family_home_child_reminder_body_repeat" formatted="false">{child}今天用眼时间已经第{step}次达到{minutes}分钟了，建议提醒孩子休息一下眼睛。</string>
+    <string name="family_home_child_reminder_title" formatted="false">{child}用眼提醒</string>
+    <string name="family_home_child_settings_note" formatted="false">这台设备是孩子设备。可以重新绑定或退出家庭护眼，规则仍由家长管理。</string>
     <string name="family_home_device_role" formatted="false">设备角色</string>
     <string name="family_home_device_role_desc" formatted="false">当前设备在家庭护眼里的用途</string>
     <string name="family_home_exit" formatted="false">退出家庭护眼</string>
     <string name="family_home_exit_desc" formatted="false">保留个人用眼统计</string>
+    <string name="family_home_join_as_child_device" formatted="false">作为孩子设备加入</string>
+    <string name="family_home_join_as_child_device_desc" formatted="false">输入家长手机上的绑定码</string>
+    <string name="family_home_leave_confirm_message" formatted="false">退出后这台设备会回到个人护眼，已有用眼统计会保留。</string>
+    <string name="family_home_leave_confirm_title" formatted="false">退出家庭护眼？</string>
     <string name="family_home_not_enabled" formatted="false">暂未开启</string>
     <string name="family_home_parent_note" formatted="false">家庭护眼已启用。需要修改孩子档案、保护密码或规则时，进入右上角设置。</string>
     <string name="family_home_passcode" formatted="false">保护密码</string>
+    <string name="family_home_passcode_change" formatted="false">修改</string>
+    <string name="family_home_passcode_change_message" formatted="false">输入新的 4 位保护密码。保存后，孩子设备会在下一次同步时更新。</string>
+    <string name="family_home_passcode_change_title" formatted="false">修改保护密码</string>
     <string name="family_home_passcode_desc" formatted="false">用于保护家庭设置</string>
+    <string name="family_home_passcode_dialog_message" formatted="false">修改这台孩子设备的家庭设置前，需要输入家长设置的 4 位保护密码。</string>
+    <string name="family_home_passcode_dialog_title" formatted="false">输入保护密码</string>
+    <string name="family_home_passcode_input_hint" formatted="false">4 位保护密码</string>
+    <string name="family_home_passcode_invalid" formatted="false">请输入 4 位数字</string>
+    <string name="family_home_passcode_missing" formatted="false">这台设备还没有保护密码，请在家长手机重新添加一次。</string>
     <string name="family_home_passcode_not_set" formatted="false">未设置</string>
+    <string name="family_home_passcode_saved" formatted="false">保护密码已保存</string>
     <string name="family_home_passcode_set" formatted="false">已设置</string>
+    <string name="family_home_passcode_wrong" formatted="false">保护密码不正确</string>
+    <string name="family_home_rebind_child_device" formatted="false">重新绑定</string>
+    <string name="family_home_rebind_child_device_desc" formatted="false">输入新的家长绑定码</string>
     <string name="family_home_rules" formatted="false">规则</string>
     <string name="family_home_rules_desc" formatted="false">设置休息、可用时段和限制</string>
     <string name="family_home_settings" formatted="false">设置</string>
@@ -185,6 +214,7 @@
     <string name="stats_daily_summary_peak_short" formatted="false">集中 {range}</string>
     <string name="stats_daily_summary_yesterday" formatted="false">昨日摘要</string>
     <string name="stats_daily_title" formatted="false">单日情况</string>
+    <string name="stats_family_child_subtitle" formatted="false">孩子的用眼趋势、分布和连续使用情况</string>
     <string name="stats_month_recorded_days" formatted="false">本月已记录 {count} 天</string>
     <string name="stats_month_title" formatted="false">月度趋势</string>
     <string name="stats_sessions_advice" formatted="false">最长连续 {duration}，建议减少 45 分钟以上的连续使用。</string>

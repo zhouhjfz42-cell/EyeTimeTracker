@@ -18,6 +18,9 @@ import android.widget.Toast;
 import java.util.Collections;
 
 public final class FamilySetupActivity extends Activity {
+    public static final String EXTRA_SHOW_PARENT_BINDING = "com.eyetimetracker.android.SHOW_PARENT_BINDING";
+    public static final String EXTRA_SHOW_CHILD_BINDING = "com.eyetimetracker.android.SHOW_CHILD_BINDING";
+
     private static final int COLOR_BG = Color.rgb(248, 252, 250);
     private static final int COLOR_TEXT = Color.rgb(17, 24, 39);
     private static final int COLOR_MUTED = Color.rgb(102, 112, 133);
@@ -37,13 +40,44 @@ public final class FamilySetupActivity extends Activity {
     private final StringBuilder passcode = new StringBuilder();
     private LinearLayout passcodeDots;
     private FamilyBindingInvite pendingInvite;
+    private FamilyBindingLanServer bindingServer;
+    private String activeBindingServerCode = "";
+    private String bindingStatus = "";
+    private boolean childJoinInProgress;
     private int step;
 
     @Override protected void onCreate(Bundle bundle) {
         super.onCreate(bundle);
         store = new EyeTimeStore(this);
+        if (getIntent().getBooleanExtra(EXTRA_SHOW_PARENT_BINDING, false)) {
+            prepareExistingParentBinding();
+        } else if (getIntent().getBooleanExtra(EXTRA_SHOW_CHILD_BINDING, false)) {
+            prepareChildBinding();
+        }
         setContentView(buildUi());
         render();
+    }
+
+    private void prepareChildBinding() {
+        selectedRole = DeviceRole.CHILD_DEVICE;
+        step = 1;
+    }
+
+    private void prepareExistingParentBinding() {
+        ChildProfile childProfile = store.getActiveChildProfile();
+        if (childProfile == null || !childProfile.isValid()) {
+            return;
+        }
+        FamilyBindingInvite invite = store.getFamilyBindingInvite();
+        if (invite == null || !invite.isValid() || !childProfile.childId.equals(invite.childProfile.childId)) {
+            invite = FamilyBindingInvite.create(null, childProfile, System.currentTimeMillis() / 1000L);
+            store.saveFamilyBindingInvite(invite);
+        }
+        selectedRole = DeviceRole.PARENT_DEVICE;
+        childNickname = childProfile.nickname;
+        selectedAgeBand = childProfile.ageBand;
+        pendingInvite = invite;
+        step = 2;
     }
 
     private View buildUi() {
@@ -223,6 +257,7 @@ public final class FamilySetupActivity extends Activity {
             root.addView(primaryButton(getString(R.string.family_binding_enter_home), v -> openFamilyHome()), matchWrapTop(28));
             return;
         }
+        startParentBindingServer(invite);
 
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
@@ -254,7 +289,9 @@ public final class FamilySetupActivity extends Activity {
         root.addView(card, matchWrapTop(24));
 
         root.addView(helpText(getString(R.string.family_binding_once_help)), matchWrapTop(14));
-        root.addView(disabledStatus(getString(R.string.family_binding_waiting_status)), matchWrapTop(22));
+        root.addView(disabledStatus(bindingStatus.isEmpty()
+                ? getString(R.string.family_binding_waiting_status)
+                : bindingStatus), matchWrapTop(22));
         root.addView(primaryButton(getString(R.string.family_binding_enter_home), v -> openFamilyHome()), matchWrapTop(12));
     }
 
@@ -405,23 +442,88 @@ public final class FamilySetupActivity extends Activity {
     }
 
     private void joinFamilyByCode() {
+        if (childJoinInProgress) {
+            return;
+        }
         String enteredCode = bindingCodeInput == null ? "" : bindingCodeInput.getText().toString();
         try {
             FamilyBindingDraft draft = FamilyBindingDraft.create(enteredCode);
             boolean consumed = store.consumeFamilyBindingCode(draft.bindingCode);
-            if (!consumed) {
-                Toast.makeText(this, R.string.family_binding_invalid, Toast.LENGTH_SHORT).show();
-                return;
+            if (consumed) {
+                openFamilyHome();
+            } else {
+                joinFamilyOverLan(draft.bindingCode);
             }
-            openFamilyHome();
         } catch (IllegalArgumentException ex) {
             Toast.makeText(this, R.string.family_binding_invalid, Toast.LENGTH_SHORT).show();
         }
     }
 
+    private void joinFamilyOverLan(String bindingCode) {
+        childJoinInProgress = true;
+        Toast.makeText(this, R.string.family_binding_searching, Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            FamilyBindingLanClient.JoinResult result = new FamilyBindingLanClient()
+                    .join(store.getDeviceId(), bindingCode);
+            runOnUiThread(() -> {
+                childJoinInProgress = false;
+                if (result.success) {
+                    store.saveRemoteFamilyChildBinding(result.familyId, result.childProfile, result.parentPasscode);
+                    Toast.makeText(this, R.string.family_binding_joined, Toast.LENGTH_SHORT).show();
+                    openFamilyHome();
+                    return;
+                }
+                Toast.makeText(this, R.string.family_binding_not_found, Toast.LENGTH_LONG).show();
+            });
+        }, "FamilyBindingLanJoin").start();
+    }
+
     private void openFamilyHome() {
         startActivity(new Intent(this, FamilyHomeActivity.class));
         finish();
+    }
+
+    private void startParentBindingServer(FamilyBindingInvite invite) {
+        if (invite == null || !invite.isValid()) {
+            return;
+        }
+        if (bindingServer != null && invite.bindingCode.equals(activeBindingServerCode)) {
+            return;
+        }
+        stopParentBindingServer();
+        bindingServer = new FamilyBindingLanServer();
+        activeBindingServerCode = invite.bindingCode;
+        bindingStatus = getString(R.string.family_binding_waiting_status);
+        bindingServer.start(invite, store.getDeviceId(), store.getParentPasscode(), new FamilyBindingLanServer.Listener() {
+            @Override public void onStarted(int port) {
+                runOnUiThread(() -> bindingStatus = getString(R.string.family_binding_waiting_status));
+            }
+
+            @Override public void onJoined(String childDeviceId) {
+                runOnUiThread(() -> {
+                    store.saveFamilyChildDeviceBinding(childDeviceId);
+                    bindingStatus = getString(R.string.family_binding_child_joined_status);
+                    render();
+                });
+            }
+
+            @Override public void onError(String message) {
+                runOnUiThread(() -> {
+                    bindingStatus = message == null || message.trim().isEmpty()
+                            ? getString(R.string.family_binding_invalid)
+                            : message;
+                    render();
+                });
+            }
+        });
+    }
+
+    private void stopParentBindingServer() {
+        if (bindingServer != null) {
+            bindingServer.stop();
+            bindingServer = null;
+        }
+        activeBindingServerCode = "";
     }
 
     private void addPageTitle(int titleId, int leadId) {
@@ -559,6 +661,11 @@ public final class FamilySetupActivity extends Activity {
 
     @Override public void onBackPressed() {
         goBack();
+    }
+
+    @Override protected void onDestroy() {
+        stopParentBindingServer();
+        super.onDestroy();
     }
 
     private GradientDrawable rounded(int color, int radius, int strokeColor, int strokeWidth) {

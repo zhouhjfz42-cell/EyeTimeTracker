@@ -4,8 +4,8 @@ public final class CoreLogicTest {
     public static void main(String[] args) {
         shouldCountWhenScreenOnAndMotionRecent();
         shouldCountWhenScreenOnAndMediaActive();
+        shouldCountWhenScreenOnEvenWithoutMotion();
         shouldPauseWhenScreenOff();
-        shouldPauseWhenScreenOnButIdleAndNoMedia();
         shouldFormatDurations();
         shouldFormatChartTooltips();
         shouldClassifyTodayToneByFixedHealthyThresholds();
@@ -66,14 +66,14 @@ public final class CoreLogicTest {
         assertEquals(true, decision.isCounting(), "media counts when screen on");
     }
 
+    private static void shouldCountWhenScreenOnEvenWithoutMotion() {
+        ActivityDecision decision = ActivityDecision.evaluate(true, 600_000L, false, 600_000L, 180_000L);
+        assertEquals(true, decision.isCounting(), "screen-on time counts without motion");
+    }
+
     private static void shouldPauseWhenScreenOff() {
         ActivityDecision decision = ActivityDecision.evaluate(false, 0L, true, 0L, 180_000L);
         assertEquals(false, decision.isCounting(), "screen off pauses");
-    }
-
-    private static void shouldPauseWhenScreenOnButIdleAndNoMedia() {
-        ActivityDecision decision = ActivityDecision.evaluate(true, 600_000L, false, 600_000L, 180_000L);
-        assertEquals(false, decision.isCounting(), "idle without media pauses");
     }
 
     private static void shouldFormatDurations() {

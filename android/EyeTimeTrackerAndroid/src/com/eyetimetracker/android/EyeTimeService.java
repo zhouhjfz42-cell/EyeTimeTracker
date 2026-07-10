@@ -134,7 +134,12 @@ public final class EyeTimeService extends Service implements SensorEventListener
         lastTickAt = now;
         boolean screenOn = powerManager == null || powerManager.isInteractive();
         boolean mediaActive = audioManager != null && audioManager.isMusicActive();
-        ActivityDecision decision = ActivityDecision.evaluate(screenOn, now - lastMotionAt, mediaActive, elapsed, MOTION_THRESHOLD_MS);
+        ActivityDecision decision = ActivityDecision.evaluate(
+                screenOn,
+                now - lastMotionAt,
+                mediaActive,
+                elapsed,
+                MOTION_THRESHOLD_MS);
         boolean nextCounting = decision.isCounting();
         if (nextCounting && !counting) {
             currentSessionStartedUnixSeconds = now / 1000L;

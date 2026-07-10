@@ -19,8 +19,18 @@ public final class ActivityDecision {
             boolean mediaActive,
             long millisecondsSinceLastTick,
             long motionThresholdMilliseconds) {
+        return evaluate(screenOn, millisecondsSinceMotion, mediaActive, millisecondsSinceLastTick, motionThresholdMilliseconds, true);
+    }
+
+    public static ActivityDecision evaluate(
+            boolean screenOn,
+            long millisecondsSinceMotion,
+            boolean mediaActive,
+            long millisecondsSinceLastTick,
+            long motionThresholdMilliseconds,
+            boolean countScreenOnOnly) {
         boolean motionRecent = millisecondsSinceMotion <= motionThresholdMilliseconds;
-        boolean counting = screenOn && (motionRecent || mediaActive);
+        boolean counting = screenOn && (countScreenOnOnly || motionRecent || mediaActive);
         return new ActivityDecision(counting, screenOn, motionRecent, mediaActive);
     }
 
