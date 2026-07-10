@@ -366,12 +366,13 @@ public final class MainActivity extends Activity {
 
     private void refresh() {
         LocalDate today = LocalDate.now();
-        long todaySeconds = store.displayTodaySeconds(today);
+        HomeStatsSnapshot stats = store.displayHomeStats(today);
+        long todaySeconds = stats.todaySeconds;
         todayValue.setText(DurationFormatter.format(this, todaySeconds));
         todayValue.setTextColor(colorForTone(TodayTone.fromSeconds(todaySeconds)));
-        yesterdayValue.setText(DurationFormatter.formatMainCard(this, store.displayYesterdaySeconds(today)));
-        weekValue.setText(DurationFormatter.formatMainCard(this, store.displayWeekSeconds(today)));
-        monthValue.setText(DurationFormatter.formatMainCard(this, store.displayMonthSeconds(today)));
+        yesterdayValue.setText(DurationFormatter.formatMainCard(this, stats.yesterdaySeconds));
+        weekValue.setText(DurationFormatter.formatMainCard(this, stats.weekSeconds));
+        monthValue.setText(DurationFormatter.formatMainCard(this, stats.monthSeconds));
         reminderValue.setText(ReminderThreshold.format(this, store.getReminderMinutes()));
         SyncSettings syncSettings = store.getSyncSettings();
         statusValue.setText(formatConnectionStatus(

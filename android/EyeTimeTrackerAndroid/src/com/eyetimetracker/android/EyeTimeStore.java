@@ -62,6 +62,14 @@ public final class EyeTimeStore {
     private static final String FAMILY_CHILD_REMINDER_DATE = "family_child_reminder_date";
     private static final String FAMILY_CHILD_REMINDER_SHOWN = "family_child_reminder_shown";
     private static final String FAMILY_CHILD_LAST_REMINDER_STEP = "family_child_last_reminder_step";
+    private static final String FAMILY_HOME_META_READY = "family_home_meta_ready";
+    private static final String FAMILY_HOME_META_PRODUCT_MODE = "family_home_meta_product_mode";
+    private static final String FAMILY_HOME_META_DEVICE_ROLE = "family_home_meta_device_role";
+    private static final String FAMILY_HOME_META_CHILD_ID = "family_home_meta_child_id";
+    private static final String FAMILY_HOME_META_CHILD_NICKNAME = "family_home_meta_child_nickname";
+    private static final String FAMILY_HOME_META_CHILD_AGE_BAND = "family_home_meta_child_age_band";
+    private static final String FAMILY_HOME_META_HAS_PARENT_PASSCODE = "family_home_meta_has_parent_passcode";
+    private static final String FAMILY_HOME_META_HAS_BOUND_CHILD_DEVICE = "family_home_meta_has_bound_child_device";
     private static final String RESET_DATE = "display_reset_date";
     private static final String RESET_TODAY_SECONDS = "display_reset_today_seconds";
     private static final String RESET_YESTERDAY_SECONDS = "display_reset_yesterday_seconds";
@@ -773,8 +781,15 @@ public final class EyeTimeStore {
     }
 
     public synchronized FamilyHomeState getFamilyHomeState() {
+        FamilyHomeState cached = readCachedFamilyHomeState();
+        if (cached != null) {
+            return cached;
+        }
         try {
-            return readFamilyHomeState(loadState());
+            JSONObject state = loadState();
+            FamilyHomeState homeState = readFamilyHomeState(state);
+            saveFamilyHomeStateCache(state);
+            return homeState;
         } catch (JSONException ignored) {
             return FamilyHomeState.create(ProductMode.PERSONAL, DeviceRole.PERSONAL_DEVICE, null, false, false);
         }
@@ -784,6 +799,7 @@ public final class EyeTimeStore {
         try {
             JSONObject state = loadState();
             writeProductMode(state, mode);
+            saveFamilyHomeStateCache(state);
             saveState(state);
         } catch (JSONException ignored) {
         }
@@ -801,6 +817,7 @@ public final class EyeTimeStore {
         try {
             JSONObject state = loadState();
             writeDeviceRole(state, role);
+            saveFamilyHomeStateCache(state);
             saveState(state);
         } catch (JSONException ignored) {
         }
@@ -836,6 +853,7 @@ public final class EyeTimeStore {
         try {
             JSONObject state = loadState();
             writeChildProfiles(state, profiles, activeChildId);
+            saveFamilyHomeStateCache(state);
             saveState(state);
         } catch (JSONException ignored) {
         }
@@ -863,6 +881,7 @@ public final class EyeTimeStore {
             JSONObject state = loadState();
             boolean consumed = consumeFamilyBindingCode(state, bindingCode);
             if (consumed) {
+                saveFamilyHomeStateCache(state);
                 saveState(state);
             }
             return consumed;
@@ -882,6 +901,7 @@ public final class EyeTimeStore {
         try {
             JSONObject state = loadState();
             writeRemoteFamilyChildBinding(state, familyId, childProfile, parentPasscode);
+            saveFamilyHomeStateCache(state);
             saveState(state);
         } catch (JSONException ex) {
             throw new IllegalStateException("Failed to save remote family child binding.", ex);
@@ -892,6 +912,7 @@ public final class EyeTimeStore {
         try {
             JSONObject state = loadState();
             writeFamilyChildDeviceBinding(state, childDeviceId, System.currentTimeMillis() / 1000L);
+            saveFamilyHomeStateCache(state);
             saveState(state);
         } catch (JSONException ex) {
             throw new IllegalStateException("Failed to save family child device binding.", ex);
@@ -926,6 +947,7 @@ public final class EyeTimeStore {
         try {
             JSONObject state = loadState();
             writeLeaveFamilyMode(state);
+            saveFamilyHomeStateCache(state);
             saveState(state);
         } catch (JSONException ex) {
             throw new IllegalStateException("Failed to leave family mode.", ex);
@@ -954,6 +976,7 @@ public final class EyeTimeStore {
         try {
             JSONObject state = loadState();
             writeParentPasscode(state, passcode);
+            saveFamilyHomeStateCache(state);
             saveState(state);
         } catch (JSONException ignored) {
         }
@@ -1135,6 +1158,43 @@ public final class EyeTimeStore {
         return raw;
     }
 
+    public synchronized HomeStatsSnapshot displayHomeStats(LocalDate today) {
+        if (today == null) {
+            return HomeStatsSnapshot.empty();
+        }
+        LocalDate weekStart = weekStart(today);
+        LocalDate monthStart = today.withDayOfMonth(1);
+        LocalDate start = earliest(today.minusDays(1), weekStart, monthStart);
+        List<DailySummary> summaries = getDays(start, today);
+        Map<String, Long> totals = dailyTotals(summaries);
+        HomeStatsSnapshot raw = new HomeStatsSnapshot(
+                dailyTotal(totals, today),
+                dailyTotal(totals, today.minusDays(1)),
+                sumDailyTotals(totals, weekStart, today),
+                sumDailyTotals(totals, monthStart, today));
+        return applyDisplayReset(today, raw);
+    }
+
+    private HomeStatsSnapshot applyDisplayReset(LocalDate today, HomeStatsSnapshot raw) {
+        long todaySeconds = raw.todaySeconds;
+        long yesterdaySeconds = raw.yesterdaySeconds;
+        long weekSeconds = raw.weekSeconds;
+        long monthSeconds = raw.monthSeconds;
+        if (today.toString().equals(prefs.getString(RESET_DATE, ""))) {
+            todaySeconds = Math.max(0L, todaySeconds - prefs.getLong(RESET_TODAY_SECONDS, 0L));
+            yesterdaySeconds = Math.max(0L, yesterdaySeconds - prefs.getLong(RESET_YESTERDAY_SECONDS, 0L));
+        }
+        LocalDate weekStart = weekStart(today);
+        if (weekStart.toString().equals(prefs.getString(RESET_WEEK_START, ""))) {
+            weekSeconds = Math.max(0L, weekSeconds - prefs.getLong(RESET_WEEK_SECONDS, 0L));
+        }
+        LocalDate monthStart = today.withDayOfMonth(1);
+        if (monthStart.toString().equals(prefs.getString(RESET_MONTH_START, ""))) {
+            monthSeconds = Math.max(0L, monthSeconds - prefs.getLong(RESET_MONTH_SECONDS, 0L));
+        }
+        return new HomeStatsSnapshot(todaySeconds, yesterdaySeconds, weekSeconds, monthSeconds);
+    }
+
     public synchronized long displayFamilyChildTodaySeconds(LocalDate today) {
         return displayFamilyChildHomeStats(today).todaySeconds;
     }
@@ -1214,6 +1274,47 @@ public final class EyeTimeStore {
             state.remove(FAMILY_CHILD_DAILY_STATS_CACHE_CHANGED);
             saveState(state);
         }
+    }
+
+    private FamilyHomeState readCachedFamilyHomeState() {
+        if (!prefs.getBoolean(FAMILY_HOME_META_READY, false)) {
+            return null;
+        }
+        ProductMode productMode = ProductMode.fromStorageValue(prefs.getString(
+                FAMILY_HOME_META_PRODUCT_MODE,
+                ProductMode.PERSONAL.storageValue()));
+        DeviceRole deviceRole = DeviceRole.fromStorageValue(prefs.getString(
+                FAMILY_HOME_META_DEVICE_ROLE,
+                DeviceRole.PERSONAL_DEVICE.storageValue()));
+        String childId = prefs.getString(FAMILY_HOME_META_CHILD_ID, "");
+        String nickname = prefs.getString(FAMILY_HOME_META_CHILD_NICKNAME, "");
+        String ageBand = prefs.getString(FAMILY_HOME_META_CHILD_AGE_BAND, ChildProfile.AGE_BAND_UNKNOWN);
+        ChildProfile childProfile = safe(nickname).trim().isEmpty()
+                ? null
+                : new ChildProfile(childId, nickname, ageBand, 0L, 0L);
+        return FamilyHomeState.create(
+                productMode,
+                deviceRole,
+                childProfile,
+                prefs.getBoolean(FAMILY_HOME_META_HAS_PARENT_PASSCODE, false),
+                prefs.getBoolean(FAMILY_HOME_META_HAS_BOUND_CHILD_DEVICE, false));
+    }
+
+    private void saveFamilyHomeStateCache(JSONObject state) {
+        FamilyHomeState homeState = readFamilyHomeState(state);
+        String activeChildId = readActiveChildId(state);
+        prefs.edit()
+                .putBoolean(FAMILY_HOME_META_READY, true)
+                .putString(FAMILY_HOME_META_PRODUCT_MODE, homeState.isFamilyMode
+                        ? ProductMode.FAMILY.storageValue()
+                        : ProductMode.PERSONAL.storageValue())
+                .putString(FAMILY_HOME_META_DEVICE_ROLE, homeState.deviceRole.storageValue())
+                .putString(FAMILY_HOME_META_CHILD_ID, activeChildId)
+                .putString(FAMILY_HOME_META_CHILD_NICKNAME, homeState.childNickname)
+                .putString(FAMILY_HOME_META_CHILD_AGE_BAND, homeState.childAgeBand)
+                .putBoolean(FAMILY_HOME_META_HAS_PARENT_PASSCODE, homeState.hasParentPasscode)
+                .putBoolean(FAMILY_HOME_META_HAS_BOUND_CHILD_DEVICE, homeState.hasBoundChildDevice)
+                .apply();
     }
 
     private JSONObject getOrCreateRecord(JSONObject state, String date) throws JSONException {
