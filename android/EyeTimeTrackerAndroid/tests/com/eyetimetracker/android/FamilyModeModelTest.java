@@ -27,6 +27,7 @@ public final class FamilyModeModelTest {
         shouldReadFamilyHomeStateFromLoadedStoreState();
         shouldShowLimitedFamilySettingsEntryOnChildDevice();
         shouldAutoOpenFamilyHomeOnlyForChildDevice();
+        shouldStartTrackerServiceForEveryMainEntryRoute();
         shouldRequirePasscodeForChildProtectedSettingsActions();
         shouldHideJoinAsChildEntryAfterParentRoleIsConfirmed();
         shouldBlockSecondChildBindingInOneToOneFamilyMode();
@@ -468,6 +469,16 @@ public final class FamilyModeModelTest {
             assertEquals(false, MainEntryRoute.shouldOpenFamilyHomeOnLaunch(ProductMode.FAMILY, DeviceRole.CHILD_DEVICE, null), "missing child profile stays on personal home on launch");
         } catch (Exception ex) {
             throw new AssertionError("main entry route test failed", ex);
+        }
+    }
+
+    private static void shouldStartTrackerServiceForEveryMainEntryRoute() {
+        try {
+            assertEquals(true, MainEntryRoute.shouldStartTrackerServiceOnLaunch(ProductMode.PERSONAL, DeviceRole.PERSONAL_DEVICE, false), "personal mode starts tracker service");
+            assertEquals(true, MainEntryRoute.shouldStartTrackerServiceOnLaunch(ProductMode.FAMILY, DeviceRole.PARENT_DEVICE, true), "parent family mode starts tracker service");
+            assertEquals(true, MainEntryRoute.shouldStartTrackerServiceOnLaunch(ProductMode.FAMILY, DeviceRole.CHILD_DEVICE, true), "child family auto route starts tracker service");
+        } catch (Exception ex) {
+            throw new AssertionError("main entry service startup test failed", ex);
         }
     }
 

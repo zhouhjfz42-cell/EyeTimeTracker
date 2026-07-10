@@ -19,4 +19,11 @@ public final class MainEntryRoute {
                 && deviceRole == DeviceRole.CHILD_DEVICE
                 && hasChildProfile;
     }
+
+    public static boolean shouldStartTrackerServiceOnLaunch(
+            ProductMode productMode,
+            DeviceRole deviceRole,
+            boolean hasChildProfile) {
+        return true;
+    }
 }

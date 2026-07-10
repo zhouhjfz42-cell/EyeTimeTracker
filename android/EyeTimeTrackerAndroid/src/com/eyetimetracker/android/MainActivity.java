@@ -87,17 +87,24 @@ public final class MainActivity extends Activity {
         super.onCreate(bundle);
         store = new EyeTimeStore(this);
         FamilyHomeState familyState = store.getFamilyHomeState();
-        if (MainEntryRoute.shouldOpenFamilyHomeOnLaunch(
-                familyState.isFamilyMode ? ProductMode.FAMILY : ProductMode.PERSONAL,
+        ProductMode productMode = familyState.isFamilyMode ? ProductMode.FAMILY : ProductMode.PERSONAL;
+        boolean hasChildProfile = familyState.hasChildProfile();
+        requestNotificationPermission();
+        if (MainEntryRoute.shouldStartTrackerServiceOnLaunch(
+                productMode,
                 familyState.deviceRole,
-                familyState.hasChildProfile())) {
+                hasChildProfile)) {
+            startTrackerService();
+        }
+        if (MainEntryRoute.shouldOpenFamilyHomeOnLaunch(
+                productMode,
+                familyState.deviceRole,
+                hasChildProfile)) {
             startActivity(new Intent(this, FamilyHomeActivity.class));
             finish();
             return;
         }
-        requestNotificationPermission();
         setContentView(buildUi());
-        startTrackerService();
     }
 
     @Override protected void onResume() {
