@@ -59,6 +59,7 @@
   "family.home.childProfileDesc": "Nickname, age band",
   "family.home.addChildDevice": "Add child device",
   "family.home.addChildDeviceDesc": "Show a binding code for the child device",
+  "family.home.addChildDeviceLimit": "Multiple child-device binding is not available yet.",
   "family.home.childDeviceJoined": "Joined",
   "family.home.childDeviceNotJoined": "Not joined",
   "family.home.joinAsChildDevice": "Join as child device",

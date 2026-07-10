@@ -69,6 +69,7 @@
     "family.eyeModeUnavailable":  "当前模式未包含家庭护眼",
     "family.home.addChildDevice":  "添加孩子设备",
     "family.home.addChildDeviceDesc":  "显示绑定码，让孩子设备加入",
+    "family.home.addChildDeviceLimit":  "当前暂未开放一对多绑定服务。",
     "family.home.childDeviceJoined":  "已加入",
     "family.home.childDeviceNotJoined":  "未加入",
     "family.home.childNote":  "这台设备已加入家庭护眼。家庭设置由家长管理。",

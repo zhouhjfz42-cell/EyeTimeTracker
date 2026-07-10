@@ -70,6 +70,7 @@
     <string name="family_eye_mode_unavailable" formatted="false">当前模式未包含家庭护眼</string>
     <string name="family_home_add_child_device" formatted="false">添加孩子设备</string>
     <string name="family_home_add_child_device_desc" formatted="false">显示绑定码，让孩子设备加入</string>
+    <string name="family_home_add_child_device_limit" formatted="false">当前暂未开放一对多绑定服务。</string>
     <string name="family_home_child_device_joined" formatted="false">已加入</string>
     <string name="family_home_child_device_not_joined" formatted="false">未加入</string>
     <string name="family_home_child_note" formatted="false">这台设备已加入家庭护眼。家庭设置由家长管理。</string>

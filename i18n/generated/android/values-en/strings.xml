@@ -70,6 +70,7 @@
     <string name="family_eye_mode_unavailable" formatted="false">Family eye care is not included in the current mode.</string>
     <string name="family_home_add_child_device" formatted="false">Add child device</string>
     <string name="family_home_add_child_device_desc" formatted="false">Show a binding code for the child device</string>
+    <string name="family_home_add_child_device_limit" formatted="false">Multiple child-device binding is not available yet.</string>
     <string name="family_home_child_device_joined" formatted="false">Joined</string>
     <string name="family_home_child_device_not_joined" formatted="false">Not joined</string>
     <string name="family_home_child_note" formatted="false">This device is part of Family Eye Care. Family settings are managed by the parent.</string>

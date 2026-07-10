@@ -401,6 +401,10 @@ public final class FamilyHomeActivity extends Activity {
     }
 
     private void openAddChildDevice() {
+        if (!FamilySettingsPolicy.canOpenAddChildDeviceBinding(state.deviceRole, state.hasBoundChildDevice)) {
+            Toast.makeText(this, R.string.family_home_add_child_device_limit, Toast.LENGTH_SHORT).show();
+            return;
+        }
         Intent intent = new Intent(this, FamilySetupActivity.class);
         intent.putExtra(FamilySetupActivity.EXTRA_SHOW_PARENT_BINDING, true);
         startActivity(intent);

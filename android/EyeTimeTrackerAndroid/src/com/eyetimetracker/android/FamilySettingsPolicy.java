@@ -7,4 +7,8 @@ public final class FamilySettingsPolicy {
     public static boolean showJoinAsChildEntry(DeviceRole role) {
         return role == DeviceRole.PERSONAL_DEVICE;
     }
+
+    public static boolean canOpenAddChildDeviceBinding(DeviceRole role, boolean hasBoundChildDevice) {
+        return role == DeviceRole.PARENT_DEVICE && !hasBoundChildDevice;
+    }
 }

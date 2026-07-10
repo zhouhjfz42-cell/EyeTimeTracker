@@ -29,6 +29,7 @@ public final class FamilyModeModelTest {
         shouldAutoOpenFamilyHomeOnlyForChildDevice();
         shouldRequirePasscodeForChildProtectedSettingsActions();
         shouldHideJoinAsChildEntryAfterParentRoleIsConfirmed();
+        shouldBlockSecondChildBindingInOneToOneFamilyMode();
         System.out.println("All Android family mode model tests passed.");
     }
 
@@ -488,6 +489,17 @@ public final class FamilyModeModelTest {
             assertEquals(true, FamilySettingsPolicy.showJoinAsChildEntry(DeviceRole.PERSONAL_DEVICE), "personal setup may join as child");
         } catch (Exception ex) {
             throw new AssertionError("family settings policy test failed", ex);
+        }
+    }
+
+    private static void shouldBlockSecondChildBindingInOneToOneFamilyMode() {
+        try {
+            assertEquals(true, FamilySettingsPolicy.canOpenAddChildDeviceBinding(DeviceRole.PARENT_DEVICE, false), "parent may bind first child device");
+            assertEquals(false, FamilySettingsPolicy.canOpenAddChildDeviceBinding(DeviceRole.PARENT_DEVICE, true), "parent cannot bind a second child device yet");
+            assertEquals(false, FamilySettingsPolicy.canOpenAddChildDeviceBinding(DeviceRole.CHILD_DEVICE, false), "child device cannot open parent binding page");
+            assertEquals(false, FamilySettingsPolicy.canOpenAddChildDeviceBinding(DeviceRole.PERSONAL_DEVICE, false), "personal device must complete family setup first");
+        } catch (Exception ex) {
+            throw new AssertionError("family one-to-one binding policy test failed", ex);
         }
     }
 

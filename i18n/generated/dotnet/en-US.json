@@ -69,6 +69,7 @@
     "family.eyeModeUnavailable":  "Family eye care is not included in the current mode.",
     "family.home.addChildDevice":  "Add child device",
     "family.home.addChildDeviceDesc":  "Show a binding code for the child device",
+    "family.home.addChildDeviceLimit":  "Multiple child-device binding is not available yet.",
     "family.home.childDeviceJoined":  "Joined",
     "family.home.childDeviceNotJoined":  "Not joined",
     "family.home.childNote":  "This device is part of Family Eye Care. Family settings are managed by the parent.",
