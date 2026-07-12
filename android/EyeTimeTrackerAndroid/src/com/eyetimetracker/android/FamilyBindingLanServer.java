@@ -35,7 +35,7 @@ public final class FamilyBindingLanServer {
         }
         stop();
         try {
-            tcpServer = new ServerSocket(0);
+            tcpServer = bindTcpServer();
             tcpServer.setSoTimeout(1000);
 
             udpServer = new DatagramSocket(null);
@@ -90,6 +90,12 @@ public final class FamilyBindingLanServer {
                 BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
                 BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8))) {
             String requestJson = reader.readLine();
+            if (requestJson != null && requestJson.contains("\"" + SyncMessages.FAMILY_BINDING_DISCOVERY_REQUEST + "\"")) {
+                writer.write(FamilyBindingProtocol.buildDiscoveryResponse("", tcpServer.getLocalPort()));
+                writer.newLine();
+                writer.flush();
+                return;
+            }
             FamilyBindingProtocol.JoinRequest request = FamilyBindingProtocol.parseJoinRequest(requestJson);
             String responseJson;
             if (!invite.bindingCode.equals(request.bindingCode)) {
@@ -103,6 +109,19 @@ public final class FamilyBindingLanServer {
             writer.write(responseJson);
             writer.newLine();
             writer.flush();
+        }
+    }
+
+    private static ServerSocket bindTcpServer() throws Exception {
+        try {
+            ServerSocket server = new ServerSocket();
+            server.setReuseAddress(true);
+            server.bind(new InetSocketAddress(FamilyBindingProtocol.DEFAULT_DISCOVERY_PORT));
+            return server;
+        } catch (Exception fixedPortFailed) {
+            ServerSocket server = new ServerSocket(0);
+            server.setReuseAddress(true);
+            return server;
         }
     }
 

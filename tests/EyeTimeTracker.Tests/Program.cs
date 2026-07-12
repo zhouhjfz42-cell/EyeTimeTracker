@@ -1295,6 +1295,35 @@ static void TestPcSyncServerAcceptsPairRequestWithCurrentCode()
     AssertEqual(string.Empty, pairingCodes.GetExpectedCode(), nameof(TestPcSyncServerAcceptsPairRequestWithCurrentCode) + " code cleared");
 }
 
+static void TestPcSyncServerRespondsToTcpDiscoveryRequest()
+{
+    var port = FindAvailablePort();
+    var store = SeedState(new AppState
+    {
+        DeviceId = "pc-test",
+        Platform = "windows"
+    });
+    using var server = new PcSyncServer(new PcSyncCoordinator(store), port, port);
+    server.Start();
+
+    using var client = new TcpClient();
+    client.Connect(IPAddress.Loopback, server.Port);
+    client.ReceiveTimeout = 5000;
+    client.SendTimeout = 5000;
+    using var stream = client.GetStream();
+    using var writer = new StreamWriter(stream) { AutoFlush = true };
+    using var reader = new StreamReader(stream);
+    writer.WriteLine(JsonSerializer.Serialize(new DiscoveryRequest()));
+
+    var responseJson = reader.ReadLine();
+    var response = JsonSerializer.Deserialize<DiscoveryResponse>(responseJson!);
+
+    AssertEqual(SyncMessageTypes.DiscoveryResponse, response?.Type, nameof(TestPcSyncServerRespondsToTcpDiscoveryRequest) + " type");
+    AssertEqual("pc-test", response?.DeviceId, nameof(TestPcSyncServerRespondsToTcpDiscoveryRequest) + " device");
+    AssertEqual("windows", response!.Platform, nameof(TestPcSyncServerRespondsToTcpDiscoveryRequest) + " platform");
+    AssertEqual(server.Port, response.Port, nameof(TestPcSyncServerRespondsToTcpDiscoveryRequest) + " port");
+}
+
 static void TestPcDiscoveryServerRespondsWithSyncPort()
 {
     var discoveryPort = FindAvailableUdpPort();
@@ -1552,6 +1581,7 @@ TestPcPairingCodeProviderRejectsNonSixDigitCode();
 TestPcSyncServerUsesNextPortWhenDefaultIsBusy();
 TestPcSyncServerHandlesOneJsonSyncRequest();
 TestPcSyncServerAcceptsPairRequestWithCurrentCode();
+TestPcSyncServerRespondsToTcpDiscoveryRequest();
 TestPcDiscoveryServerRespondsWithSyncPort();
 TestSegmentsDeDuplicateOverlappingDevices();
 TestSegmentsUseFixedTenSecondBucketsForArbitraryStartSeconds();

@@ -14,7 +14,6 @@ import java.time.LocalDate;
 import java.util.List;
 
 public final class FamilyStatsLanClient {
-    private static final String BROADCAST_HOST = "255.255.255.255";
     private final int discoveryTimeoutMillis;
     private final int connectTimeoutMillis;
     private final int readTimeoutMillis;
@@ -67,6 +66,9 @@ public final class FamilyStatsLanClient {
                 if (response.parentPasscode != null && response.parentPasscode.isConfigured()) {
                     store.saveParentPasscode(response.parentPasscode);
                 }
+                if (response.hasFamilyEyeRules && response.familyEyeRules != null) {
+                    store.saveFamilyEyeRules(response.familyEyeRules);
+                }
                 return UploadResult.success(response.changedSegments);
             }
         } catch (Exception ex) {
@@ -75,16 +77,23 @@ public final class FamilyStatsLanClient {
     }
 
     private DiscoveryTarget discover(String familyId, String childDeviceId) {
+        byte[] requestBytes = FamilyStatsProtocol.buildDiscoveryRequest(familyId, childDeviceId).getBytes(StandardCharsets.UTF_8);
+        DiscoveryTarget broadcastTarget = discoverByUdp(familyId, requestBytes);
+        return broadcastTarget.found ? broadcastTarget : discoverByTcpScan(familyId, requestBytes);
+    }
+
+    private DiscoveryTarget discoverByUdp(String familyId, byte[] requestBytes) {
         try (DatagramSocket socket = new DatagramSocket()) {
             socket.setBroadcast(true);
             socket.setSoTimeout(discoveryTimeoutMillis);
-            byte[] requestBytes = FamilyStatsProtocol.buildDiscoveryRequest(familyId, childDeviceId).getBytes(StandardCharsets.UTF_8);
-            DatagramPacket request = new DatagramPacket(
-                    requestBytes,
-                    requestBytes.length,
-                    InetAddress.getByName(BROADCAST_HOST),
-                    FamilyStatsProtocol.DEFAULT_DISCOVERY_PORT);
-            socket.send(request);
+            for (InetAddress address : LanDiscoveryAddresses.broadcastAddresses()) {
+                DatagramPacket request = new DatagramPacket(
+                        requestBytes,
+                        requestBytes.length,
+                        address,
+                        FamilyStatsProtocol.DEFAULT_DISCOVERY_PORT);
+                socket.send(request);
+            }
 
             long deadline = System.currentTimeMillis() + discoveryTimeoutMillis;
             byte[] responseBytes = new byte[2048];
@@ -98,6 +107,31 @@ public final class FamilyStatsLanClient {
                 }
             }
         } catch (Exception ignored) {
+        }
+        return DiscoveryTarget.empty();
+    }
+
+    private DiscoveryTarget discoverByTcpScan(String familyId, byte[] requestBytes) {
+        int perConnectTimeout = Math.max(80, Math.min(220, discoveryTimeoutMillis / 8));
+        int perReadTimeout = Math.max(100, Math.min(300, discoveryTimeoutMillis / 6));
+        for (InetAddress address : LanDiscoveryAddresses.candidateHosts()) {
+            String host = address.getHostAddress();
+            try (Socket socket = new Socket()) {
+                socket.connect(new InetSocketAddress(host, FamilyStatsProtocol.DEFAULT_DISCOVERY_PORT), perConnectTimeout);
+                socket.setSoTimeout(perReadTimeout);
+                try (
+                        BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
+                        BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))) {
+                    writer.write(new String(requestBytes, StandardCharsets.UTF_8));
+                    writer.newLine();
+                    writer.flush();
+                    FamilyStatsProtocol.DiscoveryResponse parsed = FamilyStatsProtocol.parseDiscoveryResponse(reader.readLine());
+                    if (parsed.found && parsed.port > 0 && familyId.equals(parsed.familyId)) {
+                        return new DiscoveryTarget(true, host, parsed.port);
+                    }
+                }
+            } catch (Exception ignored) {
+            }
         }
         return DiscoveryTarget.empty();
     }

@@ -1,12 +1,20 @@
 package com.eyetimetracker.android;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 
 public final class AndroidPcDiscoveryClient {
     public static final int DEFAULT_DISCOVERY_PORT = 17419;
+    private static final int FIRST_TCP_DISCOVERY_PORT = 17420;
+    private static final int LAST_TCP_DISCOVERY_PORT = 17429;
     private static final String DEFAULT_BROADCAST_HOST = "255.255.255.255";
 
     private final int timeoutMillis;
@@ -20,7 +28,9 @@ public final class AndroidPcDiscoveryClient {
     }
 
     public DiscoveryResult discover() {
-        return discover(DEFAULT_BROADCAST_HOST, DEFAULT_DISCOVERY_PORT);
+        byte[] requestBytes = buildRequestJson().getBytes(StandardCharsets.UTF_8);
+        DiscoveryResult broadcastResult = discoverUdp(LanDiscoveryAddresses.broadcastAddresses(), DEFAULT_DISCOVERY_PORT, requestBytes);
+        return broadcastResult.found ? broadcastResult : discoverTcpScan();
     }
 
     public DiscoveryResult discover(String host, int port) {
@@ -28,40 +38,95 @@ public final class AndroidPcDiscoveryClient {
             return DiscoveryResult.empty();
         }
 
+        return discoverUdp(java.util.Collections.singletonList(hostToAddress(host)), port, buildRequestJson().getBytes(StandardCharsets.UTF_8));
+    }
+
+    private DiscoveryResult discoverUdp(java.util.List<InetAddress> addresses, int port, byte[] requestBytes) {
         try (DatagramSocket socket = new DatagramSocket()) {
             socket.setBroadcast(true);
             socket.setSoTimeout(timeoutMillis);
 
-            byte[] requestBytes = buildRequestJson().getBytes(StandardCharsets.UTF_8);
-            DatagramPacket request = new DatagramPacket(
-                    requestBytes,
-                    requestBytes.length,
-                    InetAddress.getByName(host),
-                    port);
-            socket.send(request);
+            for (InetAddress address : addresses) {
+                if (address == null) {
+                    continue;
+                }
+                DatagramPacket request = new DatagramPacket(requestBytes, requestBytes.length, address, port);
+                socket.send(request);
+            }
 
+            long deadline = System.currentTimeMillis() + timeoutMillis;
             byte[] responseBytes = new byte[2048];
-            DatagramPacket response = new DatagramPacket(responseBytes, responseBytes.length);
-            socket.receive(response);
-
-            String json = new String(response.getData(), response.getOffset(), response.getLength(), StandardCharsets.UTF_8);
-            if (!SyncMessages.DISCOVERY_RESPONSE.equals(readString(json, "Type", "type"))) {
-                return DiscoveryResult.empty();
+            while (System.currentTimeMillis() < deadline) {
+                DatagramPacket response = new DatagramPacket(responseBytes, responseBytes.length);
+                socket.receive(response);
+                DiscoveryResult result = parseDiscoveryResponse(
+                        new String(response.getData(), response.getOffset(), response.getLength(), StandardCharsets.UTF_8),
+                        response.getAddress().getHostAddress());
+                if (result.found) {
+                    return result;
+                }
             }
+        } catch (Exception ignored) {
+        }
+        return DiscoveryResult.empty();
+    }
 
-            int syncPort = readInt(json, "Port", "port");
-            if (syncPort <= 0 || syncPort > 65535) {
-                return DiscoveryResult.empty();
+    private DiscoveryResult discoverTcpScan() {
+        String requestJson = buildRequestJson();
+        int perConnectTimeout = Math.max(80, Math.min(220, timeoutMillis / 8));
+        int perReadTimeout = Math.max(100, Math.min(300, timeoutMillis / 6));
+        for (InetAddress address : LanDiscoveryAddresses.candidateHosts()) {
+            String host = address.getHostAddress();
+            for (int port = FIRST_TCP_DISCOVERY_PORT; port <= LAST_TCP_DISCOVERY_PORT; port++) {
+                DiscoveryResult result = discoverTcp(host, port, requestJson, perConnectTimeout, perReadTimeout);
+                if (result.found) {
+                    return result;
+                }
             }
+        }
+        return DiscoveryResult.empty();
+    }
 
-            return new DiscoveryResult(
-                    true,
-                    response.getAddress().getHostAddress(),
-                    syncPort,
-                    readString(json, "DeviceId", "deviceId"),
-                    readString(json, "Platform", "platform"));
+    private DiscoveryResult discoverTcp(String host, int port, String requestJson, int connectTimeout, int readTimeout) {
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress(host, port), connectTimeout);
+            socket.setSoTimeout(readTimeout);
+            try (
+                    BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))) {
+                writer.write(requestJson);
+                writer.newLine();
+                writer.flush();
+                return parseDiscoveryResponse(reader.readLine(), host);
+            }
         } catch (Exception ignored) {
             return DiscoveryResult.empty();
+        }
+    }
+
+    private static DiscoveryResult parseDiscoveryResponse(String json, String host) {
+        if (!SyncMessages.DISCOVERY_RESPONSE.equals(readString(json, "Type", "type"))) {
+            return DiscoveryResult.empty();
+        }
+
+        int syncPort = readInt(json, "Port", "port");
+        if (syncPort <= 0 || syncPort > 65535) {
+            return DiscoveryResult.empty();
+        }
+
+        return new DiscoveryResult(
+                true,
+                host,
+                syncPort,
+                readString(json, "DeviceId", "deviceId"),
+                readString(json, "Platform", "platform"));
+    }
+
+    private static InetAddress hostToAddress(String host) {
+        try {
+            return InetAddress.getByName(host);
+        } catch (Exception ex) {
+            return null;
         }
     }
 

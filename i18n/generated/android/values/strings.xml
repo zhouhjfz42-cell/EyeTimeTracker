@@ -117,6 +117,32 @@
     <string name="family_role_parent" formatted="false">家长手机</string>
     <string name="family_role_pc" formatted="false">电脑伴随设备</string>
     <string name="family_role_personal" formatted="false">个人设备</string>
+    <string name="family_rules_add_disabled_period" formatted="false">增加禁用时段</string>
+    <string name="family_rules_add_disabled_period_desc" formatted="false">为孩子增加另一段休息时间</string>
+    <string name="family_rules_continuous_desc" formatted="false">连续看屏达到设定时间后提醒孩子休息</string>
+    <string name="family_rules_continuous_minutes" formatted="false">连续用眼</string>
+    <string name="family_rules_continuous_minutes_desc" formatted="false">点击输入分钟数</string>
+    <string name="family_rules_continuous_soft_note" formatted="false">连续用眼提醒不会锁住手机，会在每达到提醒时间后弹窗提醒一次。</string>
+    <string name="family_rules_continuous_title" formatted="false">连续用眼休息</string>
+    <string name="family_rules_disabled_end" formatted="false">结束时间</string>
+    <string name="family_rules_disabled_end_desc" formatted="false">点击修改结束时间</string>
+    <string name="family_rules_disabled_period_desc" formatted="false">到达休息时段时提醒孩子放下手机</string>
+    <string name="family_rules_disabled_period_number" formatted="false">禁用时段 {number}</string>
+    <string name="family_rules_disabled_period_title" formatted="false">禁用时段提醒</string>
+    <string name="family_rules_disabled_soft_note" formatted="false">禁用时段不会锁住手机。孩子设备会弹出休息提醒，并记录这段时间的用眼，家长可在后续统计里查看。</string>
+    <string name="family_rules_disabled_start" formatted="false">开始时间</string>
+    <string name="family_rules_disabled_start_desc" formatted="false">点击修改开始时间</string>
+    <string name="family_rules_minutes_unit" formatted="false">分钟</string>
+    <string name="family_rules_minutes_value" formatted="false">{minutes}分钟</string>
+    <string name="family_rules_next_day_time" formatted="false">次日 {time}</string>
+    <string name="family_rules_note" formatted="false">这里设置的是孩子设备执行的家庭规则，和首页的累计用眼提醒分开。</string>
+    <string name="family_rules_number_invalid" formatted="false">请输入 {min}-{max} 之间的数字</string>
+    <string name="family_rules_off" formatted="false">已关</string>
+    <string name="family_rules_on" formatted="false">已开</string>
+    <string name="family_rules_rest_minutes" formatted="false">建议休息</string>
+    <string name="family_rules_rest_minutes_desc" formatted="false">提醒文案中的建议休息时长</string>
+    <string name="family_rules_saved" formatted="false">规则已保存</string>
+    <string name="family_rules_title" formatted="false">规则</string>
     <string name="family_setup_age_band" formatted="false">年龄段</string>
     <string name="family_setup_age_skip" formatted="false">跳过</string>
     <string name="family_setup_child_lead" formatted="false">填一个你看得懂的名字就可以。年龄段可以不选。</string>

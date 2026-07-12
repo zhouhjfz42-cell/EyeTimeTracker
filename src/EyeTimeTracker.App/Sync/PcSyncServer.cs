@@ -196,6 +196,7 @@ public sealed class PcSyncServer : IDisposable
 
             return typeElement.GetString() switch
             {
+                SyncMessageTypes.DiscoveryRequest => JsonSerializer.Serialize(_coordinator.CreateDiscoveryResponse(Port), SerializerOptions),
                 SyncMessageTypes.SyncRequest => HandleSyncRequestJson(requestJson),
                 SyncMessageTypes.PairRequest => HandlePairRequestJson(requestJson),
                 SyncMessageTypes.DisconnectRequest => HandleDisconnectRequestJson(requestJson),

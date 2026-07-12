@@ -2,6 +2,7 @@ package com.eyetimetracker.android;
 
 import android.app.Activity;
 import android.app.Dialog;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
@@ -16,6 +17,8 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.GridLayout;
 import android.widget.LinearLayout;
@@ -23,6 +26,8 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 public final class FamilyHomeActivity extends Activity {
     private static final String DIAG_TAG = "EyeTimeDiag";
@@ -44,6 +49,8 @@ public final class FamilyHomeActivity extends Activity {
     private EyeTimeStore store;
     private FamilyHomeState state;
     private boolean settingsMode;
+    private boolean rulesMode;
+    private FamilyEyeRules rulesDraft;
     private FamilyStatsLanServer familyStatsServer;
     private boolean familyUploadRunning;
     private boolean childReminderDialogShowing;
@@ -97,6 +104,13 @@ public final class FamilyHomeActivity extends Activity {
     }
 
     @Override public void onBackPressed() {
+        if (rulesMode) {
+            rulesMode = false;
+            settingsMode = true;
+            rulesDraft = null;
+            render();
+            return;
+        }
         if (settingsMode) {
             settingsMode = false;
             render();
@@ -124,8 +138,8 @@ public final class FamilyHomeActivity extends Activity {
     }
 
     private void render() {
-        setContentView(settingsMode ? buildSettingsUi() : buildHomeUi());
-        if (!settingsMode) {
+        setContentView(rulesMode ? buildRulesUi() : (settingsMode ? buildSettingsUi() : buildHomeUi()));
+        if (!settingsMode && !rulesMode) {
             scheduleImmediateStatsRefresh();
         }
     }
@@ -259,9 +273,10 @@ public final class FamilyHomeActivity extends Activity {
         list.addView(settingRow(
                 getString(R.string.family_home_rules),
                 getString(R.string.family_home_rules_desc),
-                getString(R.string.family_home_not_enabled),
-                true,
-                false), matchWrapTop(10));
+                store.getFamilyEyeRules().summaryText(),
+                false,
+                false,
+                v -> openFamilyRules()), matchWrapTop(10));
         list.addView(settingRow(
                 getString(R.string.family_home_exit),
                 getString(R.string.family_home_exit_desc),
@@ -269,6 +284,75 @@ public final class FamilyHomeActivity extends Activity {
                 false,
                 true,
                 v -> confirmLeaveFamilyMode()), matchWrapTop(10));
+        return scroll;
+    }
+
+    private View buildRulesUi() {
+        if (rulesDraft == null) {
+            rulesDraft = store.getFamilyEyeRules();
+        }
+        ScrollView scroll = baseScroll();
+        LinearLayout root = baseRoot(scroll);
+        root.addView(buildHeader(
+                getString(R.string.family_rules_title),
+                "",
+                v -> {
+                    rulesMode = false;
+                    settingsMode = true;
+                    rulesDraft = null;
+                    render();
+                },
+                null), matchWrap());
+        root.addView(buildStatusLine(), matchWrapTop(18));
+
+        TextView note = helpText(getString(R.string.family_rules_note));
+        note.setTextSize(15);
+        root.addView(note, matchWrapTop(14));
+
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        root.addView(list, matchWrapTop(24));
+
+        list.addView(settingRow(
+                getString(R.string.family_rules_continuous_title),
+                getString(R.string.family_rules_continuous_desc),
+                onOffText(rulesDraft.continuousUseReminderEnabled),
+                false,
+                false,
+                v -> updateRulesDraft(rulesDraft.withContinuousUse(
+                        !rulesDraft.continuousUseReminderEnabled,
+                        rulesDraft.continuousUseMinutes,
+                        rulesDraft.restMinutes,
+                        nowSeconds()))), matchWrap());
+        if (rulesDraft.continuousUseReminderEnabled) {
+            list.addView(inlineMinuteRow(
+                    getString(R.string.family_rules_continuous_minutes),
+                    getString(R.string.family_rules_continuous_minutes_desc),
+                    rulesDraft.continuousUseMinutes,
+                    1,
+                    720,
+                    value -> rulesDraft = rulesDraft.withContinuousUse(
+                            true,
+                            value,
+                            rulesDraft.restMinutes,
+                            nowSeconds())), matchWrapTop(10));
+            TextView continuousNote = helpText(getString(R.string.family_rules_continuous_soft_note));
+            continuousNote.setTextSize(14);
+            list.addView(continuousNote, matchWrapTop(14));
+        }
+
+        list.addView(disabledPeriodsCard(), matchWrapTop(10));
+
+        TextView softNote = helpText(getString(R.string.family_rules_disabled_soft_note));
+        softNote.setTextSize(14);
+        root.addView(softNote, matchWrapTop(18));
+
+        TextView saveButton = actionButton(getString(R.string.common_save), true);
+        saveButton.setOnClickListener(v -> saveFamilyRules());
+        LinearLayout actions = new LinearLayout(this);
+        actions.setGravity(Gravity.CENTER);
+        actions.addView(saveButton, centeredButtonParams());
+        root.addView(actions, matchWrapTop(24));
         return scroll;
     }
 
@@ -398,6 +482,386 @@ public final class FamilyHomeActivity extends Activity {
         valueParams.leftMargin = dp(12);
         row.addView(valueView, valueParams);
         return row;
+    }
+
+    private View inlineMinuteRow(String title, String description, int currentValue, int min, int max, IntSubmit submit) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(14), dp(13), dp(14), dp(13));
+        row.setMinimumHeight(dp(68));
+        row.setBackground(rounded(Color.WHITE, dp(12), COLOR_LINE, 1));
+        row.setClickable(true);
+        row.setFocusable(true);
+
+        LinearLayout textBlock = new LinearLayout(this);
+        textBlock.setOrientation(LinearLayout.VERTICAL);
+        row.addView(textBlock, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView titleView = new TextView(this);
+        titleView.setText(title);
+        titleView.setTextSize(17);
+        titleView.setTextColor(COLOR_TEXT);
+        titleView.setTypeface(AppFonts.bold(this));
+        titleView.setIncludeFontPadding(false);
+        textBlock.addView(titleView, matchWrap());
+
+        TextView descView = helpText(description);
+        descView.setTextSize(13);
+        textBlock.addView(descView, matchWrapTop(6));
+
+        LinearLayout valueWrap = new LinearLayout(this);
+        valueWrap.setOrientation(LinearLayout.HORIZONTAL);
+        valueWrap.setGravity(Gravity.CENTER_VERTICAL | Gravity.RIGHT);
+        LinearLayout.LayoutParams valueWrapParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        valueWrapParams.leftMargin = dp(12);
+        row.addView(valueWrap, valueWrapParams);
+
+        EditText input = new EditText(this);
+        input.setText(String.valueOf(currentValue));
+        input.setTextSize(17);
+        input.setTextColor(COLOR_MUTED);
+        input.setTypeface(AppFonts.bold(this));
+        input.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        input.setSingleLine(true);
+        input.setSelectAllOnFocus(true);
+        input.setIncludeFontPadding(false);
+        input.setInputType(InputType.TYPE_CLASS_NUMBER);
+        input.setImeOptions(EditorInfo.IME_ACTION_DONE);
+        input.setBackgroundColor(Color.TRANSPARENT);
+        input.setPadding(0, 0, 0, 0);
+        valueWrap.addView(input, new LinearLayout.LayoutParams(dp(54), LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        TextView unit = new TextView(this);
+        unit.setText(getString(R.string.family_rules_minutes_unit));
+        unit.setTextSize(17);
+        unit.setTextColor(COLOR_MUTED);
+        unit.setTypeface(AppFonts.bold(this));
+        unit.setIncludeFontPadding(false);
+        valueWrap.addView(unit, wrapWrap());
+
+        int[] lastValue = new int[] { currentValue };
+        input.setOnFocusChangeListener((v, hasFocus) -> {
+            if (!hasFocus) {
+                commitInlineMinutes(input, lastValue, min, max, submit);
+            }
+        });
+        input.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                if (commitInlineMinutes(input, lastValue, min, max, submit)) {
+                    hideKeyboard(input);
+                    input.clearFocus();
+                }
+                return true;
+            }
+            return false;
+        });
+        row.setOnClickListener(v -> focusInlineInput(input));
+        valueWrap.setOnClickListener(v -> focusInlineInput(input));
+        return row;
+    }
+
+    private boolean commitInlineMinutes(EditText input, int[] lastValue, int min, int max, IntSubmit submit) {
+        String raw = input.getText().toString().trim();
+        try {
+            int value = Integer.parseInt(raw);
+            if (value < min || value > max) {
+                throw new NumberFormatException("out of range");
+            }
+            input.setText(String.valueOf(value));
+            if (value != lastValue[0]) {
+                lastValue[0] = value;
+                submit.onSubmit(value);
+            }
+            return true;
+        } catch (NumberFormatException ex) {
+            Toast.makeText(this, getString(R.string.family_rules_number_invalid)
+                    .replace("{min}", String.valueOf(min))
+                    .replace("{max}", String.valueOf(max)), Toast.LENGTH_SHORT).show();
+            input.setText(String.valueOf(lastValue[0]));
+            input.selectAll();
+            return false;
+        }
+    }
+
+    private void focusInlineInput(EditText input) {
+        input.requestFocus();
+        input.selectAll();
+        input.post(() -> {
+            InputMethodManager manager = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (manager != null) {
+                manager.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT);
+            }
+        });
+    }
+
+    private void hideKeyboard(View view) {
+        InputMethodManager manager = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (manager != null) {
+            manager.hideSoftInputFromWindow(view.getWindowToken(), 0);
+        }
+    }
+
+    private void openFamilyRules() {
+        if (state.deviceRole != DeviceRole.PARENT_DEVICE) {
+            return;
+        }
+        rulesDraft = store.getFamilyEyeRules();
+        settingsMode = false;
+        rulesMode = true;
+        render();
+    }
+
+    private void updateRulesDraft(FamilyEyeRules rules) {
+        rulesDraft = rules;
+        render();
+    }
+
+    private void addDisabledPeriod() {
+        showDisabledPeriodPickerDialog(FamilyEyeRules.DisabledPeriod.defaults(), period -> {
+            List<FamilyEyeRules.DisabledPeriod> periods = rulesDraft.disabledPeriodEnabled
+                    ? copyDisabledPeriods()
+                    : new ArrayList<>();
+            periods.add(period);
+            updateRulesDraft(rulesDraft.withDisabledPeriods(true, periods, nowSeconds()));
+        });
+    }
+
+    private void editDisabledPeriod(int index) {
+        if (index < 0 || index >= rulesDraft.disabledPeriods.size()) {
+            return;
+        }
+        showDisabledPeriodPickerDialog(rulesDraft.disabledPeriods.get(index), period -> replaceDisabledPeriod(index, period.startMinutes, period.endMinutes));
+    }
+
+    private void removeDisabledPeriod(int index) {
+        if (index < 0 || index >= rulesDraft.disabledPeriods.size()) {
+            return;
+        }
+        List<FamilyEyeRules.DisabledPeriod> periods = copyDisabledPeriods();
+        periods.remove(index);
+        updateRulesDraft(rulesDraft.withDisabledPeriods(!periods.isEmpty(), periods, nowSeconds()));
+    }
+
+    private void replaceDisabledPeriod(int index, int startMinutes, int endMinutes) {
+        if (index < 0 || index >= rulesDraft.disabledPeriods.size()) {
+            return;
+        }
+        List<FamilyEyeRules.DisabledPeriod> periods = copyDisabledPeriods();
+        periods.set(index, FamilyEyeRules.DisabledPeriod.create(startMinutes, endMinutes));
+        updateRulesDraft(rulesDraft.withDisabledPeriods(true, periods, nowSeconds()));
+    }
+
+    private List<FamilyEyeRules.DisabledPeriod> copyDisabledPeriods() {
+        return new ArrayList<>(rulesDraft == null ? FamilyEyeRules.defaults(store.getActiveChildId()).disabledPeriods : rulesDraft.disabledPeriods);
+    }
+
+    private String endTimeText(FamilyEyeRules.DisabledPeriod period) {
+        String value = FamilyEyeRules.formatMinuteOfDay(period.endMinutes);
+        return period.startMinutes > period.endMinutes ? getString(R.string.family_rules_next_day_time).replace("{time}", value) : value;
+    }
+
+    private String disabledPeriodText(FamilyEyeRules.DisabledPeriod period) {
+        return FamilyEyeRules.formatMinuteOfDay(period.startMinutes) + " - " + endTimeText(period);
+    }
+
+    private View disabledPeriodsCard() {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(14), dp(13), dp(14), dp(13));
+        card.setBackground(rounded(Color.WHITE, dp(12), COLOR_LINE, 1));
+
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+
+        LinearLayout textBlock = new LinearLayout(this);
+        textBlock.setOrientation(LinearLayout.VERTICAL);
+        header.addView(textBlock, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView title = new TextView(this);
+        title.setText(getString(R.string.family_rules_disabled_period_title));
+        title.setTextSize(17);
+        title.setTextColor(COLOR_TEXT);
+        title.setTypeface(AppFonts.bold(this));
+        title.setIncludeFontPadding(false);
+        textBlock.addView(title, matchWrap());
+
+        TextView add = new TextView(this);
+        add.setText("+");
+        add.setTextSize(18);
+        add.setTextColor(Color.WHITE);
+        add.setTypeface(AppFonts.bold(this));
+        add.setGravity(Gravity.CENTER);
+        add.setIncludeFontPadding(false);
+        add.setBackground(oval(COLOR_GREEN));
+        add.setClickable(true);
+        add.setFocusable(true);
+        add.setOnClickListener(v -> addDisabledPeriod());
+        LinearLayout.LayoutParams addParams = new LinearLayout.LayoutParams(dp(28), dp(28));
+        addParams.leftMargin = dp(14);
+        header.addView(add, addParams);
+        card.addView(header, matchWrap());
+
+        if (rulesDraft.disabledPeriodEnabled) {
+            for (int i = 0; i < rulesDraft.disabledPeriods.size(); i++) {
+                int index = i;
+                card.addView(disabledPeriodRow(rulesDraft.disabledPeriods.get(i), () -> editDisabledPeriod(index), () -> removeDisabledPeriod(index)), matchWrapTop(12));
+            }
+        } else {
+            TextView off = helpText(getString(R.string.family_rules_off));
+            off.setTextSize(15);
+            off.setTypeface(AppFonts.bold(this));
+            card.addView(off, matchWrapTop(14));
+        }
+        return card;
+    }
+
+    private View disabledPeriodRow(FamilyEyeRules.DisabledPeriod period, Runnable onEdit, Runnable onRemove) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(8), 0, dp(2));
+        row.setClickable(true);
+        row.setFocusable(true);
+        row.setOnClickListener(v -> onEdit.run());
+
+        TextView value = new TextView(this);
+        value.setText(disabledPeriodText(period));
+        value.setTextSize(17);
+        value.setTextColor(COLOR_TEXT);
+        AppFonts.apply(value, false);
+        value.setIncludeFontPadding(false);
+        row.addView(value, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView remove = new TextView(this);
+        remove.setText("×");
+        remove.setTextSize(18);
+        remove.setTextColor(COLOR_MUTED);
+        remove.setTypeface(AppFonts.bold(this));
+        remove.setGravity(Gravity.CENTER);
+        remove.setIncludeFontPadding(false);
+        remove.setBackground(oval(COLOR_DISABLED));
+        remove.setClickable(true);
+        remove.setFocusable(true);
+        remove.setOnClickListener(v -> onRemove.run());
+        LinearLayout.LayoutParams removeParams = new LinearLayout.LayoutParams(dp(28), dp(28));
+        removeParams.leftMargin = dp(10);
+        row.addView(remove, removeParams);
+        return row;
+    }
+
+    private void showNumberInputDialog(String title, String hint, int currentValue, int min, int max, IntSubmit submit) {
+        Dialog dialog = new Dialog(this);
+        LinearLayout panel = dialogPanel();
+        panel.addView(dialogTitle(title), matchWrap());
+
+        EditText input = new EditText(this);
+        input.setTextColor(COLOR_TEXT);
+        input.setTextSize(18);
+        input.setSingleLine(true);
+        input.setGravity(Gravity.CENTER);
+        input.setText(String.valueOf(currentValue));
+        input.setHint(hint);
+        input.setInputType(InputType.TYPE_CLASS_NUMBER);
+        input.setBackground(rounded(Color.rgb(244, 250, 247), dp(8), COLOR_LINE, 1));
+        input.setPadding(dp(14), 0, dp(14), 0);
+        panel.addView(input, fixedHeightTop(52, 18));
+
+        LinearLayout actions = dialogActions();
+        actions.addView(dialogButton(getString(R.string.common_cancel), false, false, v -> dialog.dismiss()), dialogButtonParams(0));
+        actions.addView(dialogButton(getString(R.string.common_save), true, false, v -> {
+            try {
+                int value = Integer.parseInt(input.getText().toString().trim());
+                if (value < min || value > max) {
+                    Toast.makeText(this, getString(R.string.family_rules_number_invalid)
+                            .replace("{min}", String.valueOf(min))
+                            .replace("{max}", String.valueOf(max)), Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                submit.onSubmit(value);
+                dialog.dismiss();
+            } catch (NumberFormatException ex) {
+                Toast.makeText(this, getString(R.string.family_rules_number_invalid)
+                        .replace("{min}", String.valueOf(min))
+                        .replace("{max}", String.valueOf(max)), Toast.LENGTH_SHORT).show();
+            }
+        }), dialogButtonParams(dp(10)));
+        panel.addView(actions, matchWrapTop(22));
+        showStyledDialog(dialog, panel, null);
+    }
+
+    private void showDisabledPeriodPickerDialog(FamilyEyeRules.DisabledPeriod current, PeriodSubmit submit) {
+        FamilyEyeRules.DisabledPeriod initial = current == null
+                ? FamilyEyeRules.DisabledPeriod.defaults()
+                : current;
+        Dialog dialog = new Dialog(this);
+        LinearLayout panel = dialogPanel();
+        panel.setPadding(dp(18), dp(24), dp(18), dp(24));
+
+        LinearLayout pickers = new LinearLayout(this);
+        pickers.setOrientation(LinearLayout.HORIZONTAL);
+        pickers.setGravity(Gravity.CENTER);
+        pickers.setPadding(0, 0, 0, 0);
+
+        TextView from = pickerLabel("从");
+        TimeColumn startHour = new TimeColumn(0, 23, initial.startMinutes / 60);
+        TimeColumn startMinute = new TimeColumn(0, 59, initial.startMinutes % 60);
+        TextView to = pickerLabel("到");
+        TimeColumn endHour = new TimeColumn(0, 23, initial.endMinutes / 60);
+        TimeColumn endMinute = new TimeColumn(0, 59, initial.endMinutes % 60);
+
+        pickers.addView(from, pickerLabelParams());
+        pickers.addView(startHour.view(), pickerParams());
+        pickers.addView(startMinute.view(), pickerParams());
+        pickers.addView(to, pickerLabelParams());
+        pickers.addView(endHour.view(), pickerParams());
+        pickers.addView(endMinute.view(), pickerParams());
+        panel.addView(pickers, matchWrap());
+
+        LinearLayout actions = dialogActions();
+        actions.addView(dialogButton(getString(R.string.common_cancel), false, false, v -> dialog.dismiss()), dialogButtonParams(0));
+        actions.addView(dialogButton(getString(R.string.common_confirm), true, false, v -> {
+            FamilyEyeRules.DisabledPeriod period = FamilyEyeRules.DisabledPeriod.create(
+                    startHour.value() * 60 + startMinute.value(),
+                    endHour.value() * 60 + endMinute.value());
+            if (!period.isValid()) {
+                Toast.makeText(this, "开始和结束时间不能相同", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            submit.onSubmit(period);
+            dialog.dismiss();
+        }), dialogButtonParams(dp(10)));
+        panel.addView(actions, matchWrapTop(22));
+        showBottomSheetDialog(dialog, panel, null);
+    }
+
+    private void saveFamilyRules() {
+        if (rulesDraft == null) {
+            return;
+        }
+        store.saveFamilyEyeRules(rulesDraft);
+        Toast.makeText(this, R.string.family_rules_saved, Toast.LENGTH_SHORT).show();
+        rulesMode = false;
+        settingsMode = true;
+        rulesDraft = null;
+        render();
+    }
+
+    private String onOffText(boolean enabled) {
+        return enabled ? getString(R.string.family_rules_on) : getString(R.string.family_rules_off);
+    }
+
+    private static long nowSeconds() {
+        return System.currentTimeMillis() / 1000L;
+    }
+
+    private interface IntSubmit {
+        void onSubmit(int value);
+    }
+
+    private interface PeriodSubmit {
+        void onSubmit(FamilyEyeRules.DisabledPeriod period);
     }
 
     private void openAddChildDevice() {
@@ -573,6 +1037,117 @@ public final class FamilyHomeActivity extends Activity {
         return actions;
     }
 
+    private TextView pickerLabel(String value) {
+        TextView label = new TextView(this);
+        label.setText(value);
+        label.setTextSize(21);
+        label.setTextColor(COLOR_TEXT);
+        label.setGravity(Gravity.CENTER);
+        label.setIncludeFontPadding(false);
+        label.setTypeface(AppFonts.bold(this));
+        return label;
+    }
+
+    private LinearLayout.LayoutParams pickerLabelParams() {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(30), dp(116));
+        params.leftMargin = 0;
+        params.rightMargin = 0;
+        return params;
+    }
+
+    private LinearLayout.LayoutParams pickerParams() {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(116), 1f);
+        params.leftMargin = dp(1);
+        params.rightMargin = dp(1);
+        return params;
+    }
+
+    private final class TimeColumn {
+        private final int min;
+        private final int max;
+        private int value;
+        private final LinearLayout root;
+        private final TextView previous;
+        private final TextView current;
+        private final TextView next;
+
+        TimeColumn(int min, int max, int value) {
+            this.min = min;
+            this.max = max;
+            this.value = Math.max(min, Math.min(max, value));
+            root = new LinearLayout(FamilyHomeActivity.this);
+            root.setOrientation(LinearLayout.VERTICAL);
+            root.setGravity(Gravity.CENTER);
+
+            previous = pickerNumber(false);
+            current = pickerNumber(true);
+            next = pickerNumber(false);
+
+            previous.setOnClickListener(v -> decrement());
+            next.setOnClickListener(v -> increment());
+            current.setOnClickListener(v -> increment());
+
+            root.addView(previous, pickerNumberParams(28));
+            root.addView(pickerLine(), new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(2)));
+            root.addView(current, pickerNumberParams(38));
+            root.addView(pickerLine(), new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(2)));
+            root.addView(next, pickerNumberParams(28));
+            update();
+        }
+
+        View view() {
+            return root;
+        }
+
+        int value() {
+            return value;
+        }
+
+        private void increment() {
+            value = value >= max ? min : value + 1;
+            update();
+        }
+
+        private void decrement() {
+            value = value <= min ? max : value - 1;
+            update();
+        }
+
+        private void update() {
+            previous.setText(twoDigits(value <= min ? max : value - 1));
+            current.setText(twoDigits(value));
+            next.setText(twoDigits(value >= max ? min : value + 1));
+        }
+    }
+
+    private TextView pickerNumber(boolean selected) {
+        TextView text = new TextView(this);
+        text.setTextSize(selected ? 26 : 18);
+        text.setTextColor(selected ? COLOR_GREEN : Color.rgb(96, 96, 96));
+        text.setGravity(Gravity.CENTER);
+        text.setIncludeFontPadding(false);
+        if (selected) {
+            text.setTypeface(AppFonts.bold(this));
+        } else {
+            AppFonts.apply(text, false);
+        }
+        return text;
+    }
+
+    private View pickerLine() {
+        View line = new View(this);
+        line.setBackgroundColor(Color.rgb(134, 134, 134));
+        return line;
+    }
+
+    private LinearLayout.LayoutParams pickerNumberParams(int height) {
+        return new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(height));
+    }
+
+    private String twoDigits(int value) {
+        return value < 10 ? "0" + value : String.valueOf(value);
+    }
+
     private TextView dialogButton(String label, boolean primary, boolean danger, View.OnClickListener listener) {
         TextView button = new TextView(this);
         button.setText(label);
@@ -609,6 +1184,26 @@ public final class FamilyHomeActivity extends Activity {
         Window window = dialog.getWindow();
         if (window != null) {
             window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
+    }
+
+    private void showBottomSheetDialog(Dialog dialog, View panel, Runnable onDismiss) {
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        LinearLayout outer = new LinearLayout(this);
+        outer.setPadding(dp(12), 0, dp(12), dp(18));
+        outer.addView(panel, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        dialog.setContentView(outer);
+        dialog.setOnDismissListener(d -> {
+            if (onDismiss != null) {
+                onDismiss.run();
+            }
+        });
+        dialog.show();
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            window.setGravity(Gravity.BOTTOM);
             window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         }
     }

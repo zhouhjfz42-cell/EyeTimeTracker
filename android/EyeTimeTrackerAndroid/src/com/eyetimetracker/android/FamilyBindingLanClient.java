@@ -12,7 +12,6 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 
 public final class FamilyBindingLanClient {
-    private static final String BROADCAST_HOST = "255.255.255.255";
     private final int discoveryTimeoutMillis;
     private final int connectTimeoutMillis;
     private final int readTimeoutMillis;
@@ -58,16 +57,23 @@ public final class FamilyBindingLanClient {
     }
 
     private DiscoveryTarget discover(String deviceId) {
+        byte[] requestBytes = FamilyBindingProtocol.buildDiscoveryRequest(deviceId).getBytes(StandardCharsets.UTF_8);
+        DiscoveryTarget broadcastTarget = discoverByUdp(requestBytes);
+        return broadcastTarget.found ? broadcastTarget : discoverByTcpScan(requestBytes);
+    }
+
+    private DiscoveryTarget discoverByUdp(byte[] requestBytes) {
         try (DatagramSocket socket = new DatagramSocket()) {
             socket.setBroadcast(true);
             socket.setSoTimeout(discoveryTimeoutMillis);
-            byte[] requestBytes = FamilyBindingProtocol.buildDiscoveryRequest(deviceId).getBytes(StandardCharsets.UTF_8);
-            DatagramPacket request = new DatagramPacket(
-                    requestBytes,
-                    requestBytes.length,
-                    InetAddress.getByName(BROADCAST_HOST),
-                    FamilyBindingProtocol.DEFAULT_DISCOVERY_PORT);
-            socket.send(request);
+            for (InetAddress address : LanDiscoveryAddresses.broadcastAddresses()) {
+                DatagramPacket request = new DatagramPacket(
+                        requestBytes,
+                        requestBytes.length,
+                        address,
+                        FamilyBindingProtocol.DEFAULT_DISCOVERY_PORT);
+                socket.send(request);
+            }
 
             long deadline = System.currentTimeMillis() + discoveryTimeoutMillis;
             byte[] responseBytes = new byte[2048];
@@ -81,6 +87,31 @@ public final class FamilyBindingLanClient {
                 }
             }
         } catch (Exception ignored) {
+        }
+        return DiscoveryTarget.empty();
+    }
+
+    private DiscoveryTarget discoverByTcpScan(byte[] requestBytes) {
+        int perConnectTimeout = Math.max(80, Math.min(220, discoveryTimeoutMillis / 8));
+        int perReadTimeout = Math.max(100, Math.min(300, discoveryTimeoutMillis / 6));
+        for (InetAddress address : LanDiscoveryAddresses.candidateHosts()) {
+            String host = address.getHostAddress();
+            try (Socket socket = new Socket()) {
+                socket.connect(new InetSocketAddress(host, FamilyBindingProtocol.DEFAULT_DISCOVERY_PORT), perConnectTimeout);
+                socket.setSoTimeout(perReadTimeout);
+                try (
+                        BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
+                        BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))) {
+                    writer.write(new String(requestBytes, StandardCharsets.UTF_8));
+                    writer.newLine();
+                    writer.flush();
+                    FamilyBindingProtocol.DiscoveryResponse parsed = FamilyBindingProtocol.parseDiscoveryResponse(reader.readLine());
+                    if (parsed.found && parsed.port > 0) {
+                        return new DiscoveryTarget(true, host, parsed.port);
+                    }
+                }
+            } catch (Exception ignored) {
+            }
         }
         return DiscoveryTarget.empty();
     }

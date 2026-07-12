@@ -77,7 +77,7 @@ public final class FamilyStatsProtocol {
     }
 
     public static String buildUploadResponse(boolean accepted, String error, int changedSegments) {
-        return buildUploadResponse(accepted, error, changedSegments, 0, false, false, null);
+        return buildUploadResponse(accepted, error, changedSegments, 0, false, false, null, null);
     }
 
     public static String buildUploadResponse(
@@ -96,7 +96,18 @@ public final class FamilyStatsProtocol {
             int reminderMinutes,
             boolean repeatReminder,
             ParentPasscode parentPasscode) {
-        return buildUploadResponse(accepted, error, changedSegments, reminderMinutes, repeatReminder, true, parentPasscode);
+        return buildUploadResponse(accepted, error, changedSegments, reminderMinutes, repeatReminder, parentPasscode, null);
+    }
+
+    public static String buildUploadResponse(
+            boolean accepted,
+            String error,
+            int changedSegments,
+            int reminderMinutes,
+            boolean repeatReminder,
+            ParentPasscode parentPasscode,
+            FamilyEyeRules familyEyeRules) {
+        return buildUploadResponse(accepted, error, changedSegments, reminderMinutes, repeatReminder, true, parentPasscode, familyEyeRules);
     }
 
     private static String buildUploadResponse(
@@ -106,7 +117,8 @@ public final class FamilyStatsProtocol {
             int reminderMinutes,
             boolean repeatReminder,
             boolean hasReminderSettings,
-            ParentPasscode parentPasscode) {
+            ParentPasscode parentPasscode,
+            FamilyEyeRules familyEyeRules) {
         StringBuilder json = new StringBuilder();
         json.append("{")
                 .append("\"Type\":\"").append(SyncMessages.FAMILY_STATS_UPLOAD_RESPONSE).append("\",")
@@ -118,6 +130,12 @@ public final class FamilyStatsProtocol {
                 .append("\"RepeatReminder\":").append(repeatReminder);
         if (accepted && parentPasscode != null && parentPasscode.isConfigured()) {
             json.append(",\"ParentPasscode\":").append(parentPasscodeToJsonText(parentPasscode));
+        }
+        if (accepted && familyEyeRules != null) {
+            json.append(",\"HasFamilyEyeRules\":true")
+                    .append(",\"FamilyEyeRules\":").append(familyEyeRulesToJsonText(familyEyeRules));
+        } else {
+            json.append(",\"HasFamilyEyeRules\":false");
         }
         json.append(",\"TimestampUnixSeconds\":").append(System.currentTimeMillis() / 1000L)
                 .append("}");
@@ -131,6 +149,8 @@ public final class FamilyStatsProtocol {
         boolean accepted = readBoolean(jsonText, "Accepted");
         boolean hasReminderSettings = readBoolean(jsonText, "HasReminderSettings");
         String passcodeJson = readObject(jsonText, "ParentPasscode");
+        boolean hasFamilyEyeRules = readBoolean(jsonText, "HasFamilyEyeRules");
+        String rulesJson = readObject(jsonText, "FamilyEyeRules");
         return new UploadResponse(
                 accepted,
                 readString(jsonText, "Error"),
@@ -138,7 +158,8 @@ public final class FamilyStatsProtocol {
                 readInt(jsonText, "ReminderMinutes"),
                 readBoolean(jsonText, "RepeatReminder"),
                 hasReminderSettings,
-                passcodeJson.isEmpty() ? null : parentPasscodeFromJsonText(passcodeJson));
+                passcodeJson.isEmpty() ? null : parentPasscodeFromJsonText(passcodeJson),
+                hasFamilyEyeRules && !rulesJson.isEmpty() ? familyEyeRulesFromJsonText(rulesJson) : null);
     }
 
     private static String segmentsToJson(List<UsageSegment> segments) {
@@ -221,6 +242,39 @@ public final class FamilyStatsProtocol {
                 readString(jsonText, "salt"),
                 readLong(jsonText, "updatedAtUnixSeconds"));
         return passcode.isConfigured() ? passcode : null;
+    }
+
+    private static String familyEyeRulesToJsonText(FamilyEyeRules rules) {
+        return "{"
+                + "\"childId\":\"" + escape(rules.childId) + "\","
+                + "\"continuousUseReminderEnabled\":" + rules.continuousUseReminderEnabled + ","
+                + "\"continuousUseMinutes\":" + rules.continuousUseMinutes + ","
+                + "\"restMinutes\":" + rules.restMinutes + ","
+                + "\"disabledPeriodEnabled\":" + rules.disabledPeriodEnabled + ","
+                + "\"disabledPeriodStartMinutes\":" + rules.disabledPeriodStartMinutes + ","
+                + "\"disabledPeriodEndMinutes\":" + rules.disabledPeriodEndMinutes + ","
+                + "\"disabledPeriods\":\"" + escape(FamilyEyeRules.encodeDisabledPeriods(rules.disabledPeriods)) + "\","
+                + "\"disabledPeriodReminderIntervalMinutes\":" + rules.disabledPeriodReminderIntervalMinutes + ","
+                + "\"updatedAtUnixSeconds\":" + rules.updatedAtUnixSeconds
+                + "}";
+    }
+
+    private static FamilyEyeRules familyEyeRulesFromJsonText(String jsonText) {
+        String disabledPeriods = readString(jsonText, "disabledPeriods");
+        java.util.List<FamilyEyeRules.DisabledPeriod> periods = disabledPeriods.isEmpty()
+                ? java.util.Collections.singletonList(FamilyEyeRules.DisabledPeriod.create(
+                        readInt(jsonText, "disabledPeriodStartMinutes"),
+                        readInt(jsonText, "disabledPeriodEndMinutes")))
+                : FamilyEyeRules.decodeDisabledPeriods(disabledPeriods);
+        return FamilyEyeRules.createWithDisabledPeriods(
+                readString(jsonText, "childId"),
+                readBoolean(jsonText, "continuousUseReminderEnabled"),
+                readInt(jsonText, "continuousUseMinutes"),
+                readInt(jsonText, "restMinutes"),
+                readBoolean(jsonText, "disabledPeriodEnabled"),
+                periods,
+                readInt(jsonText, "disabledPeriodReminderIntervalMinutes"),
+                readLong(jsonText, "updatedAtUnixSeconds"));
     }
 
     private static String readRawValue(String json, String name) {
@@ -313,6 +367,8 @@ public final class FamilyStatsProtocol {
         public final boolean repeatReminder;
         public final boolean hasReminderSettings;
         public final ParentPasscode parentPasscode;
+        public final boolean hasFamilyEyeRules;
+        public final FamilyEyeRules familyEyeRules;
 
         private UploadResponse(
                 boolean accepted,
@@ -321,7 +377,8 @@ public final class FamilyStatsProtocol {
                 int reminderMinutes,
                 boolean repeatReminder,
                 boolean hasReminderSettings,
-                ParentPasscode parentPasscode) {
+                ParentPasscode parentPasscode,
+                FamilyEyeRules familyEyeRules) {
             this.accepted = accepted;
             this.error = safe(error);
             this.changedSegments = Math.max(0, changedSegments);
@@ -329,10 +386,12 @@ public final class FamilyStatsProtocol {
             this.repeatReminder = repeatReminder;
             this.hasReminderSettings = hasReminderSettings;
             this.parentPasscode = parentPasscode;
+            this.hasFamilyEyeRules = familyEyeRules != null;
+            this.familyEyeRules = familyEyeRules;
         }
 
         public static UploadResponse rejected(String error) {
-            return new UploadResponse(false, error, 0, 0, false, false, null);
+            return new UploadResponse(false, error, 0, 0, false, false, null, null);
         }
     }
 

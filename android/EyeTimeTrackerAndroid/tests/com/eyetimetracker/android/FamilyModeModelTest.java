@@ -16,6 +16,8 @@ public final class FamilyModeModelTest {
         shouldSummarizeFamilyChildUsageSegments();
         shouldBuildAndParseFamilyStatsUploadRequest();
         shouldBuildAndParseFamilyStatsUploadResponseWithReminderSettings();
+        shouldRoundTripFamilyEyeRulesInStoreState();
+        shouldBuildAndParseFamilyStatsUploadResponseWithFamilyEyeRules();
         shouldBuildFamilyChildStatsSeries();
         shouldBuildFamilyChildHomeStatsInOnePass();
         shouldLeaveFamilyModeLocally();
@@ -31,6 +33,11 @@ public final class FamilyModeModelTest {
         shouldRequirePasscodeForChildProtectedSettingsActions();
         shouldHideJoinAsChildEntryAfterParentRoleIsConfirmed();
         shouldBlockSecondChildBindingInOneToOneFamilyMode();
+        shouldCreateDefaultFamilyEyeRules();
+        shouldNormalizeFamilyEyeRulesValues();
+        shouldSummarizeFamilyEyeRules();
+        shouldMatchDisabledPeriodAcrossMidnight();
+        shouldSupportMultipleDisabledPeriods();
         System.out.println("All Android family mode model tests passed.");
     }
 
@@ -288,6 +295,45 @@ public final class FamilyModeModelTest {
         }
     }
 
+    private static void shouldRoundTripFamilyEyeRulesInStoreState() {
+        try {
+            org.json.JSONObject state = new org.json.JSONObject();
+            FamilyEyeRules rules = FamilyEyeRules.create("child-1", true, 45, 10, true, 1320, 390, 30, 1783001000L);
+
+            EyeTimeStore.writeFamilyEyeRules(state, rules);
+            FamilyEyeRules saved = EyeTimeStore.readFamilyEyeRules(state, "child-1");
+
+            assertEquals("child-1", saved.childId, "stored rules keep child id");
+            assertEquals(true, saved.continuousUseReminderEnabled, "stored rules keep continuous enabled");
+            assertEquals(45, saved.continuousUseMinutes, "stored rules keep continuous minutes");
+            assertEquals(10, saved.restMinutes, "stored rules keep rest minutes");
+            assertEquals(true, saved.disabledPeriodEnabled, "stored rules keep disabled enabled");
+            assertEquals(1320, saved.disabledPeriodStartMinutes, "stored rules keep disabled start");
+            assertEquals(390, saved.disabledPeriodEndMinutes, "stored rules keep disabled end");
+            assertEquals(30, saved.disabledPeriodReminderIntervalMinutes, "stored rules keep disabled reminder interval");
+            assertEquals(1783001000L, saved.updatedAtUnixSeconds, "stored rules keep update time");
+        } catch (Exception ex) {
+            throw new AssertionError("family eye rules store round trip test failed", ex);
+        }
+    }
+
+    private static void shouldBuildAndParseFamilyStatsUploadResponseWithFamilyEyeRules() {
+        try {
+            FamilyEyeRules rules = FamilyEyeRules.create("child-1", true, 30, 5, true, 1290, 420, 15, 1783001001L);
+            FamilyStatsProtocol.UploadResponse response = FamilyStatsProtocol.parseUploadResponse(
+                    FamilyStatsProtocol.buildUploadResponse(true, "", 3, 330, false, null, rules));
+
+            assertEquals(true, response.accepted, "family stats upload response with rules is accepted");
+            assertEquals(true, response.hasFamilyEyeRules, "family stats upload response marks family rules present");
+            assertEquals("child-1", response.familyEyeRules.childId, "family stats upload response keeps rules child id");
+            assertEquals(true, response.familyEyeRules.continuousUseReminderEnabled, "family stats upload response keeps continuous enabled");
+            assertEquals(true, response.familyEyeRules.disabledPeriodEnabled, "family stats upload response keeps disabled enabled");
+            assertEquals("连续 30 分钟，21:30-07:00", response.familyEyeRules.summaryText(), "family stats upload response keeps rule summary");
+        } catch (Exception ex) {
+            throw new AssertionError("family stats protocol upload response family rules test failed", ex);
+        }
+    }
+
     private static void shouldBuildFamilyChildStatsSeries() {
         try {
             org.json.JSONObject state = new org.json.JSONObject();
@@ -511,6 +557,90 @@ public final class FamilyModeModelTest {
             assertEquals(false, FamilySettingsPolicy.canOpenAddChildDeviceBinding(DeviceRole.PERSONAL_DEVICE, false), "personal device must complete family setup first");
         } catch (Exception ex) {
             throw new AssertionError("family one-to-one binding policy test failed", ex);
+        }
+    }
+
+    private static void shouldCreateDefaultFamilyEyeRules() {
+        try {
+            FamilyEyeRules rules = FamilyEyeRules.defaults("child-1");
+
+            assertEquals("child-1", rules.childId, "default rules keep child id");
+            assertEquals(false, rules.continuousUseReminderEnabled, "continuous rule is off by default");
+            assertEquals(30, rules.continuousUseMinutes, "default continuous minutes");
+            assertEquals(5, rules.restMinutes, "default rest minutes");
+            assertEquals(false, rules.disabledPeriodEnabled, "disabled period is off by default");
+            assertEquals(1260, rules.disabledPeriodStartMinutes, "default disabled start is 21:00");
+            assertEquals(450, rules.disabledPeriodEndMinutes, "default disabled end is 07:30");
+            assertEquals(15, rules.disabledPeriodReminderIntervalMinutes, "default disabled period reminder interval");
+            assertEquals("暂未开启", rules.summaryText(), "default summary is disabled");
+        } catch (Exception ex) {
+            throw new AssertionError("default family eye rules test failed", ex);
+        }
+    }
+
+    private static void shouldNormalizeFamilyEyeRulesValues() {
+        try {
+            FamilyEyeRules rules = FamilyEyeRules.create(" child-1 ", true, 999, -2, true, -10, 2000, 0, 1783000900L);
+
+            assertEquals("child-1", rules.childId, "rules trim child id");
+            assertEquals(30, rules.continuousUseMinutes, "invalid continuous minutes fall back");
+            assertEquals(5, rules.restMinutes, "invalid rest minutes fall back");
+            assertEquals(1260, rules.disabledPeriodStartMinutes, "invalid disabled start falls back");
+            assertEquals(450, rules.disabledPeriodEndMinutes, "invalid disabled end falls back");
+            assertEquals(15, rules.disabledPeriodReminderIntervalMinutes, "invalid disabled interval falls back");
+            assertEquals(1783000900L, rules.updatedAtUnixSeconds, "rules keep update time");
+        } catch (Exception ex) {
+            throw new AssertionError("family eye rules normalization test failed", ex);
+        }
+    }
+
+    private static void shouldSummarizeFamilyEyeRules() {
+        try {
+            FamilyEyeRules continuous = FamilyEyeRules.create("child-1", true, 45, 10, false, 1290, 420, 15, 1L);
+            FamilyEyeRules disabled = FamilyEyeRules.create("child-1", false, 30, 5, true, 1320, 390, 15, 1L);
+            FamilyEyeRules both = FamilyEyeRules.create("child-1", true, 30, 5, true, 1290, 420, 15, 1L);
+
+            assertEquals("连续 45 分钟", continuous.summaryText(), "continuous summary");
+            assertEquals("22:00-06:30", disabled.summaryText(), "disabled period summary");
+            assertEquals("连续 30 分钟，21:30-07:00", both.summaryText(), "combined summary");
+        } catch (Exception ex) {
+            throw new AssertionError("family eye rules summary test failed", ex);
+        }
+    }
+
+    private static void shouldMatchDisabledPeriodAcrossMidnight() {
+        try {
+            FamilyEyeRules overnight = FamilyEyeRules.create("child-1", false, 30, 5, true, 1290, 420, 15, 1L);
+            FamilyEyeRules day = FamilyEyeRules.create("child-1", false, 30, 5, true, 540, 1020, 15, 1L);
+            FamilyEyeRules off = FamilyEyeRules.create("child-1", false, 30, 5, false, 1290, 420, 15, 1L);
+
+            assertEquals(true, overnight.isInDisabledPeriod(22, 0), "overnight disabled period matches evening");
+            assertEquals(true, overnight.isInDisabledPeriod(6, 59), "overnight disabled period matches morning");
+            assertEquals(false, overnight.isInDisabledPeriod(12, 0), "overnight disabled period does not match noon");
+            assertEquals(true, day.isInDisabledPeriod(10, 0), "same-day disabled period matches daytime");
+            assertEquals(false, day.isInDisabledPeriod(18, 0), "same-day disabled period excludes end");
+            assertEquals(false, off.isInDisabledPeriod(22, 0), "disabled period off never matches");
+        } catch (Exception ex) {
+            throw new AssertionError("family eye rules disabled period test failed", ex);
+        }
+    }
+
+    private static void shouldSupportMultipleDisabledPeriods() {
+        try {
+            java.util.List<FamilyEyeRules.DisabledPeriod> periods = java.util.Arrays.asList(
+                    FamilyEyeRules.DisabledPeriod.create(1260, 450),
+                    FamilyEyeRules.DisabledPeriod.create(750, 810));
+            FamilyEyeRules rules = FamilyEyeRules.createWithDisabledPeriods("child-1", false, 30, 5, true, periods, 15, 1L);
+
+            assertEquals(2, rules.disabledPeriods.size(), "family rules keep multiple disabled periods");
+            assertEquals(1260, rules.disabledPeriodStartMinutes, "primary disabled start uses first period");
+            assertEquals(450, rules.disabledPeriodEndMinutes, "primary disabled end uses first period");
+            assertEquals(true, rules.isInDisabledPeriod(21, 30), "multiple periods match evening period");
+            assertEquals(true, rules.isInDisabledPeriod(12, 40), "multiple periods match midday period");
+            assertEquals(false, rules.isInDisabledPeriod(10, 0), "multiple periods exclude other time");
+            assertEquals("21:00-07:30 等2段", rules.disabledPeriodSummaryText(), "multiple periods summary");
+        } catch (Exception ex) {
+            throw new AssertionError("family eye rules multiple disabled periods test failed", ex);
         }
     }
 

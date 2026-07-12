@@ -37,6 +37,10 @@ public class JSONObject {
         return values.containsKey(key);
     }
 
+    public Object remove(String key) {
+        return values.remove(key);
+    }
+
     public String getString(String key) throws JSONException {
         if (!values.containsKey(key)) {
             throw new JSONException("String not found for key " + key);

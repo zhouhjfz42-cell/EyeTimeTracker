@@ -35,7 +35,7 @@ public final class FamilyStatsLanServer {
         }
         stop();
         try {
-            tcpServer = new ServerSocket(0);
+            tcpServer = bindTcpServer();
             tcpServer.setSoTimeout(1000);
 
             udpServer = new DatagramSocket(null);
@@ -89,7 +89,15 @@ public final class FamilyStatsLanServer {
         try (
                 BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
                 BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8))) {
-            FamilyStatsProtocol.UploadRequest request = FamilyStatsProtocol.parseUploadRequest(reader.readLine());
+            String requestJson = reader.readLine();
+            FamilyStatsProtocol.DiscoveryRequest discoveryRequest = FamilyStatsProtocol.parseDiscoveryRequest(requestJson);
+            if (discoveryRequest.valid && shouldRespondToDiscovery(discoveryRequest)) {
+                writer.write(FamilyStatsProtocol.buildDiscoveryResponse(store.getFamilyId(), store.getDeviceId(), tcpServer.getLocalPort()));
+                writer.newLine();
+                writer.flush();
+                return;
+            }
+            FamilyStatsProtocol.UploadRequest request = FamilyStatsProtocol.parseUploadRequest(requestJson);
             String error = validateUpload(request);
             String responseJson;
             if (!error.isEmpty()) {
@@ -102,7 +110,8 @@ public final class FamilyStatsLanServer {
                         changed,
                         store.getReminderMinutes(),
                         store.isRepeatReminderEnabled(),
-                        store.getParentPasscode());
+                        store.getParentPasscode(),
+                        store.getFamilyEyeRules());
                 if (listener != null) {
                     listener.onUploaded(request.childDeviceId, changed);
                 }
@@ -110,6 +119,19 @@ public final class FamilyStatsLanServer {
             writer.write(responseJson);
             writer.newLine();
             writer.flush();
+        }
+    }
+
+    private static ServerSocket bindTcpServer() throws Exception {
+        try {
+            ServerSocket server = new ServerSocket();
+            server.setReuseAddress(true);
+            server.bind(new InetSocketAddress(FamilyStatsProtocol.DEFAULT_DISCOVERY_PORT));
+            return server;
+        } catch (Exception fixedPortFailed) {
+            ServerSocket server = new ServerSocket(0);
+            server.setReuseAddress(true);
+            return server;
         }
     }
 

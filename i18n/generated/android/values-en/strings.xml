@@ -117,6 +117,32 @@
     <string name="family_role_parent" formatted="false">Parent phone</string>
     <string name="family_role_pc" formatted="false">PC companion</string>
     <string name="family_role_personal" formatted="false">Personal device</string>
+    <string name="family_rules_add_disabled_period" formatted="false">Add disabled period</string>
+    <string name="family_rules_add_disabled_period_desc" formatted="false">Add another rest period for the child</string>
+    <string name="family_rules_continuous_desc" formatted="false">Remind the child to rest after continuous screen use reaches the set time</string>
+    <string name="family_rules_continuous_minutes" formatted="false">Continuous use</string>
+    <string name="family_rules_continuous_minutes_desc" formatted="false">Tap to enter minutes</string>
+    <string name="family_rules_continuous_soft_note" formatted="false">Continuous-use reminders do not lock the phone. A reminder appears each time the set duration is reached.</string>
+    <string name="family_rules_continuous_title" formatted="false">Continuous-use break</string>
+    <string name="family_rules_disabled_end" formatted="false">End time</string>
+    <string name="family_rules_disabled_end_desc" formatted="false">Tap to edit the end time</string>
+    <string name="family_rules_disabled_period_desc" formatted="false">Remind the child to put the phone down during rest time</string>
+    <string name="family_rules_disabled_period_number" formatted="false">Disabled period {number}</string>
+    <string name="family_rules_disabled_period_title" formatted="false">Disabled-period reminder</string>
+    <string name="family_rules_disabled_soft_note" formatted="false">Disabled periods do not lock the phone. The child device will show a rest reminder and record screen time during this period, so parents can review it later.</string>
+    <string name="family_rules_disabled_start" formatted="false">Start time</string>
+    <string name="family_rules_disabled_start_desc" formatted="false">Tap to edit the start time</string>
+    <string name="family_rules_minutes_unit" formatted="false">min</string>
+    <string name="family_rules_minutes_value" formatted="false">{minutes} min</string>
+    <string name="family_rules_next_day_time" formatted="false">Next day {time}</string>
+    <string name="family_rules_note" formatted="false">These rules run on the child device and stay separate from the daily total reminder on the home page.</string>
+    <string name="family_rules_number_invalid" formatted="false">Enter a number from {min} to {max}</string>
+    <string name="family_rules_off" formatted="false">Off</string>
+    <string name="family_rules_on" formatted="false">On</string>
+    <string name="family_rules_rest_minutes" formatted="false">Suggested rest</string>
+    <string name="family_rules_rest_minutes_desc" formatted="false">Rest duration shown in the reminder text</string>
+    <string name="family_rules_saved" formatted="false">Rules saved</string>
+    <string name="family_rules_title" formatted="false">Rules</string>
     <string name="family_setup_age_band" formatted="false">Age band</string>
     <string name="family_setup_age_skip" formatted="false">Skip</string>
     <string name="family_setup_child_lead" formatted="false">Use a name you recognize. The age band is optional.</string>

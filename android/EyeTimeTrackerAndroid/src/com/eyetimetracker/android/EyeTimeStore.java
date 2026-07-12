@@ -42,6 +42,7 @@ public final class EyeTimeStore {
     private static final String PARENT_PASSCODE_HASH = "parentPasscodeHash";
     private static final String PARENT_PASSCODE_SALT = "parentPasscodeSalt";
     private static final String PARENT_PASSCODE_UPDATED_AT = "parentPasscodeUpdatedAtUnixSeconds";
+    private static final String FAMILY_EYE_RULES = "familyEyeRules";
     private static final String DEVICE_ID = "device_id";
     private static final String REMINDER_MINUTES = "reminder_minutes";
     private static final String REPEAT_REMINDER = "repeat_reminder";
@@ -995,6 +996,26 @@ public final class EyeTimeStore {
             return readParentPasscode(loadState());
         } catch (JSONException ignored) {
             return null;
+        }
+    }
+
+    public synchronized FamilyEyeRules getFamilyEyeRules() {
+        try {
+            return readFamilyEyeRules(loadState(), getActiveChildId());
+        } catch (JSONException ignored) {
+            return FamilyEyeRules.defaults(getActiveChildId());
+        }
+    }
+
+    public synchronized void saveFamilyEyeRules(FamilyEyeRules rules) {
+        if (rules == null) {
+            return;
+        }
+        try {
+            JSONObject state = loadState();
+            writeFamilyEyeRules(state, rules);
+            saveState(state);
+        } catch (JSONException ignored) {
         }
     }
 
@@ -1960,6 +1981,7 @@ public final class EyeTimeStore {
         state.put(PARENT_PASSCODE_HASH, "");
         state.put(PARENT_PASSCODE_SALT, "");
         state.put(PARENT_PASSCODE_UPDATED_AT, 0L);
+        state.put(FAMILY_EYE_RULES, null);
     }
 
     private static JSONObject childProfileToJson(ChildProfile profile) throws JSONException {
@@ -2018,6 +2040,74 @@ public final class EyeTimeStore {
         state.put(PARENT_PASSCODE_HASH, passcode.hash);
         state.put(PARENT_PASSCODE_SALT, passcode.salt);
         state.put(PARENT_PASSCODE_UPDATED_AT, passcode.updatedAtUnixSeconds);
+    }
+
+    static FamilyEyeRules readFamilyEyeRules(JSONObject state, String fallbackChildId) {
+        String childId = safe(fallbackChildId).trim();
+        if (state == null) {
+            return FamilyEyeRules.defaults(childId);
+        }
+        JSONObject raw = state.optJSONObject(FAMILY_EYE_RULES);
+        if (raw == null) {
+            return FamilyEyeRules.defaults(childId);
+        }
+        String storedChildId = raw.optString("childId", childId).trim();
+        return FamilyEyeRules.createWithDisabledPeriods(
+                storedChildId.isEmpty() ? childId : storedChildId,
+                raw.optBoolean("continuousUseReminderEnabled", false),
+                raw.optInt("continuousUseMinutes", FamilyEyeRules.DEFAULT_CONTINUOUS_USE_MINUTES),
+                raw.optInt("restMinutes", FamilyEyeRules.DEFAULT_REST_MINUTES),
+                raw.optBoolean("disabledPeriodEnabled", false),
+                readDisabledPeriods(raw),
+                raw.optInt("disabledPeriodReminderIntervalMinutes", FamilyEyeRules.DEFAULT_DISABLED_PERIOD_REMINDER_INTERVAL_MINUTES),
+                raw.optLong("updatedAtUnixSeconds", 0L));
+    }
+
+    static void writeFamilyEyeRules(JSONObject state, FamilyEyeRules rules) throws JSONException {
+        if (state == null || rules == null) {
+            return;
+        }
+        JSONObject raw = new JSONObject();
+        raw.put("childId", rules.childId);
+        raw.put("continuousUseReminderEnabled", rules.continuousUseReminderEnabled);
+        raw.put("continuousUseMinutes", rules.continuousUseMinutes);
+        raw.put("restMinutes", rules.restMinutes);
+        raw.put("disabledPeriodEnabled", rules.disabledPeriodEnabled);
+        raw.put("disabledPeriodStartMinutes", rules.disabledPeriodStartMinutes);
+        raw.put("disabledPeriodEndMinutes", rules.disabledPeriodEndMinutes);
+        JSONArray periods = new JSONArray();
+        for (FamilyEyeRules.DisabledPeriod period : rules.disabledPeriods) {
+            JSONObject periodJson = new JSONObject();
+            periodJson.put("startMinutes", period.startMinutes);
+            periodJson.put("endMinutes", period.endMinutes);
+            periods.put(periodJson);
+        }
+        raw.put("disabledPeriods", periods);
+        raw.put("disabledPeriodReminderIntervalMinutes", rules.disabledPeriodReminderIntervalMinutes);
+        raw.put("updatedAtUnixSeconds", rules.updatedAtUnixSeconds);
+        state.put(FAMILY_EYE_RULES, raw);
+    }
+
+    private static List<FamilyEyeRules.DisabledPeriod> readDisabledPeriods(JSONObject raw) {
+        List<FamilyEyeRules.DisabledPeriod> periods = new ArrayList<>();
+        JSONArray values = raw.optJSONArray("disabledPeriods");
+        if (values != null) {
+            for (int i = 0; i < values.length(); i++) {
+                JSONObject period = values.optJSONObject(i);
+                if (period == null) {
+                    continue;
+                }
+                periods.add(FamilyEyeRules.DisabledPeriod.create(
+                        period.optInt("startMinutes", FamilyEyeRules.DEFAULT_DISABLED_PERIOD_START_MINUTES),
+                        period.optInt("endMinutes", FamilyEyeRules.DEFAULT_DISABLED_PERIOD_END_MINUTES)));
+            }
+        }
+        if (periods.isEmpty()) {
+            periods.add(FamilyEyeRules.DisabledPeriod.create(
+                    raw.optInt("disabledPeriodStartMinutes", FamilyEyeRules.DEFAULT_DISABLED_PERIOD_START_MINUTES),
+                    raw.optInt("disabledPeriodEndMinutes", FamilyEyeRules.DEFAULT_DISABLED_PERIOD_END_MINUTES)));
+        }
+        return periods;
     }
 
     static boolean verifyParentPasscode(ParentPasscode parentPasscode, String passcode) {
