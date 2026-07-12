@@ -55,6 +55,7 @@ public sealed class SyncRequest
     public string DeviceId { get; set; } = string.Empty;
     public string Platform { get; set; } = string.Empty;
     public List<UsageSegment> Segments { get; set; } = new();
+    public List<AppUsageEntry> AppUsageEntries { get; set; } = new();
     public TrackerSettings Settings { get; set; } = TrackerSettings.Default;
     public ReminderRuntimeState ReminderState { get; set; } = new();
     public long SinceUnixSeconds { get; set; }
@@ -69,6 +70,7 @@ public sealed class SyncResponse
     public string DeviceId { get; set; } = string.Empty;
     public string Platform { get; set; } = string.Empty;
     public List<UsageSegment> Segments { get; set; } = new();
+    public List<AppUsageEntry> AppUsageEntries { get; set; } = new();
     public ReminderRuntimeState ReminderState { get; set; } = new();
     public string Error { get; set; } = string.Empty;
     public long TimestampUnixSeconds { get; set; }

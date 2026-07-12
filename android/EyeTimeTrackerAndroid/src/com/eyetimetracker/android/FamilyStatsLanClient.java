@@ -17,15 +17,25 @@ public final class FamilyStatsLanClient {
     private final int discoveryTimeoutMillis;
     private final int connectTimeoutMillis;
     private final int readTimeoutMillis;
+    private final boolean allowTcpScanFallback;
 
     public FamilyStatsLanClient() {
-        this(2500, 2500, 5000);
+        this(2500, 2500, 5000, true);
     }
 
     public FamilyStatsLanClient(int discoveryTimeoutMillis, int connectTimeoutMillis, int readTimeoutMillis) {
+        this(discoveryTimeoutMillis, connectTimeoutMillis, readTimeoutMillis, true);
+    }
+
+    public FamilyStatsLanClient(
+            int discoveryTimeoutMillis,
+            int connectTimeoutMillis,
+            int readTimeoutMillis,
+            boolean allowTcpScanFallback) {
         this.discoveryTimeoutMillis = Math.max(50, discoveryTimeoutMillis);
         this.connectTimeoutMillis = Math.max(50, connectTimeoutMillis);
         this.readTimeoutMillis = Math.max(50, readTimeoutMillis);
+        this.allowTcpScanFallback = allowTcpScanFallback;
     }
 
     public UploadResult upload(EyeTimeStore store) {
@@ -46,13 +56,19 @@ public final class FamilyStatsLanClient {
 
         LocalDate today = LocalDate.now();
         List<UsageSegment> segments = store.getSegments(today.minusDays(30), today);
+        List<AppUsageEntry> appUsageEntries = store.getAppUsageEntries(today.minusDays(30), today);
         try (Socket socket = new Socket()) {
             socket.connect(new InetSocketAddress(target.host, target.port), connectTimeoutMillis);
             socket.setSoTimeout(readTimeoutMillis);
             try (
                     BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
                     BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))) {
-                writer.write(FamilyStatsProtocol.buildUploadRequest(familyId, childProfile.childId, childDeviceId, segments));
+                writer.write(FamilyStatsProtocol.buildUploadRequest(
+                        familyId,
+                        childProfile.childId,
+                        childDeviceId,
+                        segments,
+                        appUsageEntries));
                 writer.newLine();
                 writer.flush();
 
@@ -79,7 +95,10 @@ public final class FamilyStatsLanClient {
     private DiscoveryTarget discover(String familyId, String childDeviceId) {
         byte[] requestBytes = FamilyStatsProtocol.buildDiscoveryRequest(familyId, childDeviceId).getBytes(StandardCharsets.UTF_8);
         DiscoveryTarget broadcastTarget = discoverByUdp(familyId, requestBytes);
-        return broadcastTarget.found ? broadcastTarget : discoverByTcpScan(familyId, requestBytes);
+        if (broadcastTarget.found || !allowTcpScanFallback) {
+            return broadcastTarget;
+        }
+        return discoverByTcpScan(familyId, requestBytes);
     }
 
     private DiscoveryTarget discoverByUdp(String familyId, byte[] requestBytes) {

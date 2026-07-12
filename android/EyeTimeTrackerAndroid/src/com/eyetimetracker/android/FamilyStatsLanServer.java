@@ -104,6 +104,7 @@ public final class FamilyStatsLanServer {
                 responseJson = FamilyStatsProtocol.buildUploadResponse(false, error, 0);
             } else {
                 int changed = store.addFamilyChildSegments(request.segments);
+                int changedApps = store.addFamilyChildAppUsageEntries(request.appUsageEntries);
                 responseJson = FamilyStatsProtocol.buildUploadResponse(
                         true,
                         "",
@@ -113,7 +114,7 @@ public final class FamilyStatsLanServer {
                         store.getParentPasscode(),
                         store.getFamilyEyeRules());
                 if (listener != null) {
-                    listener.onUploaded(request.childDeviceId, changed);
+                    listener.onUploaded(request.childDeviceId, changed + changedApps);
                 }
             }
             writer.write(responseJson);

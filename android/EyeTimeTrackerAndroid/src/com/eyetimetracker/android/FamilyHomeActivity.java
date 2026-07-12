@@ -14,6 +14,7 @@ import android.text.InputType;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -42,7 +43,6 @@ public final class FamilyHomeActivity extends Activity {
     private static final int COLOR_DISABLED = Color.rgb(239, 242, 241);
     private static final int COLOR_DISABLED_TEXT = Color.rgb(152, 162, 160);
     private static final long REFRESH_INTERVAL_MS = 10_000L;
-    private static final long INITIAL_STATS_REFRESH_DELAY_MS = 120L;
     private static final long FAMILY_UPLOAD_INTERVAL_MS = 15_000L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -53,6 +53,7 @@ public final class FamilyHomeActivity extends Activity {
     private FamilyEyeRules rulesDraft;
     private FamilyStatsLanServer familyStatsServer;
     private boolean familyUploadRunning;
+    private boolean familyUploadRequestRunning;
     private boolean childReminderDialogShowing;
     private long lastFamilyUploadStartedAt;
     private TextView todayValue;
@@ -61,12 +62,6 @@ public final class FamilyHomeActivity extends Activity {
     private TextView monthValue;
     private TextView reminderValue;
     private boolean loadedOnCreate;
-
-    private final Runnable immediateRefreshRunnable = new Runnable() {
-        @Override public void run() {
-            refreshStats();
-        }
-    };
 
     private final Runnable refreshRunnable = new Runnable() {
         @Override public void run() {
@@ -88,8 +83,9 @@ public final class FamilyHomeActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         if (store != null && (consumeLoadedOnCreate() || loadStateOrOpenSetup())) {
-            scheduleImmediateStatsRefresh();
             startFamilyStatsServerIfNeeded();
+            refreshStats();
+            requestFamilyChildUploadNow();
             triggerFamilyStatsUploadIfNeeded(false);
             handler.removeCallbacks(refreshRunnable);
             handler.postDelayed(refreshRunnable, REFRESH_INTERVAL_MS);
@@ -97,7 +93,6 @@ public final class FamilyHomeActivity extends Activity {
     }
 
     @Override protected void onPause() {
-        handler.removeCallbacks(immediateRefreshRunnable);
         handler.removeCallbacks(refreshRunnable);
         stopFamilyStatsServer();
         super.onPause();
@@ -140,7 +135,7 @@ public final class FamilyHomeActivity extends Activity {
     private void render() {
         setContentView(rulesMode ? buildRulesUi() : (settingsMode ? buildSettingsUi() : buildHomeUi()));
         if (!settingsMode && !rulesMode) {
-            scheduleImmediateStatsRefresh();
+            refreshStats();
         }
     }
 
@@ -179,11 +174,11 @@ public final class FamilyHomeActivity extends Activity {
         addCard(cards, buildMetricCard(getString(R.string.main_card_yesterday), yesterdayValue = cardValueText()), 0, 0);
         addCard(cards, buildMetricCard(getString(R.string.main_card_week), weekValue = cardValueText()), 0, 1);
         addCard(cards, buildMetricCard(getString(R.string.main_card_month), monthValue = cardValueText()), 1, 0);
-        addCard(cards, buildMetricCard(getString(R.string.main_card_reminder), reminderValue = cardValueText()), 1, 1);
+        addCard(cards, buildMetricCard(getString(R.string.family_home_top_app), reminderValue = cardValueText()), 1, 1);
         yesterdayValue.setText(DurationFormatter.formatMainCard(this, 0));
         weekValue.setText(DurationFormatter.formatMainCard(this, 0));
         monthValue.setText(DurationFormatter.formatMainCard(this, 0));
-        reminderValue.setText(ReminderThreshold.format(this, store.getReminderMinutes()));
+        reminderValue.setText(getString(R.string.common_none));
 
         TextView statsButton = actionButton(getString(R.string.common_stats_page), true);
         statsButton.setOnClickListener(v -> openStatsPage());
@@ -1070,6 +1065,10 @@ public final class FamilyHomeActivity extends Activity {
         private final TextView previous;
         private final TextView current;
         private final TextView next;
+        private float touchStartY;
+        private float lastTouchY;
+        private float touchRemainderY;
+        private boolean movedByTouch;
 
         TimeColumn(int min, int max, int value) {
             this.min = min;
@@ -1083,9 +1082,15 @@ public final class FamilyHomeActivity extends Activity {
             current = pickerNumber(true);
             next = pickerNumber(false);
 
-            previous.setOnClickListener(v -> decrement());
-            next.setOnClickListener(v -> increment());
-            current.setOnClickListener(v -> increment());
+            View.OnTouchListener touchListener = (v, event) -> handleTouch(v, event);
+            root.setOnTouchListener(touchListener);
+            previous.setOnTouchListener(touchListener);
+            current.setOnTouchListener(touchListener);
+            next.setOnTouchListener(touchListener);
+            root.setClickable(true);
+            previous.setClickable(true);
+            current.setClickable(true);
+            next.setClickable(true);
 
             root.addView(previous, pickerNumberParams(28));
             root.addView(pickerLine(), new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(2)));
@@ -1111,6 +1116,50 @@ public final class FamilyHomeActivity extends Activity {
         private void decrement() {
             value = value <= min ? max : value - 1;
             update();
+        }
+
+        private boolean handleTouch(View touchedView, MotionEvent event) {
+            int stepDistance = dp(24);
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    touchStartY = event.getRawY();
+                    lastTouchY = touchStartY;
+                    touchRemainderY = 0f;
+                    movedByTouch = false;
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    float currentY = event.getRawY();
+                    float delta = currentY - lastTouchY;
+                    lastTouchY = currentY;
+                    touchRemainderY += delta;
+                    while (touchRemainderY <= -stepDistance) {
+                        increment();
+                        touchRemainderY += stepDistance;
+                        movedByTouch = true;
+                    }
+                    while (touchRemainderY >= stepDistance) {
+                        decrement();
+                        touchRemainderY -= stepDistance;
+                        movedByTouch = true;
+                    }
+                    if (Math.abs(currentY - touchStartY) > dp(8)) {
+                        movedByTouch = true;
+                    }
+                    return true;
+                case MotionEvent.ACTION_UP:
+                    if (!movedByTouch) {
+                        if (touchedView == previous) {
+                            decrement();
+                        } else {
+                            increment();
+                        }
+                    }
+                    return true;
+                case MotionEvent.ACTION_CANCEL:
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         private void update() {
@@ -1219,11 +1268,6 @@ public final class FamilyHomeActivity extends Activity {
         finish();
     }
 
-    private void scheduleImmediateStatsRefresh() {
-        handler.removeCallbacks(immediateRefreshRunnable);
-        handler.postDelayed(immediateRefreshRunnable, INITIAL_STATS_REFRESH_DELAY_MS);
-    }
-
     private TextView cardValueText() {
         TextView text = new TextView(this);
         text.setTextSize(24);
@@ -1302,11 +1346,31 @@ public final class FamilyHomeActivity extends Activity {
         monthValue.setText(DurationFormatter.formatMainCard(this, showFamilyChildStats
                 ? familyChildStats.monthSeconds
                 : store.displayMonthSeconds(today)));
-        reminderValue.setText(ReminderThreshold.format(this, store.getReminderMinutes()));
+        reminderValue.setText(topAppText(today, showFamilyChildStats));
         if (showFamilyChildStats) {
             maybeShowFamilyChildReminder(today, todaySeconds);
         }
         triggerFamilyStatsUploadIfNeeded(true);
+    }
+
+    private String topAppText(LocalDate date, boolean familyChildStats) {
+        List<AppUsageEntry> entries = familyChildStats
+                ? store.getFamilyChildAppUsageEntries(date, date)
+                : store.getAppUsageEntries(date, date);
+        AppUsageEntry best = null;
+        for (AppUsageEntry entry : entries) {
+            if (entry == null || entry.durationSeconds <= 0L) {
+                continue;
+            }
+            if (best == null || entry.durationSeconds > best.durationSeconds) {
+                best = entry;
+            }
+        }
+        if (best == null) {
+            return getString(R.string.common_none);
+        }
+        String name = best.appName == null || best.appName.trim().isEmpty() ? best.appId : best.appName;
+        return name + " " + DurationFormatter.formatMainCard(this, best.durationSeconds);
     }
 
     private void maybeShowFamilyChildReminder(LocalDate today, long childTodaySeconds) {
@@ -1376,6 +1440,26 @@ public final class FamilyHomeActivity extends Activity {
             familyStatsServer.stop();
             familyStatsServer = null;
         }
+    }
+
+    private void requestFamilyChildUploadNow() {
+        if (state == null
+                || state.deviceRole != DeviceRole.PARENT_DEVICE
+                || !state.isFamilyMode
+                || !state.hasBoundChildDevice
+                || familyUploadRequestRunning) {
+            return;
+        }
+        familyUploadRequestRunning = true;
+        new Thread(() -> {
+            FamilyStatsUploadRequestClient.RequestResult result = new FamilyStatsUploadRequestClient().requestUpload(store);
+            Log.i(DIAG_TAG, "FamilyStats upload request requested=" + result.requested
+                    + " skipped=" + result.skipped
+                    + " udpSent=" + result.udpSent
+                    + " tcpAccepted=" + result.tcpAccepted
+                    + " error=" + result.error);
+            runOnUiThread(() -> familyUploadRequestRunning = false);
+        }, "FamilyStatsUploadRequest").start();
     }
 
     private void triggerFamilyStatsUploadIfNeeded(boolean respectInterval) {

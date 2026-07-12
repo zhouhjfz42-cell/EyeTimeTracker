@@ -3,6 +3,7 @@ package com.eyetimetracker.android;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import android.content.Context;
 import android.util.Log;
 import java.time.LocalDate;
 import java.util.List;
@@ -12,19 +13,29 @@ public final class AndroidSyncRunner {
     private static final Object SYNC_LOCK = new Object();
     private static boolean syncRunning;
     private final EyeTimeStore store;
+    private final Context context;
     private final AndroidSyncClient client;
     private final AndroidPcDiscoveryClient discoveryClient;
 
     public AndroidSyncRunner(EyeTimeStore store) {
-        this(store, new AndroidSyncClient(), new AndroidPcDiscoveryClient());
+        this(store, null, new AndroidSyncClient(), new AndroidPcDiscoveryClient());
+    }
+
+    public AndroidSyncRunner(EyeTimeStore store, Context context) {
+        this(store, context, new AndroidSyncClient(), new AndroidPcDiscoveryClient());
     }
 
     public AndroidSyncRunner(EyeTimeStore store, AndroidSyncClient client) {
-        this(store, client, new AndroidPcDiscoveryClient());
+        this(store, null, client, new AndroidPcDiscoveryClient());
     }
 
     public AndroidSyncRunner(EyeTimeStore store, AndroidSyncClient client, AndroidPcDiscoveryClient discoveryClient) {
+        this(store, null, client, discoveryClient);
+    }
+
+    public AndroidSyncRunner(EyeTimeStore store, Context context, AndroidSyncClient client, AndroidPcDiscoveryClient discoveryClient) {
         this.store = store;
+        this.context = context == null ? null : context.getApplicationContext();
         this.client = client;
         this.discoveryClient = discoveryClient;
     }
@@ -77,8 +88,9 @@ public final class AndroidSyncRunner {
             String error = AndroidSyncResponseReader.readError(responseJson);
             if (error.isEmpty()) {
                 int changed = store.addSegments(AndroidSyncResponseReader.readSegments(responseJson));
+                int changedApps = store.addAppUsageEntries(AndroidSyncResponseReader.readAppUsageEntries(responseJson));
                 store.savePeerReminderState(AndroidSyncResponseReader.readReminderState(responseJson));
-                Log.i(DIAG_TAG, "AndroidSyncRunner merged segments changed=" + changed);
+                Log.i(DIAG_TAG, "AndroidSyncRunner merged segments changed=" + changed + " appUsageChanged=" + changedApps);
                 long responseTimestamp = AndroidSyncResponseReader.readTimestampUnixSeconds(responseJson);
                 if (responseTimestamp > 0L) {
                     settings.lastSyncUnixSeconds = responseTimestamp;
@@ -122,6 +134,7 @@ public final class AndroidSyncRunner {
             request.put("DeviceId", store.getDeviceId());
             request.put("Platform", "android");
             request.put("Segments", segmentsToJson(store.getSegments(LocalDate.now().minusDays(30), LocalDate.now())));
+            request.put("AppUsageEntries", appUsageEntriesToJson(store.getAppUsageEntries(LocalDate.now().minusDays(30), LocalDate.now())));
             request.put("Settings", settingsToJson());
             request.put("ReminderState", reminderStateToJson(store.getLocalReminderState()));
             request.put("SinceUnixSeconds", settings.lastSyncUnixSeconds);
@@ -193,6 +206,24 @@ public final class AndroidSyncRunner {
             item.put("LocalDate", segment.localDate);
             item.put("CreatedAtUnixSeconds", segment.createdAtUnixSeconds);
             item.put("UpdatedAtUnixSeconds", segment.updatedAtUnixSeconds);
+            json.put(item);
+        }
+        return json;
+    }
+
+    private static JSONArray appUsageEntriesToJson(List<AppUsageEntry> entries) throws JSONException {
+        JSONArray json = new JSONArray();
+        for (AppUsageEntry entry : entries) {
+            JSONObject item = new JSONObject();
+            item.put("EntryId", entry.entryId);
+            item.put("DeviceId", entry.deviceId);
+            item.put("Platform", entry.platform);
+            item.put("Source", entry.source);
+            item.put("AppId", entry.appId);
+            item.put("AppName", entry.appName);
+            item.put("LocalDate", entry.localDate);
+            item.put("DurationSeconds", entry.durationSeconds);
+            item.put("UpdatedAtUnixSeconds", entry.updatedAtUnixSeconds);
             json.put(item);
         }
         return json;

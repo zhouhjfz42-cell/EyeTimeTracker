@@ -34,6 +34,7 @@ public sealed class PcSyncCoordinator
         }
 
         MergeSegments(state, request.Segments);
+        MergeAppUsageEntries(state, request.AppUsageEntries);
         state.Sync.PeerReminderState = CloneReminderState(request.ReminderState);
         state.Settings = MergeSyncedSettings(state.Settings, request.Settings);
         state.Sync.LastSyncUnixSeconds = _unixClock();
@@ -46,6 +47,7 @@ public sealed class PcSyncCoordinator
             DeviceId = state.DeviceId,
             Platform = state.Platform,
             Segments = GetLocalSegments(state),
+            AppUsageEntries = GetLocalAppUsageEntries(state),
             ReminderState = CloneReminderState(state.Sync.LocalReminderState),
             TimestampUnixSeconds = state.Sync.LastSyncUnixSeconds
         };
@@ -231,6 +233,61 @@ public sealed class PcSyncCoordinator
             .ToList();
     }
 
+    private static void MergeAppUsageEntries(AppState state, IEnumerable<AppUsageEntry> incomingEntries)
+    {
+        state.AppUsageEntries ??= new List<AppUsageEntry>();
+        var existingById = state.AppUsageEntries
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.EntryId))
+            .ToDictionary(entry => entry.EntryId, StringComparer.Ordinal);
+
+        foreach (var incoming in incomingEntries ?? Array.Empty<AppUsageEntry>())
+        {
+            if (!IsUsableAppUsageEntry(incoming))
+            {
+                continue;
+            }
+
+            var normalized = CloneAppUsageEntry(incoming);
+            normalized.EntryId = AppUsageEntryId.For(
+                normalized.DeviceId,
+                normalized.Platform,
+                normalized.Source,
+                normalized.AppId,
+                normalized.LocalDate);
+            if (existingById.TryGetValue(normalized.EntryId, out var existing))
+            {
+                if (normalized.UpdatedAtUnixSeconds >= existing.UpdatedAtUnixSeconds)
+                {
+                    existing.AppName = normalized.AppName;
+                    existing.DurationSeconds = normalized.DurationSeconds;
+                    existing.UpdatedAtUnixSeconds = normalized.UpdatedAtUnixSeconds;
+                }
+                continue;
+            }
+
+            state.AppUsageEntries.Add(normalized);
+            existingById[normalized.EntryId] = normalized;
+        }
+    }
+
+    private static List<AppUsageEntry> GetLocalAppUsageEntries(AppState state)
+    {
+        return (state.AppUsageEntries ?? new List<AppUsageEntry>())
+            .Where(entry => string.Equals(entry.DeviceId, state.DeviceId, StringComparison.Ordinal)
+                && IsUsableAppUsageEntry(entry))
+            .Select(CloneAppUsageEntry)
+            .ToList();
+    }
+
+    private static bool IsUsableAppUsageEntry(AppUsageEntry entry)
+    {
+        return entry is not null
+            && !string.IsNullOrWhiteSpace(entry.DeviceId)
+            && !string.IsNullOrWhiteSpace(entry.AppId)
+            && entry.LocalDate != default
+            && entry.DurationSeconds > 0;
+    }
+
     private static TrackerSettings MergeSyncedSettings(TrackerSettings local, TrackerSettings incoming)
     {
         return incoming with
@@ -252,6 +309,22 @@ public sealed class PcSyncCoordinator
             LocalDate = segment.LocalDate,
             CreatedAtUnixSeconds = segment.CreatedAtUnixSeconds,
             UpdatedAtUnixSeconds = segment.UpdatedAtUnixSeconds
+        };
+    }
+
+    private static AppUsageEntry CloneAppUsageEntry(AppUsageEntry entry)
+    {
+        return new AppUsageEntry
+        {
+            EntryId = entry.EntryId,
+            DeviceId = entry.DeviceId,
+            Platform = entry.Platform,
+            Source = entry.Source,
+            AppId = entry.AppId,
+            AppName = entry.AppName,
+            LocalDate = entry.LocalDate,
+            DurationSeconds = Math.Max(0, entry.DurationSeconds),
+            UpdatedAtUnixSeconds = entry.UpdatedAtUnixSeconds
         };
     }
 

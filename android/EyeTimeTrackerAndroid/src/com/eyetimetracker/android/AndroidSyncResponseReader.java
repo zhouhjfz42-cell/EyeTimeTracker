@@ -9,6 +9,7 @@ import org.json.JSONObject;
 
 public final class AndroidSyncResponseReader {
     private static final Pattern SEGMENTS_ARRAY = Pattern.compile("\"(?:Segments|segments)\"\\s*:\\s*\\[(.*?)]", Pattern.DOTALL);
+    private static final Pattern APP_USAGE_ARRAY = Pattern.compile("\"(?:AppUsageEntries|appUsageEntries)\"\\s*:\\s*\\[(.*?)]", Pattern.DOTALL);
     private static final Pattern OBJECT = Pattern.compile("\\{(.*?)\\}", Pattern.DOTALL);
 
     private AndroidSyncResponseReader() {
@@ -44,6 +45,28 @@ public final class AndroidSyncResponseReader {
 
         String error = readString(json, "Error", "error");
         return error.isEmpty() ? "Sync response was rejected." : error;
+    }
+
+    public static List<AppUsageEntry> readAppUsageEntries(String responseJson) {
+        List<AppUsageEntry> entries = new ArrayList<>();
+        String json = safe(responseJson);
+        if (!isAccepted(json)) {
+            return entries;
+        }
+
+        Matcher arrayMatcher = APP_USAGE_ARRAY.matcher(json);
+        if (!arrayMatcher.find()) {
+            return entries;
+        }
+
+        Matcher objectMatcher = OBJECT.matcher(arrayMatcher.group(1));
+        while (objectMatcher.find()) {
+            AppUsageEntry entry = readAppUsageEntry(objectMatcher.group(1));
+            if (!entry.entryId.isEmpty() && !entry.appId.isEmpty() && entry.durationSeconds > 0L) {
+                entries.add(entry);
+            }
+        }
+        return entries;
     }
 
     public static boolean isPeerUnpaired(String responseJson) {
@@ -95,6 +118,19 @@ public final class AndroidSyncResponseReader {
                 readLong(json, "EndUnixSeconds", "endUnixSeconds"),
                 readString(json, "LocalDate", "localDate"),
                 readLong(json, "CreatedAtUnixSeconds", "createdAtUnixSeconds"),
+                readLong(json, "UpdatedAtUnixSeconds", "updatedAtUnixSeconds"));
+    }
+
+    private static AppUsageEntry readAppUsageEntry(String json) {
+        return new AppUsageEntry(
+                readString(json, "EntryId", "entryId"),
+                readString(json, "DeviceId", "deviceId"),
+                readString(json, "Platform", "platform"),
+                readString(json, "Source", "source"),
+                readString(json, "AppId", "appId"),
+                readString(json, "AppName", "appName"),
+                readString(json, "LocalDate", "localDate"),
+                readLong(json, "DurationSeconds", "durationSeconds"),
                 readLong(json, "UpdatedAtUnixSeconds", "updatedAtUnixSeconds"));
     }
 

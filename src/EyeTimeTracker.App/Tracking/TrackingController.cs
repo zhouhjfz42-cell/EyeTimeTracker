@@ -20,6 +20,7 @@ public sealed class TrackingController : IDisposable
     private readonly JsonStateStore _stateStore;
     private readonly IdleTimeProvider _idleTimeProvider;
     private readonly AudioActivityProvider _audioActivityProvider;
+    private readonly ForegroundAppProvider _foregroundAppProvider;
     private readonly NotificationService _notificationService;
     private readonly DailyReminderPolicy _reminderPolicy;
     private readonly System.Threading.Timer _timer;
@@ -41,6 +42,7 @@ public sealed class TrackingController : IDisposable
             new IdleTimeProvider(),
             new AudioActivityProvider(),
             notificationService,
+            null,
             new DailyReminderPolicy())
     {
     }
@@ -50,11 +52,13 @@ public sealed class TrackingController : IDisposable
         IdleTimeProvider idleTimeProvider,
         AudioActivityProvider audioActivityProvider,
         NotificationService notificationService,
+        ForegroundAppProvider? foregroundAppProvider = null,
         DailyReminderPolicy? reminderPolicy = null)
     {
         _stateStore = stateStore ?? throw new ArgumentNullException(nameof(stateStore));
         _idleTimeProvider = idleTimeProvider ?? throw new ArgumentNullException(nameof(idleTimeProvider));
         _audioActivityProvider = audioActivityProvider ?? throw new ArgumentNullException(nameof(audioActivityProvider));
+        _foregroundAppProvider = foregroundAppProvider ?? new ForegroundAppProvider();
         _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
         _reminderPolicy = reminderPolicy ?? new DailyReminderPolicy();
 
@@ -148,6 +152,18 @@ public sealed class TrackingController : IDisposable
         {
             PersistAccumulatorLocked();
             return UsageDeviceBreakdown.Build(date, CreateEffectiveSegmentsLocked());
+        }
+    }
+
+    public IReadOnlyList<AppUsageEntry> GetAppUsageEntries(DateOnly start, DateOnly end)
+    {
+        lock (_gate)
+        {
+            PersistAccumulatorLocked();
+            return (_state.AppUsageEntries ?? new List<AppUsageEntry>())
+                .Where(entry => entry.LocalDate >= start && entry.LocalDate <= end && entry.DurationSeconds > 0)
+                .Select(CloneAppUsageEntry)
+                .ToList();
         }
     }
 
@@ -245,6 +261,7 @@ public sealed class TrackingController : IDisposable
                 if (countedSeconds > 0)
                 {
                     AddUsageSegmentLocked(snapshot, _state.Settings, countedSeconds);
+                    AddAppUsageLocked(snapshot, countedSeconds);
                 }
 
                 var record = PersistAccumulatorLocked();
@@ -353,6 +370,46 @@ public sealed class TrackingController : IDisposable
         _state.Segments.Add(segment);
     }
 
+    private void AddAppUsageLocked(ActivitySnapshot snapshot, long countedSeconds)
+    {
+        ForegroundAppSnapshot? foreground;
+        try
+        {
+            foreground = _foregroundAppProvider.GetCurrent();
+        }
+        catch (Exception)
+        {
+            foreground = null;
+        }
+
+        if (foreground is null || string.IsNullOrWhiteSpace(foreground.AppId))
+        {
+            return;
+        }
+
+        var date = DateOnly.FromDateTime(snapshot.Timestamp.LocalDateTime);
+        var entryId = AppUsageEntryId.For(_state.DeviceId, _state.Platform, "pc", foreground.AppId, date);
+        var entry = _state.AppUsageEntries.FirstOrDefault(existing => existing.EntryId == entryId);
+        if (entry is null)
+        {
+            entry = new AppUsageEntry
+            {
+                EntryId = entryId,
+                DeviceId = _state.DeviceId,
+                Platform = _state.Platform,
+                Source = "pc",
+                AppId = foreground.AppId,
+                AppName = foreground.AppName,
+                LocalDate = date
+            };
+            _state.AppUsageEntries.Add(entry);
+        }
+
+        entry.AppName = string.IsNullOrWhiteSpace(foreground.AppName) ? entry.AppName : foreground.AppName;
+        entry.DurationSeconds += countedSeconds;
+        entry.UpdatedAtUnixSeconds = snapshot.Timestamp.ToUnixTimeSeconds();
+    }
+
     private StateSaveSnapshot CreateSaveSnapshotLocked(DateTimeOffset savedAt)
     {
         return new StateSaveSnapshot(CloneStateLocked(), savedAt, ++_nextSaveVersion);
@@ -381,6 +438,9 @@ public sealed class TrackingController : IDisposable
             _state.Segments = syncedState.Segments
                 .Select(CloneSegment)
                 .ToList();
+            _state.AppUsageEntries = syncedState.AppUsageEntries
+                .Select(CloneAppUsageEntry)
+                .ToList();
             _state.Sync = CloneSyncSettings(syncedState.Sync);
             _state.Sync.LocalReminderState = CreateLocalReminderStateLocked();
             snapshot = CreateSaveSnapshotLocked(now);
@@ -403,6 +463,9 @@ public sealed class TrackingController : IDisposable
                 .ToList(),
             Segments = _state.Segments
                 .Select(CloneSegment)
+                .ToList(),
+            AppUsageEntries = _state.AppUsageEntries
+                .Select(CloneAppUsageEntry)
                 .ToList(),
             Sync = CloneSyncSettings(_state.Sync)
         };
@@ -480,6 +543,22 @@ public sealed class TrackingController : IDisposable
             LocalDate = segment.LocalDate,
             CreatedAtUnixSeconds = segment.CreatedAtUnixSeconds,
             UpdatedAtUnixSeconds = segment.UpdatedAtUnixSeconds
+        };
+    }
+
+    private static AppUsageEntry CloneAppUsageEntry(AppUsageEntry entry)
+    {
+        return new AppUsageEntry
+        {
+            EntryId = entry.EntryId,
+            DeviceId = entry.DeviceId,
+            Platform = entry.Platform,
+            Source = entry.Source,
+            AppId = entry.AppId,
+            AppName = entry.AppName,
+            LocalDate = entry.LocalDate,
+            DurationSeconds = entry.DurationSeconds,
+            UpdatedAtUnixSeconds = entry.UpdatedAtUnixSeconds
         };
     }
 

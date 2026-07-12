@@ -45,11 +45,60 @@ public final class FamilyStatsProtocol {
                 readInt(jsonText, "Port"));
     }
 
+    public static String buildUploadNowRequest(String familyId, String childDeviceId, String parentDeviceId) {
+        return "{"
+                + "\"Type\":\"" + SyncMessages.FAMILY_STATS_UPLOAD_NOW_REQUEST + "\","
+                + "\"FamilyId\":\"" + escape(familyId) + "\","
+                + "\"ChildDeviceId\":\"" + escape(childDeviceId) + "\","
+                + "\"ParentDeviceId\":\"" + escape(parentDeviceId) + "\","
+                + "\"Platform\":\"android\","
+                + "\"TimestampUnixSeconds\":" + (System.currentTimeMillis() / 1000L)
+                + "}";
+    }
+
+    public static UploadNowRequest parseUploadNowRequest(String jsonText) {
+        if (!SyncMessages.FAMILY_STATS_UPLOAD_NOW_REQUEST.equals(readString(jsonText, "Type"))) {
+            return UploadNowRequest.invalid();
+        }
+        String familyId = readString(jsonText, "FamilyId");
+        String childDeviceId = readString(jsonText, "ChildDeviceId");
+        return new UploadNowRequest(
+                !familyId.isEmpty() && !childDeviceId.isEmpty(),
+                familyId,
+                childDeviceId,
+                readString(jsonText, "ParentDeviceId"));
+    }
+
+    public static String buildUploadNowResponse(boolean accepted, String error) {
+        return "{"
+                + "\"Type\":\"" + SyncMessages.FAMILY_STATS_UPLOAD_NOW_RESPONSE + "\","
+                + "\"Accepted\":" + accepted + ","
+                + "\"Error\":\"" + escape(error) + "\","
+                + "\"TimestampUnixSeconds\":" + (System.currentTimeMillis() / 1000L)
+                + "}";
+    }
+
+    public static UploadNowResponse parseUploadNowResponse(String jsonText) {
+        if (!SyncMessages.FAMILY_STATS_UPLOAD_NOW_RESPONSE.equals(readString(jsonText, "Type"))) {
+            return new UploadNowResponse(false, "Invalid response.");
+        }
+        return new UploadNowResponse(readBoolean(jsonText, "Accepted"), readString(jsonText, "Error"));
+    }
+
     public static String buildUploadRequest(
             String familyId,
             String childId,
             String childDeviceId,
             List<UsageSegment> segments) {
+        return buildUploadRequest(familyId, childId, childDeviceId, segments, new ArrayList<>());
+    }
+
+    public static String buildUploadRequest(
+            String familyId,
+            String childId,
+            String childDeviceId,
+            List<UsageSegment> segments,
+            List<AppUsageEntry> appUsageEntries) {
         return "{"
                 + "\"Type\":\"" + SyncMessages.FAMILY_STATS_UPLOAD_REQUEST + "\","
                 + "\"Accepted\":true,"
@@ -58,6 +107,7 @@ public final class FamilyStatsProtocol {
                 + "\"ChildDeviceId\":\"" + escape(childDeviceId) + "\","
                 + "\"Platform\":\"android\","
                 + "\"Segments\":" + segmentsToJson(segments) + ","
+                + "\"AppUsageEntries\":" + appUsageEntriesToJson(appUsageEntries) + ","
                 + "\"TimestampUnixSeconds\":" + (System.currentTimeMillis() / 1000L)
                 + "}";
     }
@@ -73,7 +123,8 @@ public final class FamilyStatsProtocol {
                 familyId,
                 readString(jsonText, "ChildId"),
                 childDeviceId,
-                AndroidSyncResponseReader.readSegments(jsonText));
+                AndroidSyncResponseReader.readSegments(jsonText),
+                AndroidSyncResponseReader.readAppUsageEntries(jsonText));
     }
 
     public static String buildUploadResponse(boolean accepted, String error, int changedSegments) {
@@ -185,6 +236,36 @@ public final class FamilyStatsProtocol {
                         .append("\"LocalDate\":\"").append(escape(segment.localDate)).append("\",")
                         .append("\"CreatedAtUnixSeconds\":").append(segment.createdAtUnixSeconds).append(",")
                         .append("\"UpdatedAtUnixSeconds\":").append(segment.updatedAtUnixSeconds)
+                        .append("}");
+            }
+        }
+        json.append("]");
+        return json.toString();
+    }
+
+    private static String appUsageEntriesToJson(List<AppUsageEntry> entries) {
+        StringBuilder json = new StringBuilder();
+        json.append("[");
+        if (entries != null) {
+            boolean first = true;
+            for (AppUsageEntry entry : entries) {
+                if (entry == null || entry.entryId.trim().isEmpty() || entry.appId.trim().isEmpty() || entry.durationSeconds <= 0L) {
+                    continue;
+                }
+                if (!first) {
+                    json.append(",");
+                }
+                first = false;
+                json.append("{")
+                        .append("\"EntryId\":\"").append(escape(entry.entryId)).append("\",")
+                        .append("\"DeviceId\":\"").append(escape(entry.deviceId)).append("\",")
+                        .append("\"Platform\":\"").append(escape(entry.platform)).append("\",")
+                        .append("\"Source\":\"").append(escape(entry.source)).append("\",")
+                        .append("\"AppId\":\"").append(escape(entry.appId)).append("\",")
+                        .append("\"AppName\":\"").append(escape(entry.appName)).append("\",")
+                        .append("\"LocalDate\":\"").append(escape(entry.localDate)).append("\",")
+                        .append("\"DurationSeconds\":").append(entry.durationSeconds).append(",")
+                        .append("\"UpdatedAtUnixSeconds\":").append(entry.updatedAtUnixSeconds)
                         .append("}");
             }
         }
@@ -345,17 +426,53 @@ public final class FamilyStatsProtocol {
         public final String childId;
         public final String childDeviceId;
         public final List<UsageSegment> segments;
+        public final List<AppUsageEntry> appUsageEntries;
 
-        private UploadRequest(boolean valid, String familyId, String childId, String childDeviceId, List<UsageSegment> segments) {
+        private UploadRequest(
+                boolean valid,
+                String familyId,
+                String childId,
+                String childDeviceId,
+                List<UsageSegment> segments,
+                List<AppUsageEntry> appUsageEntries) {
             this.valid = valid;
             this.familyId = safe(familyId);
             this.childId = safe(childId);
             this.childDeviceId = safe(childDeviceId);
             this.segments = segments == null ? new ArrayList<>() : segments;
+            this.appUsageEntries = appUsageEntries == null ? new ArrayList<>() : appUsageEntries;
         }
 
         public static UploadRequest invalid() {
-            return new UploadRequest(false, "", "", "", new ArrayList<>());
+            return new UploadRequest(false, "", "", "", new ArrayList<>(), new ArrayList<>());
+        }
+    }
+
+    public static final class UploadNowRequest {
+        public final boolean valid;
+        public final String familyId;
+        public final String childDeviceId;
+        public final String parentDeviceId;
+
+        private UploadNowRequest(boolean valid, String familyId, String childDeviceId, String parentDeviceId) {
+            this.valid = valid;
+            this.familyId = safe(familyId);
+            this.childDeviceId = safe(childDeviceId);
+            this.parentDeviceId = safe(parentDeviceId);
+        }
+
+        public static UploadNowRequest invalid() {
+            return new UploadNowRequest(false, "", "", "");
+        }
+    }
+
+    public static final class UploadNowResponse {
+        public final boolean accepted;
+        public final String error;
+
+        private UploadNowResponse(boolean accepted, String error) {
+            this.accepted = accepted;
+            this.error = safe(error);
         }
     }
 

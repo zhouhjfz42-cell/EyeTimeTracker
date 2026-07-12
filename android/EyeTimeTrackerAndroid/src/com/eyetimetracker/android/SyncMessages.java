@@ -18,6 +18,8 @@ public final class SyncMessages {
     public static final String FAMILY_STATS_DISCOVERY_RESPONSE = "familyStatsDiscoveryResponse";
     public static final String FAMILY_STATS_UPLOAD_REQUEST = "familyStatsUploadRequest";
     public static final String FAMILY_STATS_UPLOAD_RESPONSE = "familyStatsUploadResponse";
+    public static final String FAMILY_STATS_UPLOAD_NOW_REQUEST = "familyStatsUploadNowRequest";
+    public static final String FAMILY_STATS_UPLOAD_NOW_RESPONSE = "familyStatsUploadNowResponse";
 
     private SyncMessages() {
     }

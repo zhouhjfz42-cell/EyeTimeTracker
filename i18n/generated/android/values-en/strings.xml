@@ -112,6 +112,7 @@
     <string name="family_home_settings_note" formatted="false">Changing the child profile, protection code, or leaving Family Eye Care requires the protection code.</string>
     <string name="family_home_settings_title" formatted="false">Family Settings</string>
     <string name="family_home_title" formatted="false">Family Eye Care</string>
+    <string name="family_home_top_app" formatted="false">Top App</string>
     <string name="family_home_unknown_child" formatted="false">Child</string>
     <string name="family_role_child" formatted="false">Child device</string>
     <string name="family_role_parent" formatted="false">Parent phone</string>
@@ -223,6 +224,10 @@
     <string name="reminder_unit_hint" formatted="false">Unit: minutes ({equivalent})</string>
     <string name="reminder_unit_minute" formatted="false">min</string>
     <string name="reminder_validation_minutes_range" formatted="false">Enter a number from {min} to {max} minutes</string>
+    <string name="stats_app_usage_adult_note" formatted="false">Adult mode combines PC and phone data. PC / Phone labels show the source.</string>
+    <string name="stats_app_usage_empty" formatted="false">No app usage data yet.</string>
+    <string name="stats_app_usage_family_note" formatted="false">Child mode only shows phone app time. Parents see the same ranking synced from the child device.</string>
+    <string name="stats_app_usage_title" formatted="false">App Usage Ranking</string>
     <string name="stats_care_continuous_high" formatted="false">Eye care: long uninterrupted use</string>
     <string name="stats_care_night_high" formatted="false">Eye care: more night use</string>
     <string name="stats_care_no_pressure" formatted="false">Eye care: no clear pressure</string>
@@ -257,6 +262,7 @@
     <string name="stats_source_phone_high_short" formatted="false">Phone use {percent}%. Reduce quick checks when possible.</string>
     <string name="stats_source_title" formatted="false">Device Sources</string>
     <string name="stats_subtitle" formatted="false">Trends, distribution, and continuous use</string>
+    <string name="stats_summary_title" formatted="false">Eye Care Summary</string>
     <string name="stats_title" formatted="false">Stats</string>
     <string name="stats_week_title" formatted="false">Weekly Use</string>
     <string name="stats_week_total" formatted="false">Weekly total: {duration}</string>

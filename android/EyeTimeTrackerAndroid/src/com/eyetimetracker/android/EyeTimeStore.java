@@ -36,6 +36,8 @@ public final class EyeTimeStore {
     private static final String FAMILY_CHILD_DEVICE_ID = "familyChildDeviceId";
     private static final String FAMILY_CHILD_DEVICE_JOINED_AT_UNIX_SECONDS = "familyChildDeviceJoinedAtUnixSeconds";
     private static final String FAMILY_CHILD_SEGMENTS = "familyChildSegments";
+    private static final String APP_USAGE_ENTRIES = "appUsageEntries";
+    private static final String FAMILY_CHILD_APP_USAGE_ENTRIES = "familyChildAppUsageEntries";
     private static final String PENDING_FAMILY_BINDING_INVITE = "pendingFamilyBindingInvite";
     private static final String CHILD_PROFILES = "childProfiles";
     private static final String ACTIVE_CHILD_ID = "activeChildId";
@@ -180,6 +182,71 @@ public final class EyeTimeStore {
             return changed;
         } catch (JSONException ignored) {
             return 0;
+        }
+    }
+
+    public synchronized void addAppUsage(LocalDate date, long secondsToAdd, String appId, String appName) {
+        if (date == null || secondsToAdd <= 0L || safe(appId).trim().isEmpty()) {
+            return;
+        }
+        try {
+            JSONObject state = loadState();
+            long nowSeconds = System.currentTimeMillis() / 1000L;
+            AppUsageEntry entry = new AppUsageEntry(
+                    AppUsageEntry.createId(getDeviceId(), PLATFORM, "phone", appId, date.toString()),
+                    getDeviceId(),
+                    PLATFORM,
+                    "phone",
+                    appId,
+                    appName,
+                    date.toString(),
+                    secondsToAdd,
+                    nowSeconds);
+            mergeAppUsageEntries(state, java.util.Collections.singletonList(entry), APP_USAGE_ENTRIES, true);
+            saveState(state);
+        } catch (JSONException ignored) {
+        }
+    }
+
+    public synchronized int addAppUsageEntries(List<AppUsageEntry> entries) {
+        try {
+            JSONObject state = loadState();
+            int changed = mergeAppUsageEntries(state, entries, APP_USAGE_ENTRIES, false);
+            if (changed > 0) {
+                saveState(state);
+            }
+            return changed;
+        } catch (JSONException ignored) {
+            return 0;
+        }
+    }
+
+    public synchronized int addFamilyChildAppUsageEntries(List<AppUsageEntry> entries) {
+        try {
+            JSONObject state = loadState();
+            int changed = mergeAppUsageEntries(state, entries, FAMILY_CHILD_APP_USAGE_ENTRIES, false);
+            if (changed > 0) {
+                saveState(state);
+            }
+            return changed;
+        } catch (JSONException ignored) {
+            return 0;
+        }
+    }
+
+    public synchronized List<AppUsageEntry> getAppUsageEntries(LocalDate start, LocalDate end) {
+        try {
+            return readAppUsageEntries(loadState(), start, end, APP_USAGE_ENTRIES);
+        } catch (JSONException ignored) {
+            return new ArrayList<>();
+        }
+    }
+
+    public synchronized List<AppUsageEntry> getFamilyChildAppUsageEntries(LocalDate start, LocalDate end) {
+        try {
+            return readAppUsageEntries(loadState(), start, end, FAMILY_CHILD_APP_USAGE_ENTRIES);
+        } catch (JSONException ignored) {
+            return new ArrayList<>();
         }
     }
 
@@ -1269,6 +1336,8 @@ public final class EyeTimeStore {
             state.put("records", new JSONArray());
             state.put("segments", new JSONArray());
             state.put(FAMILY_CHILD_SEGMENTS, new JSONArray());
+            state.put(APP_USAGE_ENTRIES, new JSONArray());
+            state.put(FAMILY_CHILD_APP_USAGE_ENTRIES, new JSONArray());
             ensureFamilyModeState(state);
             return state;
         }
@@ -1281,6 +1350,12 @@ public final class EyeTimeStore {
         }
         if (!state.has(FAMILY_CHILD_SEGMENTS)) {
             state.put(FAMILY_CHILD_SEGMENTS, new JSONArray());
+        }
+        if (!state.has(APP_USAGE_ENTRIES)) {
+            state.put(APP_USAGE_ENTRIES, new JSONArray());
+        }
+        if (!state.has(FAMILY_CHILD_APP_USAGE_ENTRIES)) {
+            state.put(FAMILY_CHILD_APP_USAGE_ENTRIES, new JSONArray());
         }
         ensureFamilyModeState(state);
         return state;
@@ -1429,6 +1504,110 @@ public final class EyeTimeStore {
             state.put(key, segments);
         }
         return segments;
+    }
+
+    private static JSONArray ensureAppUsageEntries(JSONObject state, String key) throws JSONException {
+        JSONArray entries = state.optJSONArray(key);
+        if (entries == null) {
+            entries = new JSONArray();
+            state.put(key, entries);
+        }
+        return entries;
+    }
+
+    static int mergeAppUsageEntries(JSONObject state, List<AppUsageEntry> newEntries, String key, boolean accumulate) throws JSONException {
+        if (newEntries == null || newEntries.isEmpty()) {
+            return 0;
+        }
+
+        JSONArray entries = ensureAppUsageEntries(state, key);
+        Map<String, JSONObject> existingById = new HashMap<>();
+        for (int i = 0; i < entries.length(); i++) {
+            JSONObject existing = entries.optJSONObject(i);
+            if (existing != null) {
+                existingById.put(existing.optString("entryId"), existing);
+            }
+        }
+
+        int changed = 0;
+        for (AppUsageEntry entry : newEntries) {
+            if (entry == null || entry.entryId.trim().isEmpty() || entry.appId.trim().isEmpty() || entry.durationSeconds <= 0L) {
+                continue;
+            }
+            JSONObject existing = existingById.get(entry.entryId);
+            if (existing != null) {
+                long currentUpdatedAt = existing.optLong("updatedAtUnixSeconds", 0L);
+                if (accumulate) {
+                    existing.put("durationSeconds", existing.optLong("durationSeconds", 0L) + entry.durationSeconds);
+                    existing.put("appName", safe(entry.appName).trim().isEmpty() ? existing.optString("appName", "") : entry.appName);
+                    existing.put("updatedAtUnixSeconds", Math.max(currentUpdatedAt, entry.updatedAtUnixSeconds));
+                    changed++;
+                } else if (entry.updatedAtUnixSeconds >= currentUpdatedAt) {
+                    writeAppUsageEntryJson(existing, entry);
+                    changed++;
+                }
+                continue;
+            }
+
+            JSONObject json = appUsageEntryToJson(entry);
+            entries.put(json);
+            existingById.put(entry.entryId, json);
+            changed++;
+        }
+        return changed;
+    }
+
+    static List<AppUsageEntry> readAppUsageEntries(JSONObject state, LocalDate start, LocalDate end, String key) throws JSONException {
+        JSONArray raw = ensureAppUsageEntries(state, key);
+        List<AppUsageEntry> values = new ArrayList<>();
+        LocalDate first = start.isAfter(end) ? end : start;
+        LocalDate last = start.isAfter(end) ? start : end;
+        for (int i = 0; i < raw.length(); i++) {
+            JSONObject json = raw.optJSONObject(i);
+            if (json == null) {
+                continue;
+            }
+            AppUsageEntry entry = appUsageEntryFromJson(json);
+            if (entry.localDate.trim().isEmpty() || entry.durationSeconds <= 0L) {
+                continue;
+            }
+            LocalDate date = LocalDate.parse(entry.localDate);
+            if (!date.isBefore(first) && !date.isAfter(last)) {
+                values.add(entry);
+            }
+        }
+        return values;
+    }
+
+    private static JSONObject appUsageEntryToJson(AppUsageEntry entry) throws JSONException {
+        JSONObject json = new JSONObject();
+        writeAppUsageEntryJson(json, entry);
+        return json;
+    }
+
+    private static void writeAppUsageEntryJson(JSONObject json, AppUsageEntry entry) throws JSONException {
+        json.put("entryId", entry.entryId);
+        json.put("deviceId", entry.deviceId);
+        json.put("platform", entry.platform);
+        json.put("source", entry.source);
+        json.put("appId", entry.appId);
+        json.put("appName", entry.appName);
+        json.put("localDate", entry.localDate);
+        json.put("durationSeconds", entry.durationSeconds);
+        json.put("updatedAtUnixSeconds", entry.updatedAtUnixSeconds);
+    }
+
+    private static AppUsageEntry appUsageEntryFromJson(JSONObject json) {
+        return new AppUsageEntry(
+                json.optString("entryId", ""),
+                json.optString("deviceId", ""),
+                json.optString("platform", ""),
+                json.optString("source", ""),
+                json.optString("appId", ""),
+                json.optString("appName", ""),
+                json.optString("localDate", ""),
+                json.optLong("durationSeconds", 0L),
+                json.optLong("updatedAtUnixSeconds", 0L));
     }
 
     private static JSONObject segmentToJson(UsageSegment segment) throws JSONException {
@@ -1977,6 +2156,7 @@ public final class EyeTimeStore {
         state.put(FAMILY_CHILD_DEVICE_ID, "");
         state.put(FAMILY_CHILD_DEVICE_JOINED_AT_UNIX_SECONDS, 0L);
         state.put(FAMILY_CHILD_SEGMENTS, new JSONArray());
+        state.put(FAMILY_CHILD_APP_USAGE_ENTRIES, new JSONArray());
         state.put(PENDING_FAMILY_BINDING_INVITE, null);
         state.put(PARENT_PASSCODE_HASH, "");
         state.put(PARENT_PASSCODE_SALT, "");

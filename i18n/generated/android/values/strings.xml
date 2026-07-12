@@ -112,6 +112,7 @@
     <string name="family_home_settings_note" formatted="false">修改孩子档案、保护密码或退出家庭护眼时，需要输入保护密码。</string>
     <string name="family_home_settings_title" formatted="false">家庭设置</string>
     <string name="family_home_title" formatted="false">家庭护眼</string>
+    <string name="family_home_top_app" formatted="false">最长 App</string>
     <string name="family_home_unknown_child" formatted="false">孩子</string>
     <string name="family_role_child" formatted="false">孩子设备</string>
     <string name="family_role_parent" formatted="false">家长手机</string>
@@ -223,6 +224,10 @@
     <string name="reminder_unit_hint" formatted="false">单位：分钟（{equivalent}）</string>
     <string name="reminder_unit_minute" formatted="false">分钟</string>
     <string name="reminder_validation_minutes_range" formatted="false">请输入 {min}-{max} 之间的分钟数</string>
+    <string name="stats_app_usage_adult_note" formatted="false">成人版合并 PC 和手机数据；排行中用 PC / 手机标签注明来源。</string>
+    <string name="stats_app_usage_empty" formatted="false">暂无 App 使用数据。</string>
+    <string name="stats_app_usage_family_note" formatted="false">儿童版只显示孩子手机 App 时长；家长端看到的是孩子设备同步来的同一份排行。</string>
+    <string name="stats_app_usage_title" formatted="false">App 使用排行</string>
     <string name="stats_care_continuous_high" formatted="false">护眼表现：连续用眼偏多</string>
     <string name="stats_care_night_high" formatted="false">护眼表现：夜间用眼偏多</string>
     <string name="stats_care_no_pressure" formatted="false">护眼表现：暂无明显压力</string>
@@ -257,6 +262,7 @@
     <string name="stats_source_phone_high_short" formatted="false">手机占比 {percent}%，可减少碎片查看</string>
     <string name="stats_source_title" formatted="false">设备来源</string>
     <string name="stats_subtitle" formatted="false">看趋势、分布和连续使用情况</string>
+    <string name="stats_summary_title" formatted="false">护眼摘要</string>
     <string name="stats_title" formatted="false">统计</string>
     <string name="stats_week_title" formatted="false">本周用眼</string>
     <string name="stats_week_total" formatted="false">本周合计 {duration}</string>

@@ -33,10 +33,9 @@ public sealed class StatsForm : Form
     private readonly FitTextLabel _summaryLineFour;
     private readonly WeekBarChart _weekChart;
     private readonly MonthTrendChart _monthChart;
-    private readonly ContinuousBandsControl _continuousBands;
+    private readonly AppUsageRankingControl _appUsageRanking;
     private readonly FitTextLabel _weekNote;
     private readonly FitTextLabel _monthNote;
-    private readonly FitTextLabel _continuousNote;
     private readonly FitTextLabel _daySelectorText;
     private readonly FitTextLabel _weekSelectorText;
     private readonly FitTextLabel _monthSelectorText;
@@ -47,6 +46,7 @@ public sealed class StatsForm : Form
     private DateOnly _selectedMonthStart;
     private DateOnly _rangeStart;
     private DateOnly _rangeEnd;
+    private int _refreshGeneration;
 
     public StatsForm(TrackingController controller, Icon? icon)
     {
@@ -108,23 +108,21 @@ public sealed class StatsForm : Form
         _daySelectorText = AddPill(dayPanel, SelectorText(AppText.Get("common.today")), new Rectangle(170, 22, 112, 30), ShowDayMenu);
         AddLegend(dayPanel, new Point(314, 27));
 
-        dayPanel.Controls.Add(BuildSmallMetric(AppText.Get("stats.daily.metric.total"), out _dayTotalValue, new Rectangle(24, 70, 155, 78), AccentGreen));
-        dayPanel.Controls.Add(BuildSmallMetric(AppText.Get("stats.daily.metric.longest"), out _longestSessionValue, new Rectangle(194, 70, 155, 78), AccentYellow));
-        dayPanel.Controls.Add(BuildSmallMetric(AppText.Get("stats.daily.metric.deviceShare"), out _deviceShareValue, new Rectangle(24, 164, 155, 78), TextPrimary));
-        dayPanel.Controls.Add(BuildSmallMetric(AppText.Get("stats.daily.metric.reminders"), out _reminderCountValue, new Rectangle(194, 164, 155, 78), TextPrimary));
+        dayPanel.Controls.Add(BuildSmallMetric(AppText.Get("stats.daily.metric.total"), out _dayTotalValue, new Rectangle(24, 88, 155, 78), AccentGreen));
+        dayPanel.Controls.Add(BuildSmallMetric(AppText.Get("stats.daily.metric.longest"), out _longestSessionValue, new Rectangle(194, 88, 155, 78), AccentYellow));
+        dayPanel.Controls.Add(BuildSmallMetric(AppText.Get("stats.daily.metric.deviceShare"), out _deviceShareValue, new Rectangle(24, 186, 155, 78), TextPrimary));
+        dayPanel.Controls.Add(BuildSmallMetric(AppText.Get("stats.daily.metric.reminders"), out _reminderCountValue, new Rectangle(194, 186, 155, 78), TextPrimary));
 
         _hourlyChart = new HourlyHeatChart
         {
-            Bounds = new Rectangle(390, 30, 230, 230),
+            Bounds = new Rectangle(370, 12, 270, 260),
             BackColor = Color.Transparent
         };
         dayPanel.Controls.Add(_hourlyChart);
 
-        _summaryTitle = AddSummaryLabel(dayPanel, AppText.Get("stats.daily.summary.yesterday"), new Rectangle(690, 18, 180, 36), 13.5F, 12F, TextPrimary, FontStyle.Bold);
-        _summaryLineOne = AddSummaryLabel(dayPanel, "", new Rectangle(692, 66, 380, 34), 10.5F, 9F, TextSecondary, FontStyle.Regular);
-        _summaryLineTwo = AddSummaryLabel(dayPanel, "", new Rectangle(692, 112, 380, 34), 10.5F, 9F, TextSecondary, FontStyle.Regular);
-        _summaryLineThree = AddSummaryLabel(dayPanel, "", new Rectangle(692, 158, 380, 34), 10.5F, 9F, TextSecondary, FontStyle.Regular);
-        _summaryLineFour = AddSummaryLabel(dayPanel, "", new Rectangle(692, 204, 380, 34), 10.5F, 9F, AccentGreen, FontStyle.Bold);
+        AddPanelTitle(dayPanel, AppText.Get("stats.appUsage.title"), new Rectangle(690, 36, 220, 36));
+        _appUsageRanking = new AppUsageRankingControl { Bounds = new Rectangle(690, 82, 390, 190), BackColor = Color.Transparent };
+        dayPanel.Controls.Add(_appUsageRanking);
 
         var weekPanel = CreatePanel(new Rectangle(30, 410, 350, 300));
         root.Controls.Add(weekPanel);
@@ -144,15 +142,17 @@ public sealed class StatsForm : Form
 
         var continuousPanel = CreatePanel(new Rectangle(780, 410, 370, 300));
         root.Controls.Add(continuousPanel);
-        AddPanelTitle(continuousPanel, AppText.Get("stats.sessions.title"), new Rectangle(22, 18, 150, 34));
+        AddPanelTitle(continuousPanel, AppText.Get("stats.summary.title"), new Rectangle(22, 18, 150, 34));
         _rangeStartSelectorText = AddPill(continuousPanel, SelectorText("7/1"), new Rectangle(178, 18, 84, 30), ShowRangeStartMenu);
         _rangeEndSelectorText = AddPill(continuousPanel, SelectorText("7/1"), new Rectangle(270, 18, 84, 30), ShowRangeEndMenu);
-        _continuousBands = new ContinuousBandsControl { Bounds = new Rectangle(22, 68, 326, 150), BackColor = Color.Transparent };
-        continuousPanel.Controls.Add(_continuousBands);
-        _continuousNote = AddNote(continuousPanel, new Rectangle(22, 235, 320, 48));
+        _summaryTitle = new FitTextLabel { Visible = false };
+        _summaryLineOne = AddSummaryLabel(continuousPanel, "", new Rectangle(22, 68, 320, 32), 10.5F, 9F, TextSecondary, FontStyle.Regular);
+        _summaryLineTwo = AddSummaryLabel(continuousPanel, "", new Rectangle(22, 112, 320, 32), 10.5F, 9F, TextSecondary, FontStyle.Regular);
+        _summaryLineThree = AddSummaryLabel(continuousPanel, "", new Rectangle(22, 156, 320, 32), 10.5F, 9F, TextSecondary, FontStyle.Regular);
+        _summaryLineFour = AddSummaryLabel(continuousPanel, "", new Rectangle(22, 204, 320, 52), 10.5F, 9F, AccentGreen, FontStyle.Bold);
 
         _controller.Updated += OnTrackingUpdated;
-        RefreshStats();
+        Shown += OnShown;
     }
 
     protected override void Dispose(bool disposing)
@@ -160,9 +160,18 @@ public sealed class StatsForm : Form
         if (disposing)
         {
             _controller.Updated -= OnTrackingUpdated;
+            Shown -= OnShown;
         }
 
         base.Dispose(disposing);
+    }
+
+    private void OnShown(object? sender, EventArgs e)
+    {
+        if (!IsDisposed && IsHandleCreated)
+        {
+            BeginInvoke((MethodInvoker)RefreshStats);
+        }
     }
 
     private void OnTrackingUpdated(object? sender, TrackingUpdatedEventArgs e)
@@ -173,26 +182,63 @@ public sealed class StatsForm : Form
         }
     }
 
-    private void RefreshStats()
+    private async void RefreshStats()
+    {
+        var generation = System.Threading.Interlocked.Increment(ref _refreshGeneration);
+        var selectedDay = _selectedDay;
+        var selectedWeekStart = _selectedWeekStart;
+        var selectedMonthStart = _selectedMonthStart;
+        var selectedRangeStart = _rangeStart;
+        var selectedRangeEnd = _rangeEnd;
+
+        StatsViewModel model;
+        try
+        {
+            model = await Task.Run(() => BuildStatsViewModel(
+                selectedDay,
+                selectedWeekStart,
+                selectedMonthStart,
+                selectedRangeStart,
+                selectedRangeEnd));
+        }
+        catch
+        {
+            return;
+        }
+
+        if (IsDisposed || !IsHandleCreated || generation != _refreshGeneration)
+        {
+            return;
+        }
+
+        ApplyStats(model);
+    }
+
+    private StatsViewModel BuildStatsViewModel(
+        DateOnly selectedDay,
+        DateOnly selectedWeekStart,
+        DateOnly selectedMonthStart,
+        DateOnly selectedRangeStart,
+        DateOnly selectedRangeEnd)
     {
         var records = _controller.GetRecordsSnapshot();
         var actualToday = DateOnly.FromDateTime(DateTime.Now);
-        var todayRecord = records.FirstOrDefault(record => record.Date == _selectedDay) ?? new DailyRecord(_selectedDay);
+        var todayRecord = records.FirstOrDefault(record => record.Date == selectedDay) ?? new DailyRecord(selectedDay);
         AppState.NormalizeRecord(todayRecord);
 
         var weekRecords = Enumerable.Range(0, 7)
-            .Select(offset => records.FirstOrDefault(record => record.Date == _selectedWeekStart.AddDays(offset)) ?? new DailyRecord(_selectedWeekStart.AddDays(offset)))
+            .Select(offset => records.FirstOrDefault(record => record.Date == selectedWeekStart.AddDays(offset)) ?? new DailyRecord(selectedWeekStart.AddDays(offset)))
             .ToList();
         foreach (var record in weekRecords)
         {
             AppState.NormalizeRecord(record);
         }
 
-        var daysInMonth = _selectedMonthStart.Year == actualToday.Year && _selectedMonthStart.Month == actualToday.Month
+        var daysInMonth = selectedMonthStart.Year == actualToday.Year && selectedMonthStart.Month == actualToday.Month
             ? actualToday.Day
-            : DateTime.DaysInMonth(_selectedMonthStart.Year, _selectedMonthStart.Month);
+            : DateTime.DaysInMonth(selectedMonthStart.Year, selectedMonthStart.Month);
         var monthRecords = Enumerable.Range(0, daysInMonth)
-            .Select(offset => records.FirstOrDefault(record => record.Date == _selectedMonthStart.AddDays(offset)) ?? new DailyRecord(_selectedMonthStart.AddDays(offset)))
+            .Select(offset => records.FirstOrDefault(record => record.Date == selectedMonthStart.AddDays(offset)) ?? new DailyRecord(selectedMonthStart.AddDays(offset)))
             .ToList();
         foreach (var record in monthRecords)
         {
@@ -201,53 +247,66 @@ public sealed class StatsForm : Form
 
         var sessions = SessionValues(todayRecord).ToList();
         var longest = sessions.Count == 0 ? todayRecord.CurrentSessionSeconds : sessions.Max();
-        var deviceBreakdown = _controller.GetDeviceBreakdown(_selectedDay);
-        var isShowingToday = _selectedDay == actualToday;
-        var summaryDate = isShowingToday ? actualToday.AddDays(-1) : _selectedDay;
-        var summaryRecord = records.FirstOrDefault(record => record.Date == summaryDate) ?? new DailyRecord(summaryDate);
-        AppState.NormalizeRecord(summaryRecord);
-        var summarySessions = SessionValues(summaryRecord).ToList();
-        var summaryLongest = summarySessions.Count == 0 ? summaryRecord.CurrentSessionSeconds : summarySessions.Max();
-        var summaryDeviceBreakdown = _controller.GetDeviceBreakdown(summaryDate);
+        var deviceBreakdown = _controller.GetDeviceBreakdown(selectedDay);
         var weekBreakdowns = Enumerable.Range(0, 7)
-            .Select(offset => _controller.GetDeviceBreakdown(_selectedWeekStart.AddDays(offset)))
+            .Select(offset => _controller.GetDeviceBreakdown(selectedWeekStart.AddDays(offset)))
             .ToList();
+        var appUsageRows = BuildAppUsageRows(_controller.GetAppUsageEntries(selectedDay, selectedDay), 4);
 
-        _dayTotalValue.Text = FormatDuration(todayRecord.TotalSeconds);
-        _dayTotalValue.ForeColor = TodayColor(todayRecord.TotalSeconds);
-        _longestSessionValue.Text = FormatDuration(longest);
-        _deviceShareValue.Text = $"{deviceBreakdown.PcPercent}%/{deviceBreakdown.PhonePercent}%";
-        _reminderCountValue.Text = CountText(ReminderDisplayCount.FromSeconds(todayRecord.TotalSeconds, _controller.Settings));
-        _hourlyChart.HourlySeconds = todayRecord.HourlySeconds;
-        _hourlyChart.SetSourceHourlySeconds(deviceBreakdown.PcHourlySeconds, deviceBreakdown.PhoneHourlySeconds);
-
-        _summaryTitle.Text = isShowingToday ? AppText.Get("stats.daily.summary.yesterday") : AppText.Get("stats.daily.summary.day");
-        _summaryLineOne.Text = AppText.Format("stats.daily.summary.peak", ("range", PeakHourText(summaryRecord.HourlySeconds)));
-        _summaryLineTwo.Text = AppText.Format("stats.daily.summary.longest", ("duration", FormatDuration(summaryLongest)));
-        _summaryLineThree.Text = SummarySourceText(summaryDeviceBreakdown);
-        _summaryLineFour.Text = SummaryCareText(
-            summaryLongest,
-            NightSeconds(summaryRecord.HourlySeconds),
-            summaryDeviceBreakdown.PhonePercent);
-
-        _weekChart.Records = weekRecords;
-        _weekChart.DeviceBreakdowns = weekBreakdowns;
-        _weekNote.Text = AppText.Format("stats.week.total", ("duration", FormatDuration(weekRecords.Sum(record => record.TotalSeconds))));
-
-        _monthChart.Records = monthRecords;
-        _monthNote.Text = AppText.Format("stats.month.recordedDays", ("count", monthRecords.Count(record => record.TotalSeconds > 0)));
-
-        var rangeStart = _rangeStart <= _rangeEnd ? _rangeStart : _rangeEnd;
-        var rangeEnd = _rangeStart <= _rangeEnd ? _rangeEnd : _rangeStart;
-        var rangeSessions = records
+        var rangeStart = selectedRangeStart <= selectedRangeEnd ? selectedRangeStart : selectedRangeEnd;
+        var rangeEnd = selectedRangeStart <= selectedRangeEnd ? selectedRangeEnd : selectedRangeStart;
+        var rangeRecords = records
             .Where(record => record.Date >= rangeStart && record.Date <= rangeEnd)
-            .SelectMany(SessionValues)
             .ToList();
-        _continuousBands.Sessions = rangeSessions;
-        _continuousNote.Text = rangeSessions.Count == 0
-            ? AppText.Get("stats.sessions.empty")
-            : AppText.Format("stats.sessions.advice", ("duration", FormatDuration(rangeSessions.Max())));
-        UpdateSelectorTexts(actualToday);
+        foreach (var record in rangeRecords)
+        {
+            AppState.NormalizeRecord(record);
+        }
+        var rangeTotal = rangeRecords.Sum(record => record.TotalSeconds);
+        var rangeSessions = rangeRecords.SelectMany(SessionValues).ToList();
+        var rangeLongest = rangeSessions.Count == 0 ? 0L : rangeSessions.Max();
+        var rangeHourly = SumHourlySeconds(rangeRecords);
+        var rangeBreakdown = SumDeviceBreakdowns(rangeStart, rangeEnd);
+
+        return new StatsViewModel(
+            actualToday,
+            todayRecord,
+            longest,
+            deviceBreakdown,
+            weekRecords,
+            weekBreakdowns,
+            monthRecords,
+            appUsageRows,
+            rangeTotal,
+            rangeLongest,
+            rangeHourly,
+            rangeBreakdown);
+    }
+
+    private void ApplyStats(StatsViewModel model)
+    {
+        _dayTotalValue.Text = FormatDuration(model.TodayRecord.TotalSeconds);
+        _dayTotalValue.ForeColor = TodayColor(model.TodayRecord.TotalSeconds);
+        _longestSessionValue.Text = FormatDuration(model.LongestSessionSeconds);
+        _deviceShareValue.Text = $"{model.DayBreakdown.PcPercent}%/{model.DayBreakdown.PhonePercent}%";
+        _reminderCountValue.Text = CountText(ReminderDisplayCount.FromSeconds(model.TodayRecord.TotalSeconds, _controller.Settings));
+        _hourlyChart.HourlySeconds = model.TodayRecord.HourlySeconds;
+        _hourlyChart.SetSourceHourlySeconds(model.DayBreakdown.PcHourlySeconds, model.DayBreakdown.PhoneHourlySeconds);
+        _appUsageRanking.Entries = model.AppUsageRows;
+
+        _weekChart.Records = model.WeekRecords;
+        _weekChart.DeviceBreakdowns = model.WeekBreakdowns;
+        _weekNote.Text = AppText.Format("stats.week.total", ("duration", FormatDuration(model.WeekRecords.Sum(record => record.TotalSeconds))));
+
+        _monthChart.Records = model.MonthRecords;
+        _monthNote.Text = AppText.Format("stats.month.recordedDays", ("count", model.MonthRecords.Count(record => record.TotalSeconds > 0)));
+
+        _summaryTitle.Text = string.Empty;
+        _summaryLineOne.Text = AppText.Format("stats.week.total", ("duration", FormatDuration(model.RangeTotalSeconds)));
+        _summaryLineTwo.Text = AppText.Format("stats.daily.summary.peak", ("range", PeakHourText(model.RangeHourlySeconds)));
+        _summaryLineThree.Text = AppText.Format("stats.daily.summary.longest", ("duration", FormatDuration(model.RangeLongestSessionSeconds)));
+        _summaryLineFour.Text = SummaryCareText(model.RangeLongestSessionSeconds, NightSeconds(model.RangeHourlySeconds), model.RangeBreakdown.PhonePercent);
+        UpdateSelectorTexts(model.ActualToday);
     }
 
     private void ShowDayMenu(object? sender, EventArgs e)
@@ -312,6 +371,74 @@ public sealed class StatsForm : Form
             .ToList();
         dates.Sort();
         return dates;
+    }
+
+    private static IReadOnlyList<AppUsageRow> BuildAppUsageRows(IEnumerable<AppUsageEntry> entries, int take)
+    {
+        return (entries ?? Array.Empty<AppUsageEntry>())
+            .Where(entry => entry.DurationSeconds > 0)
+            .GroupBy(entry => (
+                Source: SourceLabel(entry),
+                AppName: string.IsNullOrWhiteSpace(entry.AppName) ? entry.AppId : entry.AppName))
+            .Select(group => new AppUsageRow(
+                group.Key.AppName,
+                group.Key.Source,
+                group.Sum(entry => entry.DurationSeconds)))
+            .OrderByDescending(row => row.DurationSeconds)
+            .ThenBy(row => row.AppName, StringComparer.CurrentCultureIgnoreCase)
+            .Take(take)
+            .ToList();
+    }
+
+    private sealed record StatsViewModel(
+        DateOnly ActualToday,
+        DailyRecord TodayRecord,
+        long LongestSessionSeconds,
+        UsageDeviceBreakdown DayBreakdown,
+        IReadOnlyList<DailyRecord> WeekRecords,
+        IReadOnlyList<UsageDeviceBreakdown> WeekBreakdowns,
+        IReadOnlyList<DailyRecord> MonthRecords,
+        IReadOnlyList<AppUsageRow> AppUsageRows,
+        long RangeTotalSeconds,
+        long RangeLongestSessionSeconds,
+        long[] RangeHourlySeconds,
+        UsageDeviceBreakdown RangeBreakdown);
+
+    private UsageDeviceBreakdown SumDeviceBreakdowns(DateOnly start, DateOnly end)
+    {
+        long pcSeconds = 0L;
+        long phoneSeconds = 0L;
+        for (var date = start; date <= end; date = date.AddDays(1))
+        {
+            var breakdown = _controller.GetDeviceBreakdown(date);
+            pcSeconds += breakdown.PcSeconds;
+            phoneSeconds += breakdown.PhoneSeconds;
+        }
+
+        return new UsageDeviceBreakdown(pcSeconds, phoneSeconds);
+    }
+
+    private static long[] SumHourlySeconds(IEnumerable<DailyRecord> records)
+    {
+        var values = new long[24];
+        foreach (var record in records)
+        {
+            AppState.NormalizeRecord(record);
+            for (var hour = 0; hour < values.Length; hour++)
+            {
+                values[hour] += record.HourlySeconds[hour];
+            }
+        }
+
+        return values;
+    }
+
+    private static string SourceLabel(AppUsageEntry entry)
+    {
+        return string.Equals(entry.Source, "pc", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(entry.Platform, "windows", StringComparison.OrdinalIgnoreCase)
+                ? AppText.Get("common.pc")
+                : AppText.Get("common.phone");
     }
 
     private static void ShowCalendarPicker(object? sender, CalendarSelectionMode mode, DateOnly initialDate, Action<DateOnly> onSelected)
@@ -1667,6 +1794,145 @@ public sealed class StatsForm : Form
                 using var valueBrush = new SolidBrush(TextPrimary);
                 e.Graphics.DrawString(CountText(counts[i]), valueFont, valueBrush, valueBounds, valueFormat);
             }
+        }
+    }
+
+    private sealed record AppUsageRow(string AppName, string SourceLabel, long DurationSeconds);
+
+    private sealed class AppUsageRankingControl : Control
+    {
+        private IReadOnlyList<AppUsageRow> _entries = Array.Empty<AppUsageRow>();
+
+        public AppUsageRankingControl()
+        {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor, true);
+        }
+
+        public IReadOnlyList<AppUsageRow> Entries
+        {
+            get => _entries;
+            set
+            {
+                _entries = value ?? Array.Empty<AppUsageRow>();
+                Invalidate();
+            }
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            if (_entries.Count == 0)
+            {
+                using var emptyFont = AppFonts.Create(9.5F);
+                TextRenderer.DrawText(
+                    e.Graphics,
+                    AppText.Get("stats.appUsage.empty"),
+                    emptyFont,
+                    new Rectangle(0, 44, Width, 32),
+                    TextSecondary,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+                return;
+            }
+
+            var maxSeconds = Math.Max(1L, _entries.Max(entry => entry.DurationSeconds));
+            for (var i = 0; i < _entries.Count; i++)
+            {
+                DrawRow(e.Graphics, _entries[i], i, maxSeconds);
+            }
+        }
+
+        private void DrawRow(Graphics graphics, AppUsageRow entry, int index, long maxSeconds)
+        {
+            var y = index * 47;
+            var iconBounds = new Rectangle(0, y + 4, 34, 34);
+            var iconColor = IconColor(index);
+            using (var iconBrush = new SolidBrush(iconColor))
+            using (var iconPath = CreateRoundRect(iconBounds, 10))
+            {
+                graphics.FillPath(iconBrush, iconPath);
+            }
+
+            using (var iconFont = AppFonts.Create(11F, FontStyle.Bold))
+            using (var iconTextBrush = new SolidBrush(Color.White))
+            using (var iconFormat = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+            {
+                graphics.DrawString(Initial(entry.AppName), iconFont, iconTextBrush, iconBounds, iconFormat);
+            }
+
+            var textLeft = 48;
+            var durationWidth = 64;
+            var badgeWidth = 42;
+            var badgeGap = 8;
+            using var nameFont = AppFonts.Create(10F, FontStyle.Regular);
+            var name = entry.AppName;
+            var source = entry.SourceLabel;
+            var badgeX = Width - durationWidth - badgeWidth - 14;
+            var nameBounds = new Rectangle(textLeft, y, Math.Max(40, badgeX - badgeGap - textLeft), 24);
+            TextRenderer.DrawText(
+                graphics,
+                name,
+                nameFont,
+                nameBounds,
+                TextPrimary,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
+            DrawSourceBadge(graphics, new Point(badgeX, y + 1), source);
+
+            using var durationFont = AppFonts.Create(9F, FontStyle.Bold);
+            using (var durationBrush = new SolidBrush(Color.FromArgb(142, 148, 160)))
+            using (var durationFormat = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center })
+            {
+                graphics.DrawString(
+                    FormatDuration(entry.DurationSeconds),
+                    durationFont,
+                    durationBrush,
+                    new RectangleF(Width - durationWidth, y - 2, durationWidth, 30),
+                    durationFormat);
+            }
+
+            var track = new Rectangle(textLeft, y + 33, Math.Max(40, badgeX - textLeft - 8), 7);
+            using (var trackBrush = new SolidBrush(Color.FromArgb(232, 243, 239)))
+            using (var fillBrush = new SolidBrush(Color.FromArgb(66, 133, 244)))
+            using (var trackPath = CreateRoundRect(track, 4))
+            {
+                graphics.FillPath(trackBrush, trackPath);
+                var fillWidth = (int)Math.Max(8, track.Width * (entry.DurationSeconds / (double)maxSeconds));
+                using var fillPath = CreateRoundRect(new Rectangle(track.X, track.Y, Math.Min(track.Width, fillWidth), track.Height), 4);
+                graphics.FillPath(fillBrush, fillPath);
+            }
+        }
+
+        private static void DrawSourceBadge(Graphics graphics, Point location, string source)
+        {
+            var bounds = new Rectangle(location.X, location.Y, 42, 22);
+            using (var path = CreateRoundRect(bounds, 9))
+            using (var fill = new SolidBrush(SoftGreen))
+            using (var border = new Pen(BorderColor))
+            {
+                graphics.FillPath(fill, path);
+                graphics.DrawPath(border, path);
+            }
+
+            using var font = AppFonts.Create(7.2F, FontStyle.Bold);
+            using var brush = new SolidBrush(AccentGreen);
+            using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+            graphics.DrawString(source, font, brush, bounds, format);
+        }
+
+        private static string Initial(string value)
+        {
+            var text = string.IsNullOrWhiteSpace(value) ? "A" : value.Trim();
+            return text.Length <= 1 ? text : text.Substring(0, 1).ToUpperInvariant();
+        }
+
+        private static Color IconColor(int index)
+        {
+            return (index % 4) switch
+            {
+                0 => Color.FromArgb(66, 133, 244),
+                1 => Color.FromArgb(22, 196, 102),
+                2 => Color.FromArgb(18, 125, 110),
+                _ => Color.FromArgb(239, 39, 67)
+            };
         }
     }
 

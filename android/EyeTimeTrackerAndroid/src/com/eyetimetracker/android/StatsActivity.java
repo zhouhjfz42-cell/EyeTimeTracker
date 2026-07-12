@@ -49,6 +49,7 @@ public final class StatsActivity extends Activity {
     private LocalDate rangeStart;
     private LocalDate rangeEnd;
     private boolean familyChildStatsMode;
+    private int statsBuildGeneration;
 
     @Override protected void onCreate(Bundle bundle) {
         super.onCreate(bundle);
@@ -62,8 +63,24 @@ public final class StatsActivity extends Activity {
         selectedMonthStart = today.withDayOfMonth(1);
         rangeStart = selectedMonthStart;
         rangeEnd = today;
-        setContentView(buildUi());
-        runSyncOnOpen();
+        reloadStatsUi(true);
+    }
+
+    private void reloadStatsUi(boolean syncAfterLoad) {
+        int generation = ++statsBuildGeneration;
+        setContentView(buildUi(placeholderStatsPayload(LocalDate.now())));
+        new Thread(() -> {
+            StatsPayload payload = loadStatsPayload();
+            runOnUiThread(() -> {
+                if (isFinishing() || generation != statsBuildGeneration) {
+                    return;
+                }
+                setContentView(buildUi(payload));
+                if (syncAfterLoad) {
+                    runSyncOnOpen();
+                }
+            });
+        }, "EyeTimeStatsBuild").start();
     }
 
     private void runSyncOnOpen() {
@@ -86,35 +103,53 @@ public final class StatsActivity extends Activity {
         }, "EyeTimeStatsSync").start();
     }
 
-    private View buildUi() {
+    private StatsPayload loadStatsPayload() {
         long totalStartedAt = System.currentTimeMillis();
         long stepStartedAt = totalStartedAt;
-        Log.i(DIAG_TAG, "StatsActivity buildUi start day=" + selectedDay
+        Log.i(DIAG_TAG, "StatsActivity loadStatsPayload start day=" + selectedDay
                 + " week=" + selectedWeekStart
                 + " month=" + selectedMonthStart
                 + " range=" + rangeStart + ".." + rangeEnd
                 + " " + store.diagnosticSnapshot());
         LocalDate today = LocalDate.now();
-        DailySummary todaySummary = statsDay(selectedDay);
-        stepStartedAt = logStep("StatsActivity get selected day", stepStartedAt);
-        DeviceUsageBreakdown deviceBreakdown = statsDeviceBreakdown(selectedDay);
-        stepStartedAt = logStep("StatsActivity get selected device breakdown", stepStartedAt);
-        LocalDate summaryDate = selectedDay.equals(today) ? today.minusDays(1) : selectedDay;
-        DailySummary summary = statsDay(summaryDate);
-        DeviceUsageBreakdown summaryBreakdown = statsDeviceBreakdown(summaryDate);
-        List<DailySummary> week = statsDays(selectedWeekStart, selectedWeekStart.plusDays(6));
-        stepStartedAt = logStep("StatsActivity get week summaries", stepStartedAt);
-        List<DeviceUsageBreakdown> weekBreakdowns = statsDeviceBreakdowns(selectedWeekStart, selectedWeekStart.plusDays(6));
-        stepStartedAt = logStep("StatsActivity get week breakdowns", stepStartedAt);
         LocalDate monthEnd = selectedMonthStart.getYear() == today.getYear() && selectedMonthStart.getMonthValue() == today.getMonthValue()
                 ? today
                 : selectedMonthStart.plusMonths(1).minusDays(1);
-        List<DailySummary> month = statsDays(selectedMonthStart, monthEnd);
-        stepStartedAt = logStep("StatsActivity get month summaries", stepStartedAt);
         LocalDate firstRange = rangeStart.isAfter(rangeEnd) ? rangeEnd : rangeStart;
         LocalDate lastRange = rangeStart.isAfter(rangeEnd) ? rangeStart : rangeEnd;
-        List<Long> sessions = collectSessions(statsDays(firstRange, lastRange));
-        stepStartedAt = logStep("StatsActivity get range sessions", stepStartedAt);
+
+        LocalDate allStart = minDate(selectedDay, selectedWeekStart, selectedMonthStart, firstRange);
+        LocalDate allEnd = maxDate(selectedDay, selectedWeekStart.plusDays(6), monthEnd, lastRange);
+        List<DailySummary> allSummaries = statsDays(allStart, allEnd);
+        stepStartedAt = logStep("StatsActivity get combined summaries", stepStartedAt);
+        List<DeviceUsageBreakdown> allBreakdowns = statsDeviceBreakdowns(allStart, allEnd);
+        stepStartedAt = logStep("StatsActivity get combined breakdowns", stepStartedAt);
+
+        DailySummary todaySummary = summaryAt(allSummaries, allStart, selectedDay);
+        DeviceUsageBreakdown deviceBreakdown = breakdownAt(allBreakdowns, allStart, selectedDay);
+        List<DailySummary> week = summariesBetween(allSummaries, allStart, selectedWeekStart, selectedWeekStart.plusDays(6));
+        List<DeviceUsageBreakdown> weekBreakdowns = breakdownsBetween(allBreakdowns, allStart, selectedWeekStart, selectedWeekStart.plusDays(6));
+        List<DailySummary> month = summariesBetween(allSummaries, allStart, selectedMonthStart, monthEnd);
+        DailySummary rangeSummary = combineSummaries(summariesBetween(allSummaries, allStart, firstRange, lastRange), firstRange + ".." + lastRange);
+        DeviceUsageBreakdown rangeBreakdown = combineBreakdowns(breakdownsBetween(allBreakdowns, allStart, firstRange, lastRange));
+
+        List<AppUsageEntry> appUsageEntries = statsAppUsageEntries(selectedDay, selectedDay);
+        stepStartedAt = logStep("StatsActivity get app usage entries", stepStartedAt);
+        Log.i(DIAG_TAG, "StatsActivity loadStatsPayload end totalMs=" + elapsed(totalStartedAt));
+        return new StatsPayload(today, todaySummary, deviceBreakdown, week, weekBreakdowns, month, appUsageEntries, rangeSummary, rangeBreakdown);
+    }
+
+    private View buildUi(StatsPayload payload) {
+        long totalStartedAt = System.currentTimeMillis();
+        LocalDate today = payload.today;
+        DailySummary todaySummary = payload.todaySummary;
+        DeviceUsageBreakdown deviceBreakdown = payload.deviceBreakdown;
+        List<DailySummary> week = payload.week;
+        List<DeviceUsageBreakdown> weekBreakdowns = payload.weekBreakdowns;
+        List<DailySummary> month = payload.month;
+        List<AppUsageEntry> appUsageEntries = payload.appUsageEntries;
+        DailySummary rangeSummary = payload.rangeSummary;
+        DeviceUsageBreakdown rangeBreakdown = payload.rangeBreakdown;
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
@@ -164,10 +199,7 @@ public final class StatsActivity extends Activity {
         dayPanel.addView(insightRow, matchWrapTop(8));
         addInsightCard(insightRow, insightInfoCard(getString(R.string.stats_daily_insight_peak), peakHour(todaySummary.hourlySeconds)), 0);
         addInsightCard(insightRow, insightInfoCard(getString(R.string.stats_daily_insight_night), formatDuration(nightSeconds(todaySummary.hourlySeconds))), 1);
-        dayPanel.addView(summaryCard(
-                selectedDay.equals(today) ? getString(R.string.stats_daily_summary_yesterday) : getString(R.string.stats_daily_summary_day),
-                summary,
-                summaryBreakdown), matchWrapTop(10));
+        dayPanel.addView(appUsageCard(appUsageEntries, 4), matchWrapTop(10));
 
         LinearLayout weekPanel = panel();
         root.addView(weekPanel, matchWrapTop(18));
@@ -188,16 +220,11 @@ public final class StatsActivity extends Activity {
         monthPanel.addView(monthView, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(190)));
         monthPanel.addView(note(formatResource(R.string.stats_month_recorded_days, "count", activeDays(month))), matchWrapTop(8));
 
-        LinearLayout sessionsPanel = panel();
-        root.addView(sessionsPanel, matchWrapTop(18));
-        TextView rangePill = addPanelHead(sessionsPanel, getString(R.string.stats_sessions_title), selectorText(compactDate(rangeStart)) + " " + selectorText(compactDate(rangeEnd)));
+        LinearLayout summaryPanel = panel();
+        root.addView(summaryPanel, matchWrapTop(18));
+        TextView rangePill = addPanelHead(summaryPanel, getString(R.string.stats_summary_title), selectorText(compactDate(rangeStart)) + " " + selectorText(compactDate(rangeEnd)));
         rangePill.setOnClickListener(v -> showDateSheet(DatePickMode.RANGE));
-        ContinuousBandsView bandsView = new ContinuousBandsView(this);
-        bandsView.setSessions(sessions);
-        sessionsPanel.addView(bandsView, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(150)));
-        sessionsPanel.addView(note(sessions.isEmpty()
-                ? getString(R.string.stats_sessions_empty)
-                : formatResource(R.string.stats_sessions_advice, "duration", formatDuration(max(sessions)))), matchWrapTop(8));
+        summaryPanel.addView(summaryCard("", rangeSummary, rangeBreakdown), matchWrapTop(12));
 
         Log.i(DIAG_TAG, "StatsActivity buildUi end totalMs=" + elapsed(totalStartedAt));
         return scroll;
@@ -227,6 +254,141 @@ public final class StatsActivity extends Activity {
 
     private List<DeviceUsageBreakdown> statsDeviceBreakdowns(LocalDate start, LocalDate end) {
         return familyChildStatsMode ? store.getFamilyChildDeviceBreakdowns(start, end) : store.getDeviceBreakdowns(start, end);
+    }
+
+    private List<AppUsageEntry> statsAppUsageEntries(LocalDate start, LocalDate end) {
+        return familyChildStatsMode ? store.getFamilyChildAppUsageEntries(start, end) : store.getAppUsageEntries(start, end);
+    }
+
+    private StatsPayload placeholderStatsPayload(LocalDate today) {
+        LocalDate monthEnd = selectedMonthStart.getYear() == today.getYear() && selectedMonthStart.getMonthValue() == today.getMonthValue()
+                ? today
+                : selectedMonthStart.plusMonths(1).minusDays(1);
+        LocalDate firstRange = rangeStart.isAfter(rangeEnd) ? rangeEnd : rangeStart;
+        LocalDate lastRange = rangeStart.isAfter(rangeEnd) ? rangeStart : rangeEnd;
+        return new StatsPayload(
+                today,
+                zeroSummary(selectedDay),
+                new DeviceUsageBreakdown(0L, 0L),
+                summariesBetween(new ArrayList<>(), selectedWeekStart, selectedWeekStart, selectedWeekStart.plusDays(6)),
+                breakdownsBetween(new ArrayList<>(), selectedWeekStart, selectedWeekStart, selectedWeekStart.plusDays(6)),
+                summariesBetween(new ArrayList<>(), selectedMonthStart, selectedMonthStart, monthEnd),
+                new ArrayList<>(),
+                zeroSummary(firstRange + ".." + lastRange),
+                new DeviceUsageBreakdown(0L, 0L));
+    }
+
+    private static LocalDate minDate(LocalDate first, LocalDate... rest) {
+        LocalDate value = first;
+        for (LocalDate date : rest) {
+            if (date != null && date.isBefore(value)) {
+                value = date;
+            }
+        }
+        return value;
+    }
+
+    private static LocalDate maxDate(LocalDate first, LocalDate... rest) {
+        LocalDate value = first;
+        for (LocalDate date : rest) {
+            if (date != null && date.isAfter(value)) {
+                value = date;
+            }
+        }
+        return value;
+    }
+
+    private static DailySummary summaryAt(List<DailySummary> summaries, LocalDate start, LocalDate date) {
+        int index = (int) (date.toEpochDay() - start.toEpochDay());
+        if (summaries != null && index >= 0 && index < summaries.size() && summaries.get(index) != null) {
+            return summaries.get(index);
+        }
+        return zeroSummary(date);
+    }
+
+    private static DeviceUsageBreakdown breakdownAt(List<DeviceUsageBreakdown> breakdowns, LocalDate start, LocalDate date) {
+        int index = (int) (date.toEpochDay() - start.toEpochDay());
+        if (breakdowns != null && index >= 0 && index < breakdowns.size() && breakdowns.get(index) != null) {
+            return breakdowns.get(index);
+        }
+        return new DeviceUsageBreakdown(0L, 0L);
+    }
+
+    private static List<DailySummary> summariesBetween(List<DailySummary> summaries, LocalDate sourceStart, LocalDate start, LocalDate end) {
+        List<DailySummary> values = new ArrayList<>();
+        for (LocalDate cursor = start; !cursor.isAfter(end); cursor = cursor.plusDays(1)) {
+            values.add(summaryAt(summaries, sourceStart, cursor));
+        }
+        return values;
+    }
+
+    private static List<DeviceUsageBreakdown> breakdownsBetween(List<DeviceUsageBreakdown> breakdowns, LocalDate sourceStart, LocalDate start, LocalDate end) {
+        List<DeviceUsageBreakdown> values = new ArrayList<>();
+        for (LocalDate cursor = start; !cursor.isAfter(end); cursor = cursor.plusDays(1)) {
+            values.add(breakdownAt(breakdowns, sourceStart, cursor));
+        }
+        return values;
+    }
+
+    private static DailySummary zeroSummary(LocalDate date) {
+        return zeroSummary(date.toString());
+    }
+
+    private static DailySummary zeroSummary(String date) {
+        return new DailySummary(date, 0L, false, 0);
+    }
+
+    private DailySummary combineSummaries(List<DailySummary> summaries, String date) {
+        long totalSeconds = 0L;
+        long currentSessionSeconds = 0L;
+        long[] hourly = new long[24];
+        List<Long> sessions = new ArrayList<>();
+        boolean reminderShown = false;
+        int lastReminderStep = 0;
+        if (summaries != null) {
+            for (DailySummary summary : summaries) {
+                if (summary == null) {
+                    continue;
+                }
+                totalSeconds += summary.totalSeconds;
+                currentSessionSeconds += summary.currentSessionSeconds;
+                reminderShown |= summary.reminderShown;
+                lastReminderStep = Math.max(lastReminderStep, summary.lastReminderStep);
+                for (int i = 0; i < hourly.length && i < summary.hourlySeconds.length; i++) {
+                    hourly[i] += summary.hourlySeconds[i];
+                }
+                for (long seconds : summary.sessionSeconds) {
+                    if (seconds > 0L) {
+                        sessions.add(seconds);
+                    }
+                }
+            }
+        }
+
+        long[] sessionValues = new long[sessions.size()];
+        for (int i = 0; i < sessions.size(); i++) {
+            sessionValues[i] = sessions.get(i);
+        }
+        return new DailySummary(date, totalSeconds, hourly, sessionValues, currentSessionSeconds, reminderShown, lastReminderStep);
+    }
+
+    private DeviceUsageBreakdown combineBreakdowns(List<DeviceUsageBreakdown> breakdowns) {
+        long pcSeconds = 0L;
+        long phoneSeconds = 0L;
+        long[] pcHourly = new long[24];
+        long[] phoneHourly = new long[24];
+        for (DeviceUsageBreakdown breakdown : breakdowns) {
+            if (breakdown == null) {
+                continue;
+            }
+            pcSeconds += breakdown.pcSeconds;
+            phoneSeconds += breakdown.phoneSeconds;
+            for (int i = 0; i < 24; i++) {
+                pcHourly[i] += breakdown.pcHourlySeconds[i];
+                phoneHourly[i] += breakdown.phoneHourlySeconds[i];
+            }
+        }
+        return new DeviceUsageBreakdown(pcSeconds, phoneSeconds, pcHourly, phoneHourly);
     }
 
     private TextView addPanelHead(LinearLayout parent, String title, String pillText) {
@@ -432,19 +594,19 @@ public final class StatsActivity extends Activity {
         if (mode == DatePickMode.DAY) {
             selectedDay = date;
             dialog.dismiss();
-            setContentView(buildUi());
+            reloadStatsUi(false);
             return;
         }
         if (mode == DatePickMode.WEEK) {
             selectedWeekStart = startOfWeek(date);
             dialog.dismiss();
-            setContentView(buildUi());
+            reloadStatsUi(false);
             return;
         }
         if (mode == DatePickMode.MONTH) {
             selectedMonthStart = date.withDayOfMonth(1);
             dialog.dismiss();
-            setContentView(buildUi());
+            reloadStatsUi(false);
             return;
         }
 
@@ -463,7 +625,7 @@ public final class StatsActivity extends Activity {
             rangeEnd = date;
         }
         dialog.dismiss();
-        setContentView(buildUi());
+        reloadStatsUi(false);
     }
 
     private static LocalDate startOfWeek(LocalDate date) {
@@ -536,13 +698,15 @@ public final class StatsActivity extends Activity {
         card.setPadding(dp(14), dp(12), dp(14), dp(12));
         card.setBackground(rounded(Color.WHITE, dp(16), COLOR_LINE, 1));
 
-        TextView titleView = text(title, 20, COLOR_TEXT, true);
-        titleView.setIncludeFontPadding(false);
-        card.addView(titleView, matchWrap());
+        if (title != null && !title.trim().isEmpty()) {
+            TextView titleView = text(title, 20, COLOR_TEXT, true);
+            titleView.setIncludeFontPadding(false);
+            card.addView(titleView, matchWrap());
+        }
 
         TextView peakText = text(formatResource(R.string.stats_daily_summary_peak_short, "range", peakHour(summary.hourlySeconds)), 14, COLOR_MUTED, false);
         peakText.setLineSpacing(0f, 1.15f);
-        card.addView(peakText, matchWrapTop(8));
+        card.addView(peakText, matchWrapTop(title == null || title.trim().isEmpty() ? 0 : 8));
 
         TextView longestText = text(formatResource(R.string.stats_daily_summary_longest_short, "duration", formatDuration(longestSession(summary))), 14, COLOR_MUTED, false);
         longestText.setLineSpacing(0f, 1.15f);
@@ -563,6 +727,112 @@ public final class StatsActivity extends Activity {
         careText.setLineSpacing(0f, 1.15f);
         card.addView(careText, matchWrapTop(8));
         return card;
+    }
+
+    private LinearLayout appUsageCard(List<AppUsageEntry> entries, int maxRows) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(14), dp(12), dp(14), dp(12));
+        card.setBackground(rounded(Color.WHITE, dp(16), COLOR_LINE, 1));
+        TextView titleView = text(getString(R.string.stats_app_usage_title), 20, COLOR_TEXT, true);
+        titleView.setIncludeFontPadding(false);
+        card.addView(titleView, matchWrap());
+        addAppUsageRanking(card, entries, maxRows);
+        return card;
+    }
+
+    private void addAppUsageRanking(LinearLayout parent, List<AppUsageEntry> entries, int maxRows) {
+        List<AppUsageEntry> ranked = rankAppUsage(entries, maxRows);
+        if (ranked.isEmpty()) {
+            parent.addView(note(getString(R.string.stats_app_usage_empty)), matchWrapTop(12));
+            return;
+        }
+
+        long maxSeconds = 1L;
+        for (AppUsageEntry entry : ranked) {
+            maxSeconds = Math.max(maxSeconds, entry.durationSeconds);
+        }
+        for (int i = 0; i < ranked.size(); i++) {
+            parent.addView(appUsageRow(ranked.get(i), maxSeconds, i), matchWrapTop(i == 0 ? 12 : 14));
+        }
+    }
+
+    private LinearLayout appUsageRow(AppUsageEntry entry, long maxSeconds, int index) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView icon = text(initial(entry.appName.isEmpty() ? entry.appId : entry.appName), 18, Color.WHITE, true);
+        icon.setGravity(Gravity.CENTER);
+        icon.setBackground(rounded(appIconColor(index), dp(14), Color.TRANSPARENT, 0));
+        row.addView(icon, new LinearLayout.LayoutParams(dp(48), dp(48)));
+
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams contentParams = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        contentParams.leftMargin = dp(12);
+        row.addView(content, contentParams);
+
+        LinearLayout nameRow = new LinearLayout(this);
+        nameRow.setOrientation(LinearLayout.HORIZONTAL);
+        nameRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView name = text(entry.appName.isEmpty() ? entry.appId : entry.appName, 18, COLOR_TEXT, false);
+        name.setSingleLine(true);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        nameRow.addView(name, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        TextView source = text(sourceLabel(entry), 12, COLOR_GREEN, true);
+        source.setGravity(Gravity.CENTER);
+        source.setBackground(rounded(COLOR_SOFT, dp(999), COLOR_LINE, 1));
+        LinearLayout.LayoutParams sourceParams = new LinearLayout.LayoutParams(dp(42), dp(23));
+        sourceParams.leftMargin = dp(4);
+        nameRow.addView(source, sourceParams);
+        TextView duration = text(formatDuration(entry.durationSeconds), 16, Color.rgb(142, 148, 160), true);
+        duration.setGravity(Gravity.RIGHT);
+        LinearLayout.LayoutParams durationParams = new LinearLayout.LayoutParams(dp(76), LinearLayout.LayoutParams.WRAP_CONTENT);
+        durationParams.leftMargin = dp(6);
+        nameRow.addView(duration, durationParams);
+        content.addView(nameRow, matchWrap());
+
+        AppUsageBarView bar = new AppUsageBarView(this);
+        bar.setProgress((float) (entry.durationSeconds / (double) Math.max(1L, maxSeconds)));
+        content.addView(bar, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(14)));
+        return row;
+    }
+
+    private static List<AppUsageEntry> rankAppUsage(List<AppUsageEntry> entries, int maxRows) {
+        List<AppUsageEntry> values = new ArrayList<>();
+        if (entries != null) {
+            for (AppUsageEntry entry : entries) {
+                if (entry != null && entry.durationSeconds > 0L) {
+                    values.add(entry);
+                }
+            }
+        }
+        values.sort((left, right) -> Long.compare(right.durationSeconds, left.durationSeconds));
+        if (values.size() <= maxRows) {
+            return values;
+        }
+        return new ArrayList<>(values.subList(0, maxRows));
+    }
+
+    private String sourceLabel(AppUsageEntry entry) {
+        return "pc".equalsIgnoreCase(entry.source) || "windows".equalsIgnoreCase(entry.platform)
+                ? getString(R.string.common_pc)
+                : getString(R.string.common_phone);
+    }
+
+    private static String initial(String value) {
+        String text = value == null || value.trim().isEmpty() ? "A" : value.trim();
+        return text.substring(0, 1).toUpperCase(java.util.Locale.ROOT);
+    }
+
+    private static int appIconColor(int index) {
+        switch (index % 4) {
+            case 0: return Color.rgb(66, 133, 244);
+            case 1: return Color.rgb(22, 196, 102);
+            case 2: return Color.rgb(18, 125, 110);
+            default: return Color.rgb(239, 39, 67);
+        }
     }
 
     private LinearLayout deviceLegend() {
@@ -843,6 +1113,39 @@ public final class StatsActivity extends Activity {
             this.text = text;
             this.x = x;
             this.y = y;
+        }
+    }
+
+    private static final class StatsPayload {
+        final LocalDate today;
+        final DailySummary todaySummary;
+        final DeviceUsageBreakdown deviceBreakdown;
+        final List<DailySummary> week;
+        final List<DeviceUsageBreakdown> weekBreakdowns;
+        final List<DailySummary> month;
+        final List<AppUsageEntry> appUsageEntries;
+        final DailySummary rangeSummary;
+        final DeviceUsageBreakdown rangeBreakdown;
+
+        StatsPayload(
+                LocalDate today,
+                DailySummary todaySummary,
+                DeviceUsageBreakdown deviceBreakdown,
+                List<DailySummary> week,
+                List<DeviceUsageBreakdown> weekBreakdowns,
+                List<DailySummary> month,
+                List<AppUsageEntry> appUsageEntries,
+                DailySummary rangeSummary,
+                DeviceUsageBreakdown rangeBreakdown) {
+            this.today = today;
+            this.todaySummary = todaySummary;
+            this.deviceBreakdown = deviceBreakdown;
+            this.week = week;
+            this.weekBreakdowns = weekBreakdowns;
+            this.month = month;
+            this.appUsageEntries = appUsageEntries;
+            this.rangeSummary = rangeSummary;
+            this.rangeBreakdown = rangeBreakdown;
         }
     }
 
@@ -1308,6 +1611,38 @@ public final class StatsActivity extends Activity {
                 paint.setColor(COLOR_TEXT);
                 canvas.drawText(formatResource(getContext(), R.string.stats_sessions_count, "count", counts[i]), getWidth() - dpLocal(60), y, paint);
             }
+        }
+
+        private float dpLocal(float value) {
+            return value * getResources().getDisplayMetrics().density;
+        }
+    }
+
+    public static final class AppUsageBarView extends View {
+        private float progress;
+
+        public AppUsageBarView(android.content.Context context) {
+            super(context);
+        }
+
+        public void setProgress(float value) {
+            progress = Math.max(0f, Math.min(1f, value));
+            invalidate();
+        }
+
+        @Override protected void onDraw(Canvas canvas) {
+            Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            float radius = dpLocal(4);
+            float centerY = getHeight() / 2f;
+            RectF track = new RectF(0, centerY - radius, getWidth(), centerY + radius);
+            paint.setColor(Color.rgb(232, 243, 239));
+            canvas.drawRoundRect(track, radius, radius, paint);
+            if (progress <= 0f) {
+                return;
+            }
+            RectF fill = new RectF(0, centerY - radius, Math.max(dpLocal(8), getWidth() * progress), centerY + radius);
+            paint.setColor(Color.rgb(66, 133, 244));
+            canvas.drawRoundRect(fill, radius, radius, paint);
         }
 
         private float dpLocal(float value) {

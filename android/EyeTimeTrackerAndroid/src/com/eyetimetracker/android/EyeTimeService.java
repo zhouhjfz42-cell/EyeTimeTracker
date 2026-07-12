@@ -20,9 +20,11 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.util.Log;
 import java.time.LocalDate;
 
 public final class EyeTimeService extends Service implements SensorEventListener {
+    private static final String DIAG_TAG = "EyeTimeDiag";
     public static final String ACTION_STATE_CHANGED = "com.eyetimetracker.android.STATE_CHANGED";
     public static final String ACTION_REMINDER = "com.eyetimetracker.android.REMINDER";
     public static final String ACTION_START = "com.eyetimetracker.android.START";
@@ -38,6 +40,7 @@ public final class EyeTimeService extends Service implements SensorEventListener
     private static final long TICK_MS = 10_000L;
     private static final long MOTION_THRESHOLD_MS = 180_000L;
     private static final long MAX_COUNTABLE_TICK_MS = 30_000L;
+    private static final long FAMILY_BACKGROUND_UPLOAD_INTERVAL_MS = 60_000L;
     private static final float MOTION_DELTA_THRESHOLD = 0.7f;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -50,7 +53,9 @@ public final class EyeTimeService extends Service implements SensorEventListener
 
     private EyeTimeStore store;
     private AndroidSyncRunner syncRunner;
+    private AndroidForegroundAppProvider foregroundAppProvider;
     private AndroidSyncTriggerPolicy syncPolicy;
+    private FamilyStatsUploadRequestServer familyUploadRequestServer;
     private SensorManager sensorManager;
     private AudioManager audioManager;
     private PowerManager powerManager;
@@ -65,11 +70,14 @@ public final class EyeTimeService extends Service implements SensorEventListener
     private long currentSessionStartedUnixSeconds;
     private boolean syncInFlight;
     private boolean statsCacheWarmInFlight;
+    private boolean familyStatsUploadInFlight;
+    private long lastFamilyStatsUploadStartedAt = Long.MIN_VALUE;
 
     @Override public void onCreate() {
         super.onCreate();
         store = new EyeTimeStore(this);
-        syncRunner = new AndroidSyncRunner(store);
+        syncRunner = new AndroidSyncRunner(store, this);
+        foregroundAppProvider = new AndroidForegroundAppProvider(this);
         syncPolicy = new AndroidSyncTriggerPolicy();
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
@@ -87,6 +95,7 @@ public final class EyeTimeService extends Service implements SensorEventListener
         }
         startForeground(FOREGROUND_ID, buildStatusNotification(getString(R.string.sync_service_running)));
         maybeWarmPastDailyStatsCache(LocalDate.now());
+        ensureFamilyStatsUploadRequestServer();
         handler.removeCallbacks(tickRunnable);
         handler.post(tickRunnable);
         return START_STICKY;
@@ -97,6 +106,7 @@ public final class EyeTimeService extends Service implements SensorEventListener
         if (sensorManager != null) {
             sensorManager.unregisterListener(this);
         }
+        stopFamilyStatsUploadRequestServer();
         super.onDestroy();
     }
 
@@ -150,7 +160,12 @@ public final class EyeTimeService extends Service implements SensorEventListener
         store.saveLocalReminderState(counting, currentSessionStartedUnixSeconds);
         boolean countedThisTick = false;
         if (counting && elapsed > 0L && elapsed <= MAX_COUNTABLE_TICK_MS) {
-            store.addSeconds(LocalDate.now(), elapsed / 1000L, now / 1000L, "android-screen");
+            long countedSeconds = elapsed / 1000L;
+            store.addSeconds(LocalDate.now(), countedSeconds, now / 1000L, "android-screen");
+            AndroidForegroundAppProvider.AppSnapshot foregroundApp = foregroundAppProvider == null ? null : foregroundAppProvider.getCurrent(now);
+            if (foregroundApp != null) {
+                store.addAppUsage(LocalDate.now(), countedSeconds, foregroundApp.appId, foregroundApp.appName);
+            }
             syncPolicy.markLocalChange(now);
             countedThisTick = true;
         } else if (!counting) {
@@ -188,6 +203,8 @@ public final class EyeTimeService extends Service implements SensorEventListener
                 today.reminderShown,
                 today.lastReminderStep);
         maybeRunSync(now, countedThisTick, upcomingReminderSync);
+        ensureFamilyStatsUploadRequestServer();
+        maybeRunFamilyStatsUpload(now, countedThisTick, false);
     }
 
     private void maybeWarmPastDailyStatsCache(LocalDate today) {
@@ -232,6 +249,76 @@ public final class EyeTimeService extends Service implements SensorEventListener
                 syncInFlight = false;
             }
         }, "EyeTimeSync").start();
+    }
+
+    private void ensureFamilyStatsUploadRequestServer() {
+        if (!isChildFamilyMode()) {
+            stopFamilyStatsUploadRequestServer();
+            return;
+        }
+        if (familyUploadRequestServer != null) {
+            return;
+        }
+        familyUploadRequestServer = new FamilyStatsUploadRequestServer(store);
+        familyUploadRequestServer.start(new FamilyStatsUploadRequestServer.Listener() {
+            @Override public void onStarted() {
+                Log.i(DIAG_TAG, "FamilyStatsUploadRequestServer started");
+            }
+
+            @Override public void onUploadRequested() {
+                Log.i(DIAG_TAG, "FamilyStatsUploadRequestServer upload requested");
+                maybeRunFamilyStatsUpload(System.currentTimeMillis(), false, true);
+            }
+
+            @Override public void onError(String message) {
+                Log.i(DIAG_TAG, "FamilyStatsUploadRequestServer error=" + message);
+            }
+        });
+    }
+
+    private void stopFamilyStatsUploadRequestServer() {
+        if (familyUploadRequestServer != null) {
+            familyUploadRequestServer.stop();
+            familyUploadRequestServer = null;
+        }
+    }
+
+    private boolean isChildFamilyMode() {
+        return store != null
+                && store.getProductMode() == ProductMode.FAMILY
+                && store.getDeviceRole() == DeviceRole.CHILD_DEVICE;
+    }
+
+    private void maybeRunFamilyStatsUpload(long now, boolean countedThisTick, boolean force) {
+        if (!isChildFamilyMode() || familyStatsUploadInFlight) {
+            return;
+        }
+        if (!force) {
+            if (!counting || !countedThisTick) {
+                return;
+            }
+            if (lastFamilyStatsUploadStartedAt != Long.MIN_VALUE
+                    && now - lastFamilyStatsUploadStartedAt < FAMILY_BACKGROUND_UPLOAD_INTERVAL_MS) {
+                return;
+            }
+        }
+        familyStatsUploadInFlight = true;
+        lastFamilyStatsUploadStartedAt = now;
+        new Thread(() -> {
+            try {
+                FamilyStatsLanClient client = force
+                        ? new FamilyStatsLanClient()
+                        : new FamilyStatsLanClient(1200, 1800, 3500, false);
+                FamilyStatsLanClient.UploadResult result = client.upload(store);
+                Log.i(DIAG_TAG, "FamilyStats background upload success=" + result.success
+                        + " skipped=" + result.skipped
+                        + " changed=" + result.changedSegments
+                        + " force=" + force
+                        + " error=" + result.error);
+            } finally {
+                familyStatsUploadInFlight = false;
+            }
+        }, force ? "FamilyStatsUploadNow" : "FamilyStatsBackgroundUpload").start();
     }
 
     private void registerSensor() {
