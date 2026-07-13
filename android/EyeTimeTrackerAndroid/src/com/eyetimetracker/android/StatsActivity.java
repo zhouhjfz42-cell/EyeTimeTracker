@@ -50,6 +50,11 @@ public final class StatsActivity extends Activity {
     private LocalDate rangeEnd;
     private boolean familyChildStatsMode;
     private int statsBuildGeneration;
+    private int panelRefreshGeneration;
+    private LinearLayout dayPanel;
+    private LinearLayout weekPanel;
+    private LinearLayout monthPanel;
+    private LinearLayout summaryPanel;
 
     @Override protected void onCreate(Bundle bundle) {
         super.onCreate(bundle);
@@ -166,13 +171,33 @@ public final class StatsActivity extends Activity {
         TextView subtitle = text(getString(familyChildStatsMode ? R.string.stats_family_child_subtitle : R.string.stats_subtitle), 16, COLOR_MUTED, false);
         root.addView(subtitle, matchWrapTop(10));
 
-        LinearLayout dayPanel = panel();
+        dayPanel = panel();
         root.addView(dayPanel, matchWrapTop(24));
-        TextView dayPill = addPanelHead(dayPanel, getString(R.string.stats_daily_title), selectorText(dateLabel(selectedDay, today)));
+        populateDayPanel(dayPanel, today, todaySummary, deviceBreakdown, appUsageEntries);
+
+        weekPanel = panel();
+        root.addView(weekPanel, matchWrapTop(18));
+        populateWeekPanel(weekPanel, today, week, weekBreakdowns);
+
+        monthPanel = panel();
+        root.addView(monthPanel, matchWrapTop(18));
+        populateMonthPanel(monthPanel, today, month);
+
+        summaryPanel = panel();
+        root.addView(summaryPanel, matchWrapTop(18));
+        populateSummaryPanel(summaryPanel, rangeSummary, rangeBreakdown);
+
+        Log.i(DIAG_TAG, "StatsActivity buildUi end totalMs=" + elapsed(totalStartedAt));
+        return scroll;
+    }
+
+    private void populateDayPanel(LinearLayout target, LocalDate today, DailySummary todaySummary, DeviceUsageBreakdown deviceBreakdown, List<AppUsageEntry> appUsageEntries) {
+        target.removeAllViews();
+        TextView dayPill = addPanelHead(target, getString(R.string.stats_daily_title), selectorText(dateLabel(selectedDay, today)));
         dayPill.setOnClickListener(v -> showDateSheet(DatePickMode.DAY));
         GridLayout metrics = new GridLayout(this);
         metrics.setColumnCount(2);
-        dayPanel.addView(metrics, matchWrapTop(12));
+        target.addView(metrics, matchWrapTop(12));
         addCard(metrics, metricCard(getString(R.string.stats_daily_metric_total), formatDuration(todaySummary.totalSeconds), colorForToday(todaySummary.totalSeconds)), 0, 0);
         addCard(metrics, metricCard(getString(R.string.stats_daily_metric_longest), formatDuration(longestSession(todaySummary)), COLOR_YELLOW), 0, 1);
         addCard(metrics, metricCard(getString(R.string.stats_daily_metric_device_share), deviceBreakdown.pcPercent() + "%/" + deviceBreakdown.phonePercent() + "%", COLOR_TEXT), 1, 0);
@@ -184,7 +209,7 @@ public final class StatsActivity extends Activity {
                         store.isRepeatReminderEnabled())),
                 COLOR_TEXT), 1, 1);
 
-        dayPanel.addView(deviceLegend(), matchWrapTop(8));
+        target.addView(deviceLegend(), matchWrapTop(8));
 
         HourlyHeatView heatView = new HourlyHeatView(this);
         heatView.setHourlySeconds(todaySummary.hourlySeconds);
@@ -192,42 +217,105 @@ public final class StatsActivity extends Activity {
         LinearLayout.LayoutParams heatParams = new LinearLayout.LayoutParams(dp(226), dp(226));
         heatParams.gravity = Gravity.CENTER_HORIZONTAL;
         heatParams.topMargin = dp(2);
-        dayPanel.addView(heatView, heatParams);
+        target.addView(heatView, heatParams);
 
         LinearLayout insightRow = new LinearLayout(this);
         insightRow.setOrientation(LinearLayout.HORIZONTAL);
-        dayPanel.addView(insightRow, matchWrapTop(8));
+        target.addView(insightRow, matchWrapTop(8));
         addInsightCard(insightRow, insightInfoCard(getString(R.string.stats_daily_insight_peak), peakHour(todaySummary.hourlySeconds)), 0);
         addInsightCard(insightRow, insightInfoCard(getString(R.string.stats_daily_insight_night), formatDuration(nightSeconds(todaySummary.hourlySeconds))), 1);
-        dayPanel.addView(appUsageCard(appUsageEntries, 4), matchWrapTop(10));
+        target.addView(appUsageCard(appUsageEntries, 4), matchWrapTop(10));
+    }
 
-        LinearLayout weekPanel = panel();
-        root.addView(weekPanel, matchWrapTop(18));
-        TextView weekPill = addPanelHead(weekPanel, getString(R.string.stats_week_title), selectorText(weekLabel(selectedWeekStart, today)));
+    private void populateWeekPanel(LinearLayout target, LocalDate today, List<DailySummary> week, List<DeviceUsageBreakdown> weekBreakdowns) {
+        target.removeAllViews();
+        TextView weekPill = addPanelHead(target, getString(R.string.stats_week_title), selectorText(weekLabel(selectedWeekStart, today)));
         weekPill.setOnClickListener(v -> showDateSheet(DatePickMode.WEEK));
         WeekBarView weekView = new WeekBarView(this);
         weekView.setSummaries(week);
         weekView.setDeviceBreakdowns(weekBreakdowns);
-        weekPanel.addView(weekView, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(210)));
-        weekPanel.addView(note(formatResource(R.string.stats_week_total, "duration", formatDuration(sum(week)))), matchWrapTop(8));
+        target.addView(weekView, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(210)));
+        target.addView(note(formatResource(R.string.stats_week_total, "duration", formatDuration(sum(week)))), matchWrapTop(8));
+    }
 
-        LinearLayout monthPanel = panel();
-        root.addView(monthPanel, matchWrapTop(18));
-        TextView monthPill = addPanelHead(monthPanel, getString(R.string.stats_month_title), selectorText(monthLabel(selectedMonthStart, today)));
+    private void populateMonthPanel(LinearLayout target, LocalDate today, List<DailySummary> month) {
+        target.removeAllViews();
+        TextView monthPill = addPanelHead(target, getString(R.string.stats_month_title), selectorText(monthLabel(selectedMonthStart, today)));
         monthPill.setOnClickListener(v -> showDateSheet(DatePickMode.MONTH));
         MonthTrendView monthView = new MonthTrendView(this);
         monthView.setSummaries(month);
-        monthPanel.addView(monthView, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(190)));
-        monthPanel.addView(note(formatResource(R.string.stats_month_recorded_days, "count", activeDays(month))), matchWrapTop(8));
+        target.addView(monthView, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(190)));
+        target.addView(note(formatResource(R.string.stats_month_recorded_days, "count", activeDays(month))), matchWrapTop(8));
+    }
 
-        LinearLayout summaryPanel = panel();
-        root.addView(summaryPanel, matchWrapTop(18));
-        TextView rangePill = addPanelHead(summaryPanel, getString(R.string.stats_summary_title), selectorText(compactDate(rangeStart)) + " " + selectorText(compactDate(rangeEnd)));
+    private void populateSummaryPanel(LinearLayout target, DailySummary rangeSummary, DeviceUsageBreakdown rangeBreakdown) {
+        target.removeAllViews();
+        TextView rangePill = addPanelHead(target, getString(R.string.stats_summary_title), selectorText(compactDate(rangeStart)) + " " + selectorText(compactDate(rangeEnd)));
         rangePill.setOnClickListener(v -> showDateSheet(DatePickMode.RANGE));
-        summaryPanel.addView(summaryCard("", rangeSummary, rangeBreakdown), matchWrapTop(12));
+        target.addView(summaryCard("", rangeSummary, rangeBreakdown), matchWrapTop(12));
+    }
 
-        Log.i(DIAG_TAG, "StatsActivity buildUi end totalMs=" + elapsed(totalStartedAt));
-        return scroll;
+    private void refreshPanel(DatePickMode mode) {
+        int generation = ++panelRefreshGeneration;
+        LocalDate today = LocalDate.now();
+        if (mode == DatePickMode.DAY) {
+            LocalDate date = selectedDay;
+            new Thread(() -> {
+                DailySummary summary = statsDay(date);
+                DeviceUsageBreakdown breakdown = statsDeviceBreakdown(date);
+                List<AppUsageEntry> appUsageEntries = statsAppUsageEntries(date, date);
+                runOnUiThread(() -> {
+                    if (isFinishing() || generation != panelRefreshGeneration || dayPanel == null) {
+                        return;
+                    }
+                    populateDayPanel(dayPanel, today, summary, breakdown, appUsageEntries);
+                });
+            }, "EyeTimeStatsDayPanel").start();
+            return;
+        }
+        if (mode == DatePickMode.WEEK) {
+            LocalDate weekStart = selectedWeekStart;
+            LocalDate weekEnd = weekStart.plusDays(6);
+            new Thread(() -> {
+                List<DailySummary> week = statsDays(weekStart, weekEnd);
+                List<DeviceUsageBreakdown> weekBreakdowns = statsDeviceBreakdowns(weekStart, weekEnd);
+                runOnUiThread(() -> {
+                    if (isFinishing() || generation != panelRefreshGeneration || weekPanel == null) {
+                        return;
+                    }
+                    populateWeekPanel(weekPanel, today, week, weekBreakdowns);
+                });
+            }, "EyeTimeStatsWeekPanel").start();
+            return;
+        }
+        if (mode == DatePickMode.MONTH) {
+            LocalDate monthStart = selectedMonthStart;
+            LocalDate monthEnd = monthStart.getYear() == today.getYear() && monthStart.getMonthValue() == today.getMonthValue()
+                    ? today
+                    : monthStart.plusMonths(1).minusDays(1);
+            new Thread(() -> {
+                List<DailySummary> month = statsDays(monthStart, monthEnd);
+                runOnUiThread(() -> {
+                    if (isFinishing() || generation != panelRefreshGeneration || monthPanel == null) {
+                        return;
+                    }
+                    populateMonthPanel(monthPanel, today, month);
+                });
+            }, "EyeTimeStatsMonthPanel").start();
+            return;
+        }
+        LocalDate firstRange = rangeStart.isAfter(rangeEnd) ? rangeEnd : rangeStart;
+        LocalDate lastRange = rangeStart.isAfter(rangeEnd) ? rangeStart : rangeEnd;
+        new Thread(() -> {
+            DailySummary summary = combineSummaries(statsDays(firstRange, lastRange), firstRange + ".." + lastRange);
+            DeviceUsageBreakdown breakdown = combineBreakdowns(statsDeviceBreakdowns(firstRange, lastRange));
+            runOnUiThread(() -> {
+                if (isFinishing() || generation != panelRefreshGeneration || summaryPanel == null) {
+                    return;
+                }
+                populateSummaryPanel(summaryPanel, summary, breakdown);
+            });
+        }, "EyeTimeStatsSummaryPanel").start();
     }
 
     private long logStep(String label, long startedAt) {
@@ -594,19 +682,19 @@ public final class StatsActivity extends Activity {
         if (mode == DatePickMode.DAY) {
             selectedDay = date;
             dialog.dismiss();
-            reloadStatsUi(false);
+            refreshPanel(DatePickMode.DAY);
             return;
         }
         if (mode == DatePickMode.WEEK) {
             selectedWeekStart = startOfWeek(date);
             dialog.dismiss();
-            reloadStatsUi(false);
+            refreshPanel(DatePickMode.WEEK);
             return;
         }
         if (mode == DatePickMode.MONTH) {
             selectedMonthStart = date.withDayOfMonth(1);
             dialog.dismiss();
-            reloadStatsUi(false);
+            refreshPanel(DatePickMode.MONTH);
             return;
         }
 
@@ -625,7 +713,7 @@ public final class StatsActivity extends Activity {
             rangeEnd = date;
         }
         dialog.dismiss();
-        reloadStatsUi(false);
+        refreshPanel(DatePickMode.RANGE);
     }
 
     private static LocalDate startOfWeek(LocalDate date) {

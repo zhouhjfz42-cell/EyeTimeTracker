@@ -14,7 +14,7 @@ import java.nio.charset.StandardCharsets;
 public final class FamilyStatsLanServer {
     public interface Listener {
         void onStarted(int port);
-        void onUploaded(String childDeviceId, int changedSegments);
+        void onUploaded(String childDeviceId, int changedSegments, String childHost);
         void onError(String message);
     }
 
@@ -103,18 +103,22 @@ public final class FamilyStatsLanServer {
             if (!error.isEmpty()) {
                 responseJson = FamilyStatsProtocol.buildUploadResponse(false, error, 0);
             } else {
+                int changedSnapshot = store.saveFamilyChildHomeSnapshot(request.homeSnapshot);
                 int changed = store.addFamilyChildSegments(request.segments);
                 int changedApps = store.addFamilyChildAppUsageEntries(request.appUsageEntries);
                 responseJson = FamilyStatsProtocol.buildUploadResponse(
                         true,
                         "",
-                        changed,
+                        changed + changedSnapshot,
                         store.getReminderMinutes(),
                         store.isRepeatReminderEnabled(),
                         store.getParentPasscode(),
                         store.getFamilyEyeRules());
                 if (listener != null) {
-                    listener.onUploaded(request.childDeviceId, changed + changedApps);
+                    listener.onUploaded(
+                            request.childDeviceId,
+                            changed + changedApps + changedSnapshot,
+                            socket.getInetAddress().getHostAddress());
                 }
             }
             writer.write(responseJson);

@@ -14,7 +14,7 @@ import java.nio.charset.StandardCharsets;
 public final class FamilyStatsUploadRequestServer {
     public interface Listener {
         void onStarted();
-        void onUploadRequested();
+        void onUploadRequested(String parentHost, int parentStatsPort);
         void onError(String message);
     }
 
@@ -91,12 +91,13 @@ public final class FamilyStatsUploadRequestServer {
                 BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
                 BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8))) {
             String requestJson = reader.readLine();
-            String error = validate(FamilyStatsProtocol.parseUploadNowRequest(requestJson));
+            FamilyStatsProtocol.UploadNowRequest request = FamilyStatsProtocol.parseUploadNowRequest(requestJson);
+            String error = validate(request);
             writer.write(FamilyStatsProtocol.buildUploadNowResponse(error.isEmpty(), error));
             writer.newLine();
             writer.flush();
             if (error.isEmpty() && listener != null) {
-                listener.onUploadRequested();
+                listener.onUploadRequested(socket.getInetAddress().getHostAddress(), request.parentStatsPort);
             }
         }
     }
@@ -120,7 +121,7 @@ public final class FamilyStatsUploadRequestServer {
                         request.getPort());
                 udpServer.send(response);
                 if (listener != null) {
-                    listener.onUploadRequested();
+                    listener.onUploadRequested(request.getAddress().getHostAddress(), FamilyStatsProtocol.parseUploadNowRequest(requestJson).parentStatsPort);
                 }
             } catch (java.net.SocketTimeoutException ignored) {
             } catch (Exception ex) {

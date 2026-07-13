@@ -11,6 +11,7 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 public final class FamilyStatsLanClient {
@@ -39,24 +40,80 @@ public final class FamilyStatsLanClient {
     }
 
     public UploadResult upload(EyeTimeStore store) {
+        UploadPreparation preparation = prepareUpload(store);
+        if (preparation.result != null) {
+            return preparation.result;
+        }
+        DiscoveryTarget target = discover(preparation.familyId, preparation.childDeviceId);
+        if (!target.found) {
+            return UploadResult.skipped("Parent phone not found.");
+        }
+        return uploadToTarget(store, preparation, target);
+    }
+
+    public UploadResult uploadToKnownParent(EyeTimeStore store, String host, int port) {
+        UploadPreparation preparation = prepareUpload(store);
+        if (preparation.result != null) {
+            return preparation.result;
+        }
+        if (host == null || host.trim().isEmpty() || port <= 0) {
+            return upload(store);
+        }
+        UploadResult directResult = uploadToTarget(store, preparation, new DiscoveryTarget(true, host.trim(), port));
+        if (directResult.success) {
+            return directResult;
+        }
+        return upload(store);
+    }
+
+    public UploadResult uploadHomeSnapshotToKnownParent(EyeTimeStore store, String host, int port) {
+        UploadPreparation preparation = prepareUpload(store);
+        if (preparation.result != null) {
+            return preparation.result;
+        }
+        if (host == null || host.trim().isEmpty() || port <= 0) {
+            return UploadResult.skipped("Parent phone not found.");
+        }
+        FamilyChildHomeSnapshot snapshot = store.buildLocalFamilyChildHomeSnapshot(LocalDate.now());
+        if (snapshot == null) {
+            return UploadResult.skipped("Home snapshot is unavailable.");
+        }
+        return uploadToTarget(
+                store,
+                preparation,
+                new DiscoveryTarget(true, host.trim(), port),
+                new ArrayList<>(),
+                new ArrayList<>(),
+                snapshot);
+    }
+
+    private UploadPreparation prepareUpload(EyeTimeStore store) {
         if (store == null || store.getProductMode() != ProductMode.FAMILY || store.getDeviceRole() != DeviceRole.CHILD_DEVICE) {
-            return UploadResult.skipped("Child device is not in family mode.");
+            return UploadPreparation.withResult(UploadResult.skipped("Child device is not in family mode."));
         }
         String familyId = store.getFamilyId();
         String childDeviceId = store.getDeviceId();
         ChildProfile childProfile = store.getActiveChildProfile();
         if (familyId.isEmpty() || childProfile == null || !childProfile.isValid()) {
-            return UploadResult.skipped("Family binding is incomplete.");
+            return UploadPreparation.withResult(UploadResult.skipped("Family binding is incomplete."));
         }
+        return new UploadPreparation(familyId, childDeviceId, childProfile, null);
+    }
 
-        DiscoveryTarget target = discover(familyId, childDeviceId);
-        if (!target.found) {
-            return UploadResult.skipped("Parent phone not found.");
-        }
-
+    private UploadResult uploadToTarget(EyeTimeStore store, UploadPreparation preparation, DiscoveryTarget target) {
         LocalDate today = LocalDate.now();
         List<UsageSegment> segments = store.getSegments(today.minusDays(30), today);
         List<AppUsageEntry> appUsageEntries = store.getAppUsageEntries(today.minusDays(30), today);
+        return uploadToTarget(store, preparation, target, segments, appUsageEntries, null);
+    }
+
+    private UploadResult uploadToTarget(
+            EyeTimeStore store,
+            UploadPreparation preparation,
+            DiscoveryTarget target,
+            List<UsageSegment> segments,
+            List<AppUsageEntry> appUsageEntries,
+            FamilyChildHomeSnapshot homeSnapshot) {
         try (Socket socket = new Socket()) {
             socket.connect(new InetSocketAddress(target.host, target.port), connectTimeoutMillis);
             socket.setSoTimeout(readTimeoutMillis);
@@ -64,11 +121,12 @@ public final class FamilyStatsLanClient {
                     BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
                     BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))) {
                 writer.write(FamilyStatsProtocol.buildUploadRequest(
-                        familyId,
-                        childProfile.childId,
-                        childDeviceId,
+                        preparation.familyId,
+                        preparation.childProfile.childId,
+                        preparation.childDeviceId,
                         segments,
-                        appUsageEntries));
+                        appUsageEntries,
+                        homeSnapshot));
                 writer.newLine();
                 writer.flush();
 
@@ -76,19 +134,26 @@ public final class FamilyStatsLanClient {
                 if (!response.accepted) {
                     return UploadResult.failed(response.error.isEmpty() ? "Family stats upload was rejected." : response.error);
                 }
-                if (response.hasReminderSettings) {
-                    store.saveReminderSettings(response.reminderMinutes, response.repeatReminder);
-                }
-                if (response.parentPasscode != null && response.parentPasscode.isConfigured()) {
-                    store.saveParentPasscode(response.parentPasscode);
-                }
-                if (response.hasFamilyEyeRules && response.familyEyeRules != null) {
-                    store.saveFamilyEyeRules(response.familyEyeRules);
-                }
+                applyUploadResponse(store, response);
                 return UploadResult.success(response.changedSegments);
             }
         } catch (Exception ex) {
             return UploadResult.failed(ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage());
+        }
+    }
+
+    private static void applyUploadResponse(EyeTimeStore store, FamilyStatsProtocol.UploadResponse response) {
+        if (store == null || response == null) {
+            return;
+        }
+        if (response.hasReminderSettings) {
+            store.saveReminderSettings(response.reminderMinutes, response.repeatReminder);
+        }
+        if (response.parentPasscode != null && response.parentPasscode.isConfigured()) {
+            store.saveParentPasscode(response.parentPasscode);
+        }
+        if (response.hasFamilyEyeRules && response.familyEyeRules != null) {
+            store.saveFamilyEyeRules(response.familyEyeRules);
         }
     }
 
@@ -168,6 +233,24 @@ public final class FamilyStatsLanClient {
 
         static DiscoveryTarget empty() {
             return new DiscoveryTarget(false, "", 0);
+        }
+    }
+
+    private static final class UploadPreparation {
+        final String familyId;
+        final String childDeviceId;
+        final ChildProfile childProfile;
+        final UploadResult result;
+
+        UploadPreparation(String familyId, String childDeviceId, ChildProfile childProfile, UploadResult result) {
+            this.familyId = familyId == null ? "" : familyId;
+            this.childDeviceId = childDeviceId == null ? "" : childDeviceId;
+            this.childProfile = childProfile;
+            this.result = result;
+        }
+
+        static UploadPreparation withResult(UploadResult result) {
+            return new UploadPreparation("", "", null, result);
         }
     }
 

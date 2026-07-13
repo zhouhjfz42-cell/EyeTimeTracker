@@ -19,6 +19,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.UUID;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
@@ -65,6 +67,16 @@ public final class EyeTimeStore {
     private static final String FAMILY_CHILD_REMINDER_DATE = "family_child_reminder_date";
     private static final String FAMILY_CHILD_REMINDER_SHOWN = "family_child_reminder_shown";
     private static final String FAMILY_CHILD_LAST_REMINDER_STEP = "family_child_last_reminder_step";
+    private static final String FAMILY_CHILD_LAST_KNOWN_HOST = "family_child_last_known_host";
+    private static final String FAMILY_CHILD_LAST_KNOWN_AT = "family_child_last_known_at";
+    private static final String FAMILY_CHILD_HOME_SNAPSHOT_DATE = "family_child_home_snapshot_date";
+    private static final String FAMILY_CHILD_HOME_SNAPSHOT_TODAY_SECONDS = "family_child_home_snapshot_today_seconds";
+    private static final String FAMILY_CHILD_HOME_SNAPSHOT_YESTERDAY_SECONDS = "family_child_home_snapshot_yesterday_seconds";
+    private static final String FAMILY_CHILD_HOME_SNAPSHOT_WEEK_SECONDS = "family_child_home_snapshot_week_seconds";
+    private static final String FAMILY_CHILD_HOME_SNAPSHOT_MONTH_SECONDS = "family_child_home_snapshot_month_seconds";
+    private static final String FAMILY_CHILD_HOME_SNAPSHOT_TOP_APP_NAME = "family_child_home_snapshot_top_app_name";
+    private static final String FAMILY_CHILD_HOME_SNAPSHOT_TOP_APP_SECONDS = "family_child_home_snapshot_top_app_seconds";
+    private static final String FAMILY_CHILD_HOME_SNAPSHOT_UPDATED_AT = "family_child_home_snapshot_updated_at";
     private static final String FAMILY_HOME_META_READY = "family_home_meta_ready";
     private static final String FAMILY_HOME_META_PRODUCT_MODE = "family_home_meta_product_mode";
     private static final String FAMILY_HOME_META_DEVICE_ROLE = "family_home_meta_device_role";
@@ -82,6 +94,8 @@ public final class EyeTimeStore {
     private static final String RESET_MONTH_SECONDS = "display_reset_month_seconds";
     private static final String MAIN_ACTIVITY_VISIBLE = "main_activity_visible";
     private static final String PLATFORM = "android";
+    private static final int SEGMENT_COMPACT_THRESHOLD = 2_000;
+    private static final long SEGMENT_BUCKET_SECONDS = 10L;
     private static final int PARENT_PASSCODE_SALT_BYTES = 16;
     private static final int PARENT_PASSCODE_ITERATIONS = 120_000;
     private static final int PARENT_PASSCODE_HASH_BITS = 256;
@@ -185,33 +199,26 @@ public final class EyeTimeStore {
         }
     }
 
-    public synchronized void addAppUsage(LocalDate date, long secondsToAdd, String appId, String appName) {
-        if (date == null || secondsToAdd <= 0L || safe(appId).trim().isEmpty()) {
-            return;
-        }
-        try {
-            JSONObject state = loadState();
-            long nowSeconds = System.currentTimeMillis() / 1000L;
-            AppUsageEntry entry = new AppUsageEntry(
-                    AppUsageEntry.createId(getDeviceId(), PLATFORM, "phone", appId, date.toString()),
-                    getDeviceId(),
-                    PLATFORM,
-                    "phone",
-                    appId,
-                    appName,
-                    date.toString(),
-                    secondsToAdd,
-                    nowSeconds);
-            mergeAppUsageEntries(state, java.util.Collections.singletonList(entry), APP_USAGE_ENTRIES, true);
-            saveState(state);
-        } catch (JSONException ignored) {
-        }
-    }
-
     public synchronized int addAppUsageEntries(List<AppUsageEntry> entries) {
         try {
             JSONObject state = loadState();
             int changed = mergeAppUsageEntries(state, entries, APP_USAGE_ENTRIES, false);
+            if (changed > 0) {
+                saveState(state);
+            }
+            return changed;
+        } catch (JSONException ignored) {
+            return 0;
+        }
+    }
+
+    public synchronized int replacePhoneAppUsageEntries(LocalDate date, List<AppUsageEntry> entries) {
+        if (date == null) {
+            return 0;
+        }
+        try {
+            JSONObject state = loadState();
+            int changed = replacePhoneAppUsageEntries(state, date, entries);
             if (changed > 0) {
                 saveState(state);
             }
@@ -248,6 +255,61 @@ public final class EyeTimeStore {
         } catch (JSONException ignored) {
             return new ArrayList<>();
         }
+    }
+
+    public synchronized FamilyChildHomeSnapshot buildLocalFamilyChildHomeSnapshot(LocalDate today) {
+        if (today == null) {
+            return null;
+        }
+        HomeStatsSnapshot stats = displayHomeStats(today);
+        AppUsageEntry topApp = findTopAppUsage(getAppUsageEntries(today, today));
+        return new FamilyChildHomeSnapshot(
+                today.toString(),
+                stats.todaySeconds,
+                stats.yesterdaySeconds,
+                stats.weekSeconds,
+                stats.monthSeconds,
+                topApp == null ? "" : (topApp.appName.trim().isEmpty() ? topApp.appId : topApp.appName),
+                topApp == null ? 0L : topApp.durationSeconds,
+                System.currentTimeMillis() / 1000L);
+    }
+
+    public synchronized int saveFamilyChildHomeSnapshot(FamilyChildHomeSnapshot snapshot) {
+        if (snapshot == null || snapshot.updatedAtUnixSeconds <= 0L || snapshot.date.trim().isEmpty()) {
+            return 0;
+        }
+        long currentUpdatedAt = prefs.getLong(FAMILY_CHILD_HOME_SNAPSHOT_UPDATED_AT, 0L);
+        if (snapshot.updatedAtUnixSeconds < currentUpdatedAt) {
+            return 0;
+        }
+        prefs.edit()
+                .putString(FAMILY_CHILD_HOME_SNAPSHOT_DATE, snapshot.date)
+                .putLong(FAMILY_CHILD_HOME_SNAPSHOT_TODAY_SECONDS, snapshot.todaySeconds)
+                .putLong(FAMILY_CHILD_HOME_SNAPSHOT_YESTERDAY_SECONDS, snapshot.yesterdaySeconds)
+                .putLong(FAMILY_CHILD_HOME_SNAPSHOT_WEEK_SECONDS, snapshot.weekSeconds)
+                .putLong(FAMILY_CHILD_HOME_SNAPSHOT_MONTH_SECONDS, snapshot.monthSeconds)
+                .putString(FAMILY_CHILD_HOME_SNAPSHOT_TOP_APP_NAME, snapshot.topAppName)
+                .putLong(FAMILY_CHILD_HOME_SNAPSHOT_TOP_APP_SECONDS, snapshot.topAppSeconds)
+                .putLong(FAMILY_CHILD_HOME_SNAPSHOT_UPDATED_AT, snapshot.updatedAtUnixSeconds)
+                .apply();
+        return 1;
+    }
+
+    public synchronized FamilyChildHomeSnapshot getFamilyChildHomeSnapshot(LocalDate today) {
+        if (today == null) {
+            return null;
+        }
+        String date = prefs.getString(FAMILY_CHILD_HOME_SNAPSHOT_DATE, "");
+        FamilyChildHomeSnapshot snapshot = new FamilyChildHomeSnapshot(
+                date,
+                prefs.getLong(FAMILY_CHILD_HOME_SNAPSHOT_TODAY_SECONDS, 0L),
+                prefs.getLong(FAMILY_CHILD_HOME_SNAPSHOT_YESTERDAY_SECONDS, 0L),
+                prefs.getLong(FAMILY_CHILD_HOME_SNAPSHOT_WEEK_SECONDS, 0L),
+                prefs.getLong(FAMILY_CHILD_HOME_SNAPSHOT_MONTH_SECONDS, 0L),
+                prefs.getString(FAMILY_CHILD_HOME_SNAPSHOT_TOP_APP_NAME, ""),
+                prefs.getLong(FAMILY_CHILD_HOME_SNAPSHOT_TOP_APP_SECONDS, 0L),
+                prefs.getLong(FAMILY_CHILD_HOME_SNAPSHOT_UPDATED_AT, 0L));
+        return snapshot.isValidForDate(today.toString()) ? snapshot : null;
     }
 
     public synchronized List<UsageSegment> getSegments(LocalDate start, LocalDate end) {
@@ -730,6 +792,21 @@ public final class EyeTimeStore {
         }
     }
 
+    private static final class SegmentBucketGroup {
+        final String deviceId;
+        final String platform;
+        final String source;
+        final String localDate;
+        final SortedSet<Long> buckets = new TreeSet<>();
+
+        SegmentBucketGroup(String deviceId, String platform, String source, String localDate) {
+            this.deviceId = safe(deviceId).trim();
+            this.platform = safe(platform).trim();
+            this.source = safe(source).trim();
+            this.localDate = safe(localDate).trim();
+        }
+    }
+
     private static Map<String, List<UsageSegment>> groupSegmentsByDate(List<UsageSegment> segments) {
         Map<String, List<UsageSegment>> grouped = new HashMap<>();
         if (segments == null) {
@@ -1009,6 +1086,21 @@ public final class EyeTimeStore {
         } catch (JSONException ignored) {
             return false;
         }
+    }
+
+    public synchronized String getFamilyChildLastKnownHost() {
+        return prefs.getString(FAMILY_CHILD_LAST_KNOWN_HOST, "");
+    }
+
+    public synchronized void saveFamilyChildLastKnownHost(String host) {
+        String safeHost = safe(host).trim();
+        if (safeHost.isEmpty()) {
+            return;
+        }
+        prefs.edit()
+                .putString(FAMILY_CHILD_LAST_KNOWN_HOST, safeHost)
+                .putLong(FAMILY_CHILD_LAST_KNOWN_AT, System.currentTimeMillis() / 1000L)
+                .apply();
     }
 
     public synchronized void leaveFamilyMode() {
@@ -1318,6 +1410,22 @@ public final class EyeTimeStore {
         return total;
     }
 
+    private static AppUsageEntry findTopAppUsage(List<AppUsageEntry> entries) {
+        AppUsageEntry best = null;
+        if (entries == null) {
+            return null;
+        }
+        for (AppUsageEntry entry : entries) {
+            if (entry == null || entry.durationSeconds <= 0L) {
+                continue;
+            }
+            if (best == null || entry.durationSeconds > best.durationSeconds) {
+                best = entry;
+            }
+        }
+        return best;
+    }
+
     private String ensureDeviceId() {
         String id = prefs.getString(DEVICE_ID, null);
         if (id == null || id.trim().isEmpty()) {
@@ -1362,7 +1470,25 @@ public final class EyeTimeStore {
     }
 
     private void saveState(JSONObject state) {
-        prefs.edit().putString(STATE, state.toString()).apply();
+        if (state == null) {
+            return;
+        }
+        try {
+            compactStateForStorage(state, false);
+            prefs.edit().putString(STATE, state.toString()).apply();
+        } catch (OutOfMemoryError oom) {
+            Log.e(DIAG_TAG, "EyeTimeStore saveState OOM, retrying with compacted state", oom);
+            try {
+                state.remove(DAILY_STATS_CACHE);
+                state.remove(FAMILY_CHILD_DAILY_STATS_CACHE);
+                compactStateForStorage(state, true);
+                prefs.edit().putString(STATE, state.toString()).apply();
+            } catch (JSONException | OutOfMemoryError retryError) {
+                Log.e(DIAG_TAG, "EyeTimeStore saveState failed after compaction", retryError);
+            }
+        } catch (JSONException ex) {
+            Log.e(DIAG_TAG, "EyeTimeStore saveState failed while compacting", ex);
+        }
     }
 
     private void saveFamilyChildCacheIfChanged(JSONObject state) {
@@ -1506,6 +1632,118 @@ public final class EyeTimeStore {
         return segments;
     }
 
+    private static void compactStateForStorage(JSONObject state, boolean force) throws JSONException {
+        compactSegmentsForStorage(state, "segments", force);
+        compactSegmentsForStorage(state, FAMILY_CHILD_SEGMENTS, force);
+    }
+
+    private static void compactSegmentsForStorage(JSONObject state, String key, boolean force) throws JSONException {
+        JSONArray raw = ensureSegments(state, key);
+        if (!force && raw.length() < SEGMENT_COMPACT_THRESHOLD) {
+            return;
+        }
+
+        Map<String, SegmentBucketGroup> groups = new HashMap<>();
+        int usableCount = 0;
+        for (int i = 0; i < raw.length(); i++) {
+            JSONObject json = raw.optJSONObject(i);
+            if (json == null) {
+                continue;
+            }
+            UsageSegment segment = segmentFromJson(json);
+            if (!isCompactableSegment(segment)) {
+                continue;
+            }
+            usableCount++;
+            String groupKey = segment.deviceId + "\u0001"
+                    + segment.platform + "\u0001"
+                    + segment.source + "\u0001"
+                    + segment.localDate;
+            SegmentBucketGroup group = groups.get(groupKey);
+            if (group == null) {
+                group = new SegmentBucketGroup(segment.deviceId, segment.platform, segment.source, segment.localDate);
+                groups.put(groupKey, group);
+            }
+            long startBucket = floorSegmentBucket(segment.startUnixSeconds);
+            long endBucket = ceilSegmentBucket(segment.endUnixSeconds);
+            for (long bucket = startBucket; bucket < endBucket; bucket++) {
+                group.buckets.add(bucket);
+            }
+        }
+
+        if (usableCount <= 0) {
+            return;
+        }
+
+        JSONArray compacted = new JSONArray();
+        int compactedCount = 0;
+        for (SegmentBucketGroup group : groups.values()) {
+            Long rangeStart = null;
+            long previous = -1L;
+            for (long bucket : group.buckets) {
+                if (rangeStart == null) {
+                    rangeStart = bucket;
+                    previous = bucket;
+                    continue;
+                }
+                if (bucket == previous + 1L) {
+                    previous = bucket;
+                    continue;
+                }
+                compacted.put(compactedSegmentToJson(group, rangeStart, previous));
+                compactedCount++;
+                rangeStart = bucket;
+                previous = bucket;
+            }
+            if (rangeStart != null) {
+                compacted.put(compactedSegmentToJson(group, rangeStart, previous));
+                compactedCount++;
+            }
+        }
+
+        if (compactedCount > 0 && compactedCount < raw.length()) {
+            state.put(key, compacted);
+            Log.i(DIAG_TAG, "EyeTimeStore compactSegments key=" + key
+                    + " before=" + raw.length()
+                    + " after=" + compactedCount);
+        }
+    }
+
+    private static boolean isCompactableSegment(UsageSegment segment) {
+        return segment != null
+                && !safe(segment.deviceId).trim().isEmpty()
+                && !safe(segment.platform).trim().isEmpty()
+                && !safe(segment.source).trim().isEmpty()
+                && !safe(segment.localDate).trim().isEmpty()
+                && segment.endUnixSeconds > segment.startUnixSeconds;
+    }
+
+    private static JSONObject compactedSegmentToJson(
+            SegmentBucketGroup group,
+            long startBucket,
+            long endBucket) throws JSONException {
+        long startUnixSeconds = startBucket * SEGMENT_BUCKET_SECONDS;
+        long endUnixSeconds = (endBucket + 1L) * SEGMENT_BUCKET_SECONDS;
+        return segmentToJson(new UsageSegment(
+                UsageSegmentId.create(group.deviceId, group.source, startUnixSeconds, endUnixSeconds),
+                group.deviceId,
+                group.platform,
+                group.source,
+                startUnixSeconds,
+                endUnixSeconds,
+                group.localDate,
+                startUnixSeconds,
+                endUnixSeconds));
+    }
+
+    private static long floorSegmentBucket(long unixSeconds) {
+        return unixSeconds / SEGMENT_BUCKET_SECONDS;
+    }
+
+    private static long ceilSegmentBucket(long unixSeconds) {
+        return (unixSeconds + SEGMENT_BUCKET_SECONDS - 1L) / SEGMENT_BUCKET_SECONDS;
+    }
+
     private static JSONArray ensureAppUsageEntries(JSONObject state, String key) throws JSONException {
         JSONArray entries = state.optJSONArray(key);
         if (entries == null) {
@@ -1555,6 +1793,50 @@ public final class EyeTimeStore {
             changed++;
         }
         return changed;
+    }
+
+    static int replacePhoneAppUsageEntries(JSONObject state, LocalDate date, List<AppUsageEntry> newEntries) throws JSONException {
+        JSONArray raw = ensureAppUsageEntries(state, APP_USAGE_ENTRIES);
+        JSONArray updated = new JSONArray();
+        String targetDate = date.toString();
+        String localDeviceId = state.optString(DEVICE_ID, "");
+        int removed = 0;
+        for (int i = 0; i < raw.length(); i++) {
+            JSONObject existing = raw.optJSONObject(i);
+            if (existing == null) {
+                continue;
+            }
+            boolean sameLocalPhoneDate = targetDate.equals(existing.optString("localDate", ""))
+                    && PLATFORM.equalsIgnoreCase(existing.optString("platform", ""))
+                    && "phone".equalsIgnoreCase(existing.optString("source", ""))
+                    && localDeviceId.equals(existing.optString("deviceId", ""));
+            if (sameLocalPhoneDate) {
+                removed++;
+            } else {
+                updated.put(existing);
+            }
+        }
+
+        int added = 0;
+        if (newEntries != null) {
+            Set<String> addedIds = new HashSet<>();
+            for (AppUsageEntry entry : newEntries) {
+                if (entry == null
+                        || entry.entryId.trim().isEmpty()
+                        || entry.appId.trim().isEmpty()
+                        || entry.durationSeconds <= 0L
+                        || !targetDate.equals(entry.localDate)
+                        || !"phone".equalsIgnoreCase(entry.source)) {
+                    continue;
+                }
+                if (addedIds.add(entry.entryId)) {
+                    updated.put(appUsageEntryToJson(entry));
+                    added++;
+                }
+            }
+        }
+        state.put(APP_USAGE_ENTRIES, updated);
+        return removed + added;
     }
 
     static List<AppUsageEntry> readAppUsageEntries(JSONObject state, LocalDate start, LocalDate end, String key) throws JSONException {

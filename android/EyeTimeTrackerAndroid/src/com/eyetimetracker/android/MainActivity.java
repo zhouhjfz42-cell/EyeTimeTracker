@@ -63,8 +63,11 @@ public final class MainActivity extends Activity {
     private TextView pairingButton;
     private View statusDot;
     private boolean syncStatusCheckInFlight;
+    private boolean refreshInFlight;
+    private boolean refreshQueued;
     private long nextSyncStatusCheckMillis;
     private boolean receiverRegistered;
+    private FamilyHomeState cachedFamilyHomeState;
 
         private final BroadcastReceiver receiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
@@ -89,6 +92,7 @@ public final class MainActivity extends Activity {
         super.onCreate(bundle);
         store = new EyeTimeStore(this);
         FamilyHomeState familyState = store.getFamilyHomeState();
+        cachedFamilyHomeState = familyState;
         ProductMode productMode = familyState.isFamilyMode ? ProductMode.FAMILY : ProductMode.PERSONAL;
         boolean hasChildProfile = familyState.hasChildProfile();
         requestNotificationPermission();
@@ -374,16 +378,36 @@ public final class MainActivity extends Activity {
     }
 
     private void refresh() {
+        if (refreshInFlight) {
+            refreshQueued = true;
+            return;
+        }
+        refreshInFlight = true;
         LocalDate today = LocalDate.now();
-        HomeStatsSnapshot stats = store.displayHomeStats(today);
-        long todaySeconds = stats.todaySeconds;
+        new Thread(() -> {
+            HomeStatsSnapshot stats = store.displayHomeStats(today);
+            int reminderMinutes = store.getReminderMinutes();
+            SyncSettings syncSettings = store.getSyncSettings();
+            FamilyHomeState familyState = store.getFamilyHomeState();
+            MainHomeSnapshot snapshot = new MainHomeSnapshot(today, stats, reminderMinutes, syncSettings, familyState);
+            runOnUiThread(() -> applyHomeSnapshot(snapshot));
+        }, "EyeTimeMainRefresh").start();
+    }
+
+    private void applyHomeSnapshot(MainHomeSnapshot snapshot) {
+        refreshInFlight = false;
+        cachedFamilyHomeState = snapshot.familyState;
+        if (todayValue == null || isFinishing()) {
+            return;
+        }
+        long todaySeconds = snapshot.stats.todaySeconds;
         todayValue.setText(DurationFormatter.format(this, todaySeconds));
         todayValue.setTextColor(colorForTone(TodayTone.fromSeconds(todaySeconds)));
-        yesterdayValue.setText(DurationFormatter.formatMainCard(this, stats.yesterdaySeconds));
-        weekValue.setText(DurationFormatter.formatMainCard(this, stats.weekSeconds));
-        monthValue.setText(DurationFormatter.formatMainCard(this, stats.monthSeconds));
-        reminderValue.setText(ReminderThreshold.format(this, store.getReminderMinutes()));
-        SyncSettings syncSettings = store.getSyncSettings();
+        yesterdayValue.setText(DurationFormatter.formatMainCard(this, snapshot.stats.yesterdaySeconds));
+        weekValue.setText(DurationFormatter.formatMainCard(this, snapshot.stats.weekSeconds));
+        monthValue.setText(DurationFormatter.formatMainCard(this, snapshot.stats.monthSeconds));
+        reminderValue.setText(ReminderThreshold.format(this, snapshot.reminderMinutes));
+        SyncSettings syncSettings = snapshot.syncSettings;
         statusValue.setText(formatConnectionStatus(
                 getString(R.string.main_status_tracking),
                 syncSettings.isPaired,
@@ -399,6 +423,10 @@ public final class MainActivity extends Activity {
         }
         statusDot.setBackground(oval(COLOR_GREEN));
         checkPcStillConnected(syncSettings);
+        if (refreshQueued) {
+            refreshQueued = false;
+            refresh();
+        }
     }
 
     private void checkPcStillConnected(SyncSettings syncSettings) {
@@ -966,9 +994,30 @@ public final class MainActivity extends Activity {
     }
 
     private void openFamilyEyeMode() {
-        FamilyHomeState familyState = store.getFamilyHomeState();
+        FamilyHomeState familyState = cachedFamilyHomeState;
         boolean configured = familyState.isFamilyMode && familyState.hasChildProfile();
         startActivity(new Intent(this, configured ? FamilyHomeActivity.class : FamilySetupActivity.class));
+    }
+
+    private static final class MainHomeSnapshot {
+        final LocalDate today;
+        final HomeStatsSnapshot stats;
+        final int reminderMinutes;
+        final SyncSettings syncSettings;
+        final FamilyHomeState familyState;
+
+        MainHomeSnapshot(
+                LocalDate today,
+                HomeStatsSnapshot stats,
+                int reminderMinutes,
+                SyncSettings syncSettings,
+                FamilyHomeState familyState) {
+            this.today = today;
+            this.stats = stats;
+            this.reminderMinutes = reminderMinutes;
+            this.syncSettings = syncSettings;
+            this.familyState = familyState;
+        }
     }
 
     private int colorForTone(TodayTone tone) {

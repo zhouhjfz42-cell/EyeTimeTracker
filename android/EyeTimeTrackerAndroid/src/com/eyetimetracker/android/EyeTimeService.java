@@ -55,7 +55,7 @@ public final class EyeTimeService extends Service implements SensorEventListener
 
     private EyeTimeStore store;
     private AndroidSyncRunner syncRunner;
-    private AndroidForegroundAppProvider foregroundAppProvider;
+    private AndroidAppUsageCollector appUsageCollector;
     private AndroidSyncTriggerPolicy syncPolicy;
     private FamilyStatsUploadRequestServer familyUploadRequestServer;
     private SensorManager sensorManager;
@@ -73,9 +73,14 @@ public final class EyeTimeService extends Service implements SensorEventListener
     private boolean syncInFlight;
     private boolean statsCacheWarmInFlight;
     private boolean familyStatsUploadInFlight;
+    private boolean queuedFamilyStatsUploadNow;
+    private String queuedFamilyStatsUploadParentHost = "";
+    private int queuedFamilyStatsUploadParentPort;
     private boolean pendingFamilyStatsUpload;
     private long lastFamilyStatsUploadStartedAt = Long.MIN_VALUE;
     private long pendingFamilyStatsUploadUntilAt = Long.MIN_VALUE;
+    private long lastAppUsageRefreshAt = Long.MIN_VALUE;
+    private boolean appUsageRefreshInFlight;
     private PowerManager.WakeLock familyStatsWakeLock;
     private WifiManager.WifiLock familyStatsWifiLock;
 
@@ -83,7 +88,7 @@ public final class EyeTimeService extends Service implements SensorEventListener
         super.onCreate();
         store = new EyeTimeStore(this);
         syncRunner = new AndroidSyncRunner(store, this);
-        foregroundAppProvider = new AndroidForegroundAppProvider(this);
+        appUsageCollector = new AndroidAppUsageCollector(this);
         syncPolicy = new AndroidSyncTriggerPolicy();
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
@@ -170,10 +175,6 @@ public final class EyeTimeService extends Service implements SensorEventListener
         if (counting && elapsed > 0L && elapsed <= MAX_COUNTABLE_TICK_MS) {
             long countedSeconds = elapsed / 1000L;
             store.addSeconds(LocalDate.now(), countedSeconds, now / 1000L, "android-screen");
-            AndroidForegroundAppProvider.AppSnapshot foregroundApp = foregroundAppProvider == null ? null : foregroundAppProvider.getCurrent(now);
-            if (foregroundApp != null) {
-                store.addAppUsage(LocalDate.now(), countedSeconds, foregroundApp.appId, foregroundApp.appName);
-            }
             syncPolicy.markLocalChange(now);
             markPendingFamilyStatsUpload(now);
             countedThisTick = true;
@@ -184,6 +185,7 @@ public final class EyeTimeService extends Service implements SensorEventListener
             }
         }
         LocalDate todayDate = LocalDate.now();
+        maybeRefreshAppUsage(todayDate, now, countedThisTick || (wasCounting && !counting));
         maybeWarmPastDailyStatsCache(todayDate);
         DailySummary today = store.getDay(todayDate);
         int reminderMinutes = store.getReminderMinutes();
@@ -217,6 +219,32 @@ public final class EyeTimeService extends Service implements SensorEventListener
         maybeRunSync(now, countedThisTick, upcomingReminderSync);
         ensureFamilyStatsUploadRequestServer();
         maybeRunFamilyStatsUpload(now, countedThisTick, wasCounting && !counting);
+    }
+
+    private void maybeRefreshAppUsage(LocalDate today, long now, boolean force) {
+        if (appUsageCollector == null || appUsageRefreshInFlight) {
+            return;
+        }
+        if (!force && lastAppUsageRefreshAt != Long.MIN_VALUE && now - lastAppUsageRefreshAt < 60_000L) {
+            return;
+        }
+        appUsageRefreshInFlight = true;
+        lastAppUsageRefreshAt = now;
+        new Thread(() -> {
+            try {
+                java.util.List<AppUsageEntry> entries = appUsageCollector.collectDailyUsage(store, today, System.currentTimeMillis());
+                if (!entries.isEmpty()) {
+                    int changed = store.replacePhoneAppUsageEntries(today, entries);
+                    if (changed > 0) {
+                        syncPolicy.markLocalChange(System.currentTimeMillis());
+                        markPendingFamilyStatsUpload(System.currentTimeMillis());
+                    }
+                    Log.i(DIAG_TAG, "AndroidAppUsageCollector refreshed entries=" + entries.size() + " changed=" + changed);
+                }
+            } finally {
+                appUsageRefreshInFlight = false;
+            }
+        }, "EyeTimeAppUsageRefresh").start();
     }
 
     private void maybeWarmPastDailyStatsCache(LocalDate today) {
@@ -277,9 +305,9 @@ public final class EyeTimeService extends Service implements SensorEventListener
                 Log.i(DIAG_TAG, "FamilyStatsUploadRequestServer started");
             }
 
-            @Override public void onUploadRequested() {
-                Log.i(DIAG_TAG, "FamilyStatsUploadRequestServer upload requested");
-                maybeRunFamilyStatsUpload(System.currentTimeMillis(), false, true);
+            @Override public void onUploadRequested(String parentHost, int parentStatsPort) {
+                Log.i(DIAG_TAG, "FamilyStatsUploadRequestServer upload requested host=" + parentHost + " port=" + parentStatsPort);
+                handler.post(() -> requestFamilyStatsUploadNow(parentHost, parentStatsPort));
             }
 
             @Override public void onError(String message) {
@@ -302,6 +330,10 @@ public final class EyeTimeService extends Service implements SensorEventListener
     }
 
     private void maybeRunFamilyStatsUpload(long now, boolean countedThisTick, boolean force) {
+        maybeRunFamilyStatsUpload(now, countedThisTick, force, "", 0);
+    }
+
+    private void maybeRunFamilyStatsUpload(long now, boolean countedThisTick, boolean force, String parentHost, int parentStatsPort) {
         if (!isChildFamilyMode()) {
             clearPendingFamilyStatsUpload();
             return;
@@ -325,25 +357,79 @@ public final class EyeTimeService extends Service implements SensorEventListener
         familyStatsUploadInFlight = true;
         lastFamilyStatsUploadStartedAt = now;
         boolean useFullDiscovery = force || !counting || !countedThisTick;
+        String directParentHost = parentHost == null ? "" : parentHost.trim();
+        int directParentPort = Math.max(0, parentStatsPort);
         new Thread(() -> {
             try {
                 FamilyStatsLanClient client = force
                         ? new FamilyStatsLanClient()
                         : new FamilyStatsLanClient(1200, 1800, 12000, useFullDiscovery);
-                FamilyStatsLanClient.UploadResult result = client.upload(store);
+                boolean snapshotOnly = force && !directParentHost.isEmpty() && directParentPort > 0;
+                FamilyStatsLanClient.UploadResult result = snapshotOnly
+                        ? client.uploadHomeSnapshotToKnownParent(store, directParentHost, directParentPort)
+                        : (!directParentHost.isEmpty() && directParentPort > 0
+                                ? client.uploadToKnownParent(store, directParentHost, directParentPort)
+                                : client.upload(store));
                 if (result.success) {
                     clearPendingFamilyStatsUpload();
+                    if (snapshotOnly) {
+                        FamilyStatsLanClient.UploadResult detailResult = client.uploadToKnownParent(
+                                store,
+                                directParentHost,
+                                directParentPort);
+                        Log.i(DIAG_TAG, "FamilyStats detail upload after snapshot success=" + detailResult.success
+                                + " skipped=" + detailResult.skipped
+                                + " changed=" + detailResult.changedSegments
+                                + " directHost=" + directParentHost
+                                + " directPort=" + directParentPort
+                                + " error=" + detailResult.error);
+                        if (!detailResult.success) {
+                            markPendingFamilyStatsUpload(System.currentTimeMillis());
+                        }
+                    }
                 }
                 Log.i(DIAG_TAG, "FamilyStats background upload success=" + result.success
                         + " skipped=" + result.skipped
                         + " changed=" + result.changedSegments
                         + " force=" + force
+                        + " snapshotOnly=" + snapshotOnly
                         + " fullDiscovery=" + useFullDiscovery
+                        + " directHost=" + directParentHost
+                        + " directPort=" + directParentPort
                         + " error=" + result.error);
             } finally {
-                familyStatsUploadInFlight = false;
+                handler.post(() -> {
+                    familyStatsUploadInFlight = false;
+                    runQueuedFamilyStatsUploadNowIfNeeded();
+                });
             }
         }, force ? "FamilyStatsUploadNow" : "FamilyStatsBackgroundUpload").start();
+    }
+
+    private void requestFamilyStatsUploadNow(String parentHost, int parentStatsPort) {
+        if (!isChildFamilyMode()) {
+            return;
+        }
+        if (familyStatsUploadInFlight) {
+            queuedFamilyStatsUploadNow = true;
+            queuedFamilyStatsUploadParentHost = parentHost == null ? "" : parentHost.trim();
+            queuedFamilyStatsUploadParentPort = Math.max(0, parentStatsPort);
+            acquireFamilyStatsUploadLocks();
+            return;
+        }
+        maybeRunFamilyStatsUpload(System.currentTimeMillis(), false, true, parentHost, parentStatsPort);
+    }
+
+    private void runQueuedFamilyStatsUploadNowIfNeeded() {
+        if (!queuedFamilyStatsUploadNow || familyStatsUploadInFlight) {
+            return;
+        }
+        queuedFamilyStatsUploadNow = false;
+        String parentHost = queuedFamilyStatsUploadParentHost;
+        int parentPort = queuedFamilyStatsUploadParentPort;
+        queuedFamilyStatsUploadParentHost = "";
+        queuedFamilyStatsUploadParentPort = 0;
+        maybeRunFamilyStatsUpload(System.currentTimeMillis(), false, true, parentHost, parentPort);
     }
 
     private void markPendingFamilyStatsUpload(long now) {
