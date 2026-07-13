@@ -20,7 +20,7 @@ public final class FamilyStatsLanClient {
     private final boolean allowTcpScanFallback;
 
     public FamilyStatsLanClient() {
-        this(2500, 2500, 5000, true);
+        this(2500, 2500, 15000, true);
     }
 
     public FamilyStatsLanClient(int discoveryTimeoutMillis, int connectTimeoutMillis, int readTimeoutMillis) {

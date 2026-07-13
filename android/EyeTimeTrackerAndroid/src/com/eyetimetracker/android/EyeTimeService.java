@@ -15,6 +15,7 @@ import android.media.AudioAttributes;
 import android.media.AudioManager;
 import android.media.RingtoneManager;
 import android.net.Uri;
+import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -41,6 +42,7 @@ public final class EyeTimeService extends Service implements SensorEventListener
     private static final long MOTION_THRESHOLD_MS = 180_000L;
     private static final long MAX_COUNTABLE_TICK_MS = 30_000L;
     private static final long FAMILY_BACKGROUND_UPLOAD_INTERVAL_MS = 60_000L;
+    private static final long FAMILY_PENDING_UPLOAD_WINDOW_MS = 30 * 60_000L;
     private static final float MOTION_DELTA_THRESHOLD = 0.7f;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -71,7 +73,11 @@ public final class EyeTimeService extends Service implements SensorEventListener
     private boolean syncInFlight;
     private boolean statsCacheWarmInFlight;
     private boolean familyStatsUploadInFlight;
+    private boolean pendingFamilyStatsUpload;
     private long lastFamilyStatsUploadStartedAt = Long.MIN_VALUE;
+    private long pendingFamilyStatsUploadUntilAt = Long.MIN_VALUE;
+    private PowerManager.WakeLock familyStatsWakeLock;
+    private WifiManager.WifiLock familyStatsWifiLock;
 
     @Override public void onCreate() {
         super.onCreate();
@@ -107,6 +113,7 @@ public final class EyeTimeService extends Service implements SensorEventListener
             sensorManager.unregisterListener(this);
         }
         stopFamilyStatsUploadRequestServer();
+        releaseFamilyStatsUploadLocks();
         super.onDestroy();
     }
 
@@ -151,6 +158,7 @@ public final class EyeTimeService extends Service implements SensorEventListener
                 elapsed,
                 MOTION_THRESHOLD_MS);
         boolean nextCounting = decision.isCounting();
+        boolean wasCounting = counting;
         if (nextCounting && !counting) {
             currentSessionStartedUnixSeconds = now / 1000L;
         } else if (!nextCounting) {
@@ -167,9 +175,13 @@ public final class EyeTimeService extends Service implements SensorEventListener
                 store.addAppUsage(LocalDate.now(), countedSeconds, foregroundApp.appId, foregroundApp.appName);
             }
             syncPolicy.markLocalChange(now);
+            markPendingFamilyStatsUpload(now);
             countedThisTick = true;
         } else if (!counting) {
             store.finishCurrentSession(LocalDate.now());
+            if (wasCounting) {
+                markPendingFamilyStatsUpload(now);
+            }
         }
         LocalDate todayDate = LocalDate.now();
         maybeWarmPastDailyStatsCache(todayDate);
@@ -204,7 +216,7 @@ public final class EyeTimeService extends Service implements SensorEventListener
                 today.lastReminderStep);
         maybeRunSync(now, countedThisTick, upcomingReminderSync);
         ensureFamilyStatsUploadRequestServer();
-        maybeRunFamilyStatsUpload(now, countedThisTick, false);
+        maybeRunFamilyStatsUpload(now, countedThisTick, wasCounting && !counting);
     }
 
     private void maybeWarmPastDailyStatsCache(LocalDate today) {
@@ -290,11 +302,19 @@ public final class EyeTimeService extends Service implements SensorEventListener
     }
 
     private void maybeRunFamilyStatsUpload(long now, boolean countedThisTick, boolean force) {
-        if (!isChildFamilyMode() || familyStatsUploadInFlight) {
+        if (!isChildFamilyMode()) {
+            clearPendingFamilyStatsUpload();
+            return;
+        }
+        if (familyStatsUploadInFlight) {
             return;
         }
         if (!force) {
-            if (!counting || !countedThisTick) {
+            if (!pendingFamilyStatsUpload) {
+                return;
+            }
+            if (pendingFamilyStatsUploadUntilAt != Long.MIN_VALUE && now > pendingFamilyStatsUploadUntilAt) {
+                clearPendingFamilyStatsUpload();
                 return;
             }
             if (lastFamilyStatsUploadStartedAt != Long.MIN_VALUE
@@ -304,21 +324,95 @@ public final class EyeTimeService extends Service implements SensorEventListener
         }
         familyStatsUploadInFlight = true;
         lastFamilyStatsUploadStartedAt = now;
+        boolean useFullDiscovery = force || !counting || !countedThisTick;
         new Thread(() -> {
             try {
                 FamilyStatsLanClient client = force
                         ? new FamilyStatsLanClient()
-                        : new FamilyStatsLanClient(1200, 1800, 3500, false);
+                        : new FamilyStatsLanClient(1200, 1800, 12000, useFullDiscovery);
                 FamilyStatsLanClient.UploadResult result = client.upload(store);
+                if (result.success) {
+                    clearPendingFamilyStatsUpload();
+                }
                 Log.i(DIAG_TAG, "FamilyStats background upload success=" + result.success
                         + " skipped=" + result.skipped
                         + " changed=" + result.changedSegments
                         + " force=" + force
+                        + " fullDiscovery=" + useFullDiscovery
                         + " error=" + result.error);
             } finally {
                 familyStatsUploadInFlight = false;
             }
         }, force ? "FamilyStatsUploadNow" : "FamilyStatsBackgroundUpload").start();
+    }
+
+    private void markPendingFamilyStatsUpload(long now) {
+        if (!isChildFamilyMode()) {
+            return;
+        }
+        pendingFamilyStatsUpload = true;
+        pendingFamilyStatsUploadUntilAt = now + FAMILY_PENDING_UPLOAD_WINDOW_MS;
+        acquireFamilyStatsUploadLocks();
+    }
+
+    private void clearPendingFamilyStatsUpload() {
+        pendingFamilyStatsUpload = false;
+        pendingFamilyStatsUploadUntilAt = Long.MIN_VALUE;
+        releaseFamilyStatsUploadLocks();
+    }
+
+    private void acquireFamilyStatsUploadLocks() {
+        try {
+            if (powerManager != null) {
+                if (familyStatsWakeLock == null) {
+                    familyStatsWakeLock = powerManager.newWakeLock(
+                            PowerManager.PARTIAL_WAKE_LOCK,
+                            "EyeTimeTracker:FamilyStatsUpload");
+                    familyStatsWakeLock.setReferenceCounted(false);
+                }
+                if (familyStatsWakeLock.isHeld()) {
+                    familyStatsWakeLock.release();
+                }
+                familyStatsWakeLock.acquire(FAMILY_PENDING_UPLOAD_WINDOW_MS);
+            }
+        } catch (Exception ex) {
+            Log.i(DIAG_TAG, "FamilyStats wake lock failed=" + messageOf(ex));
+        }
+        try {
+            if (familyStatsWifiLock == null) {
+                WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+                if (wifiManager != null) {
+                    familyStatsWifiLock = wifiManager.createWifiLock(
+                            WifiManager.WIFI_MODE_FULL_HIGH_PERF,
+                            "EyeTimeTracker:FamilyStatsUpload");
+                    familyStatsWifiLock.setReferenceCounted(false);
+                }
+            }
+            if (familyStatsWifiLock != null && !familyStatsWifiLock.isHeld()) {
+                familyStatsWifiLock.acquire();
+            }
+        } catch (Exception ex) {
+            Log.i(DIAG_TAG, "FamilyStats wifi lock failed=" + messageOf(ex));
+        }
+    }
+
+    private void releaseFamilyStatsUploadLocks() {
+        try {
+            if (familyStatsWifiLock != null && familyStatsWifiLock.isHeld()) {
+                familyStatsWifiLock.release();
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            if (familyStatsWakeLock != null && familyStatsWakeLock.isHeld()) {
+                familyStatsWakeLock.release();
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static String messageOf(Exception ex) {
+        return ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
     }
 
     private void registerSensor() {

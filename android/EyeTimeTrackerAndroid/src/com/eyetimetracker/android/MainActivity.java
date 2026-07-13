@@ -31,6 +31,8 @@ import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -412,13 +414,30 @@ public final class MainActivity extends Activity {
         syncStatusCheckInFlight = true;
         nextSyncStatusCheckMillis = now + CONNECTION_CHECK_INTERVAL_MS;
         new Thread(() -> {
-            new AndroidSyncRunner(store).syncOnce();
-            store.warmPastDailyStatsCache(LocalDate.now());
+            checkPcSocket(syncSettings);
             handler.post(() -> {
                 syncStatusCheckInFlight = false;
                 refresh();
             });
         }, "EyeTimeConnectionCheck").start();
+    }
+
+    private void checkPcSocket(SyncSettings syncSettings) {
+        if (syncSettings == null || !syncSettings.isPaired) {
+            return;
+        }
+        if (syncSettings.peerHost == null || syncSettings.peerHost.trim().isEmpty() || syncSettings.peerPort <= 0) {
+            syncSettings.lastError = "PC address is incomplete.";
+            store.saveSyncResult(syncSettings);
+            return;
+        }
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress(syncSettings.peerHost, syncSettings.peerPort), 900);
+            syncSettings.lastError = "";
+        } catch (Exception ex) {
+            syncSettings.lastError = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
+        }
+        store.saveSyncResult(syncSettings);
     }
 
     private String formatConnectionStatus(String baseStatus, boolean isPaired, boolean isOnline, String peerName) {
