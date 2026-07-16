@@ -1781,7 +1781,11 @@ public final class EyeTimeStore {
                     existing.put("updatedAtUnixSeconds", Math.max(currentUpdatedAt, entry.updatedAtUnixSeconds));
                     changed++;
                 } else if (entry.updatedAtUnixSeconds >= currentUpdatedAt) {
+                    String existingIconData = existing.optString("iconData", "");
                     writeAppUsageEntryJson(existing, entry);
+                    if (safe(entry.iconData).trim().isEmpty() && !existingIconData.trim().isEmpty()) {
+                        existing.put("iconData", existingIconData);
+                    }
                     changed++;
                 }
                 continue;
@@ -1874,6 +1878,7 @@ public final class EyeTimeStore {
         json.put("source", entry.source);
         json.put("appId", entry.appId);
         json.put("appName", entry.appName);
+        json.put("iconData", entry.iconData);
         json.put("localDate", entry.localDate);
         json.put("durationSeconds", entry.durationSeconds);
         json.put("updatedAtUnixSeconds", entry.updatedAtUnixSeconds);
@@ -1887,6 +1892,7 @@ public final class EyeTimeStore {
                 json.optString("source", ""),
                 json.optString("appId", ""),
                 json.optString("appName", ""),
+                json.optString("iconData", ""),
                 json.optString("localDate", ""),
                 json.optLong("durationSeconds", 0L),
                 json.optLong("updatedAtUnixSeconds", 0L));

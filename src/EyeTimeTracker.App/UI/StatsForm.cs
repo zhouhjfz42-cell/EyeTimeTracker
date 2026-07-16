@@ -108,20 +108,20 @@ public sealed class StatsForm : Form
         _daySelectorText = AddPill(dayPanel, SelectorText(AppText.Get("common.today")), new Rectangle(170, 22, 112, 30), ShowDayMenu);
         AddLegend(dayPanel, new Point(314, 27));
 
-        dayPanel.Controls.Add(BuildSmallMetric(AppText.Get("stats.daily.metric.total"), out _dayTotalValue, new Rectangle(24, 88, 155, 78), AccentGreen));
-        dayPanel.Controls.Add(BuildSmallMetric(AppText.Get("stats.daily.metric.longest"), out _longestSessionValue, new Rectangle(194, 88, 155, 78), AccentYellow));
-        dayPanel.Controls.Add(BuildSmallMetric(AppText.Get("stats.daily.metric.deviceShare"), out _deviceShareValue, new Rectangle(24, 186, 155, 78), TextPrimary));
-        dayPanel.Controls.Add(BuildSmallMetric(AppText.Get("stats.daily.metric.reminders"), out _reminderCountValue, new Rectangle(194, 186, 155, 78), TextPrimary));
+        dayPanel.Controls.Add(BuildSmallMetric(AppText.Get("stats.daily.metric.total"), out _dayTotalValue, new Rectangle(24, 88, 174, 78), AccentGreen));
+        dayPanel.Controls.Add(BuildSmallMetric(AppText.Get("stats.daily.metric.longest"), out _longestSessionValue, new Rectangle(214, 88, 174, 78), AccentYellow));
+        dayPanel.Controls.Add(BuildSmallMetric(AppText.Get("stats.daily.metric.deviceShare"), out _deviceShareValue, new Rectangle(24, 186, 174, 78), TextPrimary));
+        dayPanel.Controls.Add(BuildSmallMetric(AppText.Get("stats.daily.metric.reminders"), out _reminderCountValue, new Rectangle(214, 186, 174, 78), TextPrimary));
 
         _hourlyChart = new HourlyHeatChart
         {
-            Bounds = new Rectangle(370, 12, 270, 260),
+            Bounds = new Rectangle(404, 12, 255, 260),
             BackColor = Color.Transparent
         };
         dayPanel.Controls.Add(_hourlyChart);
 
-        AddPanelTitle(dayPanel, AppText.Get("stats.appUsage.title"), new Rectangle(690, 36, 220, 36));
-        _appUsageRanking = new AppUsageRankingControl { Bounds = new Rectangle(690, 82, 390, 190), BackColor = Color.Transparent };
+        AddPanelTitle(dayPanel, AppText.Get("stats.appUsage.title"), new Rectangle(704, 36, 220, 36));
+        _appUsageRanking = new AppUsageRankingControl { Bounds = new Rectangle(704, 82, 376, 190), BackColor = Color.Transparent };
         dayPanel.Controls.Add(_appUsageRanking);
 
         var weekPanel = CreatePanel(new Rectangle(30, 410, 350, 300));
@@ -380,10 +380,20 @@ public sealed class StatsForm : Form
             .GroupBy(entry => (
                 Source: SourceLabel(entry),
                 AppName: string.IsNullOrWhiteSpace(entry.AppName) ? entry.AppId : entry.AppName))
-            .Select(group => new AppUsageRow(
-                group.Key.AppName,
-                group.Key.Source,
-                group.Sum(entry => entry.DurationSeconds)))
+            .Select(group =>
+            {
+                var best = group
+                    .OrderByDescending(entry => entry.DurationSeconds)
+                    .ThenByDescending(entry => entry.UpdatedAtUnixSeconds)
+                    .First();
+                return new AppUsageRow(
+                    group.Key.AppName,
+                    group.Key.Source,
+                    best.AppId,
+                    best.Platform,
+                    best.IconData,
+                    best.DurationSeconds);
+            })
             .OrderByDescending(row => row.DurationSeconds)
             .ThenBy(row => row.AppName, StringComparer.CurrentCultureIgnoreCase)
             .Take(take)
@@ -626,7 +636,7 @@ public sealed class StatsForm : Form
         value = new FitTextLabel
         {
             Text = AppText.Get("duration.zeroMinutes"),
-            Bounds = new Rectangle(16, 38, bounds.Width - 28, 32),
+            Bounds = new Rectangle(16, 38, bounds.Width - 24, 32),
             MaxFontSize = 17F,
             MinFontSize = 11F,
             FontStyle = FontStyle.Bold,
@@ -1797,11 +1807,12 @@ public sealed class StatsForm : Form
         }
     }
 
-    private sealed record AppUsageRow(string AppName, string SourceLabel, long DurationSeconds);
+    private sealed record AppUsageRow(string AppName, string SourceLabel, string AppId, string Platform, string IconData, long DurationSeconds);
 
     private sealed class AppUsageRankingControl : Control
     {
         private IReadOnlyList<AppUsageRow> _entries = Array.Empty<AppUsageRow>();
+        private readonly Dictionary<string, Image?> _iconCache = new(StringComparer.OrdinalIgnoreCase);
 
         public AppUsageRankingControl()
         {
@@ -1845,29 +1856,35 @@ public sealed class StatsForm : Form
         {
             var y = index * 47;
             var iconBounds = new Rectangle(0, y + 4, 34, 34);
-            var iconColor = IconColor(index);
-            using (var iconBrush = new SolidBrush(iconColor))
-            using (var iconPath = CreateRoundRect(iconBounds, 10))
+            var iconImage = GetAppIcon(entry);
+            if (iconImage is not null)
             {
-                graphics.FillPath(iconBrush, iconPath);
+                graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                graphics.DrawImage(iconImage, iconBounds);
             }
-
-            using (var iconFont = AppFonts.Create(11F, FontStyle.Bold))
-            using (var iconTextBrush = new SolidBrush(Color.White))
-            using (var iconFormat = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+            else
             {
+                var iconColor = IconColor(index);
+                using (var iconBrush = new SolidBrush(iconColor))
+                using (var iconPath = CreateRoundRect(iconBounds, 10))
+                {
+                    graphics.FillPath(iconBrush, iconPath);
+                }
+
+                using var iconFont = AppFonts.Create(11F, FontStyle.Bold);
+                using var iconTextBrush = new SolidBrush(Color.White);
+                using var iconFormat = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
                 graphics.DrawString(Initial(entry.AppName), iconFont, iconTextBrush, iconBounds, iconFormat);
             }
 
             var textLeft = 48;
             var durationWidth = 64;
-            var badgeWidth = 42;
-            var badgeGap = 8;
-            using var nameFont = AppFonts.Create(10F, FontStyle.Regular);
+            using var nameFont = AppFonts.Create(9.2F, FontStyle.Regular);
             var name = entry.AppName;
-            var source = entry.SourceLabel;
-            var badgeX = Width - durationWidth - badgeWidth - 14;
-            var nameBounds = new Rectangle(textLeft, y, Math.Max(40, badgeX - badgeGap - textLeft), 24);
+            var sourceIconBounds = new Rectangle(textLeft, y + 3, 18, 18);
+            DrawSourceIcon(graphics, sourceIconBounds, IsPcSource(entry));
+            var nameLeft = textLeft + 24;
+            var nameBounds = new Rectangle(nameLeft, y, Math.Max(40, Width - durationWidth - 8 - nameLeft), 24);
             TextRenderer.DrawText(
                 graphics,
                 name,
@@ -1875,21 +1892,20 @@ public sealed class StatsForm : Form
                 nameBounds,
                 TextPrimary,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
-            DrawSourceBadge(graphics, new Point(badgeX, y + 1), source);
 
             using var durationFont = AppFonts.Create(9F, FontStyle.Bold);
             using (var durationBrush = new SolidBrush(Color.FromArgb(142, 148, 160)))
             using (var durationFormat = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center })
             {
                 graphics.DrawString(
-                    FormatDuration(entry.DurationSeconds),
+                    FormatAppUsageDuration(entry.DurationSeconds),
                     durationFont,
                     durationBrush,
                     new RectangleF(Width - durationWidth, y - 2, durationWidth, 30),
                     durationFormat);
             }
 
-            var track = new Rectangle(textLeft, y + 33, Math.Max(40, badgeX - textLeft - 8), 7);
+            var track = new Rectangle(textLeft, y + 33, Math.Max(40, Width - textLeft), 7);
             using (var trackBrush = new SolidBrush(Color.FromArgb(232, 243, 239)))
             using (var fillBrush = new SolidBrush(Color.FromArgb(66, 133, 244)))
             using (var trackPath = CreateRoundRect(track, 4))
@@ -1901,21 +1917,96 @@ public sealed class StatsForm : Form
             }
         }
 
-        private static void DrawSourceBadge(Graphics graphics, Point location, string source)
+        private Image? GetAppIcon(AppUsageRow entry)
         {
-            var bounds = new Rectangle(location.X, location.Y, 42, 22);
-            using (var path = CreateRoundRect(bounds, 9))
-            using (var fill = new SolidBrush(SoftGreen))
-            using (var border = new Pen(BorderColor))
+            if (!string.IsNullOrWhiteSpace(entry.IconData))
             {
-                graphics.FillPath(fill, path);
-                graphics.DrawPath(border, path);
+                var cacheKey = "data:" + entry.IconData.GetHashCode(StringComparison.Ordinal);
+                if (_iconCache.TryGetValue(cacheKey, out var cachedDataIcon))
+                {
+                    return cachedDataIcon;
+                }
+
+                Image? dataImage = null;
+                try
+                {
+                    var bytes = Convert.FromBase64String(entry.IconData);
+                    using var stream = new MemoryStream(bytes);
+                    using var loaded = Image.FromStream(stream);
+                    dataImage = new Bitmap(loaded);
+                }
+                catch
+                {
+                    dataImage = null;
+                }
+
+                _iconCache[cacheKey] = dataImage;
+                if (dataImage is not null)
+                {
+                    return dataImage;
+                }
             }
 
-            using var font = AppFonts.Create(7.2F, FontStyle.Bold);
-            using var brush = new SolidBrush(AccentGreen);
-            using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-            graphics.DrawString(source, font, brush, bounds, format);
+            if (!IsPcSource(entry) || string.IsNullOrWhiteSpace(entry.AppId) || !File.Exists(entry.AppId))
+            {
+                return null;
+            }
+
+            if (_iconCache.TryGetValue(entry.AppId, out var cached))
+            {
+                return cached;
+            }
+
+            Image? image = null;
+            try
+            {
+                using var icon = Icon.ExtractAssociatedIcon(entry.AppId);
+                image = icon?.ToBitmap();
+            }
+            catch
+            {
+                image = null;
+            }
+
+            _iconCache[entry.AppId] = image;
+            return image;
+        }
+
+        private static void DrawSourceIcon(Graphics graphics, Rectangle bounds, bool pc)
+        {
+            using var pen = new Pen(pc ? AccentGreen : AccentBlue, 2F)
+            {
+                StartCap = LineCap.Round,
+                EndCap = LineCap.Round,
+                LineJoin = LineJoin.Round
+            };
+
+            if (pc)
+            {
+                var screen = new Rectangle(bounds.X + 2, bounds.Y + 3, bounds.Width - 4, bounds.Height - 8);
+                using var path = CreateRoundRect(screen, 2);
+                graphics.DrawPath(pen, path);
+                graphics.DrawLine(pen, bounds.X + bounds.Width / 2F, bounds.Bottom - 5, bounds.X + bounds.Width / 2F, bounds.Bottom - 1);
+                graphics.DrawLine(pen, bounds.X + 5, bounds.Bottom - 1, bounds.Right - 5, bounds.Bottom - 1);
+                return;
+            }
+
+            var phone = new Rectangle(bounds.X + 5, bounds.Y + 1, bounds.Width - 10, bounds.Height - 2);
+            using var phonePath = CreateRoundRect(phone, 3);
+            graphics.DrawPath(pen, phonePath);
+            graphics.DrawLine(pen, bounds.X + 8, bounds.Bottom - 4, bounds.Right - 8, bounds.Bottom - 4);
+        }
+
+        private static bool IsPcSource(AppUsageRow entry)
+        {
+            return string.Equals(entry.SourceLabel, AppText.Get("common.pc"), StringComparison.OrdinalIgnoreCase)
+                || string.Equals(entry.Platform, "windows", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string FormatAppUsageDuration(long totalSeconds)
+        {
+            var duration = TimeSpan.FromSeconds(Math.Max(0, totalSeconds));
+            return $"{(int)duration.TotalHours}:{duration.Minutes:00}";
         }
 
         private static string Initial(string value)
@@ -1933,6 +2024,19 @@ public sealed class StatsForm : Form
                 2 => Color.FromArgb(18, 125, 110),
                 _ => Color.FromArgb(239, 39, 67)
             };
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                foreach (var image in _iconCache.Values)
+                {
+                    image?.Dispose();
+                }
+                _iconCache.Clear();
+            }
+            base.Dispose(disposing);
         }
     }
 

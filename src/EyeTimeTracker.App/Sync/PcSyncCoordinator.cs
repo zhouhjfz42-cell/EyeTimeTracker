@@ -259,6 +259,10 @@ public sealed class PcSyncCoordinator
                 if (normalized.UpdatedAtUnixSeconds >= existing.UpdatedAtUnixSeconds)
                 {
                     existing.AppName = normalized.AppName;
+                    if (!string.IsNullOrWhiteSpace(normalized.IconData))
+                    {
+                        existing.IconData = normalized.IconData;
+                    }
                     existing.DurationSeconds = normalized.DurationSeconds;
                     existing.UpdatedAtUnixSeconds = normalized.UpdatedAtUnixSeconds;
                 }
@@ -322,6 +326,7 @@ public sealed class PcSyncCoordinator
             Source = entry.Source,
             AppId = entry.AppId,
             AppName = entry.AppName,
+            IconData = entry.IconData,
             LocalDate = entry.LocalDate,
             DurationSeconds = Math.Max(0, entry.DurationSeconds),
             UpdatedAtUnixSeconds = entry.UpdatedAtUnixSeconds

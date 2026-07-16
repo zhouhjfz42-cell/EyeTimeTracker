@@ -1,3 +1,5 @@
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.Windows.Forms;
 using EyeTimeTracker.App.Platform;
 using EyeTimeTracker.App.Sync;
@@ -400,14 +402,45 @@ public sealed class TrackingController : IDisposable
                 Source = "pc",
                 AppId = foreground.AppId,
                 AppName = foreground.AppName,
+                IconData = ReadAppIconData(foreground.AppId),
                 LocalDate = date
             };
             _state.AppUsageEntries.Add(entry);
         }
 
         entry.AppName = string.IsNullOrWhiteSpace(foreground.AppName) ? entry.AppName : foreground.AppName;
+        if (string.IsNullOrWhiteSpace(entry.IconData))
+        {
+            entry.IconData = ReadAppIconData(foreground.AppId);
+        }
         entry.DurationSeconds += countedSeconds;
         entry.UpdatedAtUnixSeconds = snapshot.Timestamp.ToUnixTimeSeconds();
+    }
+
+    private static string ReadAppIconData(string appId)
+    {
+        if (string.IsNullOrWhiteSpace(appId) || !File.Exists(appId))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            using var icon = Icon.ExtractAssociatedIcon(appId);
+            if (icon is null)
+            {
+                return string.Empty;
+            }
+
+            using var bitmap = new Bitmap(icon.ToBitmap(), new Size(48, 48));
+            using var stream = new MemoryStream();
+            bitmap.Save(stream, ImageFormat.Png);
+            return Convert.ToBase64String(stream.ToArray());
+        }
+        catch
+        {
+            return string.Empty;
+        }
     }
 
     private StateSaveSnapshot CreateSaveSnapshotLocked(DateTimeOffset savedAt)
@@ -556,6 +589,7 @@ public sealed class TrackingController : IDisposable
             Source = entry.Source,
             AppId = entry.AppId,
             AppName = entry.AppName,
+            IconData = entry.IconData,
             LocalDate = entry.LocalDate,
             DurationSeconds = entry.DurationSeconds,
             UpdatedAtUnixSeconds = entry.UpdatedAtUnixSeconds

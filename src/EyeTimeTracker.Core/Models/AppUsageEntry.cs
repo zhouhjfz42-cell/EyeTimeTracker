@@ -8,6 +8,7 @@ public sealed class AppUsageEntry
     public string Source { get; set; } = string.Empty;
     public string AppId { get; set; } = string.Empty;
     public string AppName { get; set; } = string.Empty;
+    public string IconData { get; set; } = string.Empty;
     public DateOnly LocalDate { get; set; }
     public long DurationSeconds { get; set; }
     public long UpdatedAtUnixSeconds { get; set; }

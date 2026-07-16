@@ -168,7 +168,7 @@ public final class AndroidSyncRunner {
             return "";
         }
 
-        AndroidPcDiscoveryClient.DiscoveryResult discovery = discoveryClient.discover();
+        AndroidPcDiscoveryClient.DiscoveryResult discovery = discoveryClient.discoverKnownPeer(settings.peerHost, settings.peerPort);
         Log.i(DIAG_TAG, "AndroidSyncRunner discovery found=" + discovery.found
                 + " host=" + discovery.host
                 + " port=" + discovery.port
@@ -221,6 +221,7 @@ public final class AndroidSyncRunner {
             item.put("Source", entry.source);
             item.put("AppId", entry.appId);
             item.put("AppName", entry.appName);
+            item.put("IconData", entry.iconData);
             item.put("LocalDate", entry.localDate);
             item.put("DurationSeconds", entry.durationSeconds);
             item.put("UpdatedAtUnixSeconds", entry.updatedAtUnixSeconds);

@@ -3,6 +3,9 @@ package com.eyetimetracker.android;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.Context;
+import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -11,7 +14,9 @@ import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
+import android.util.Base64;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -20,13 +25,17 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.GridLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 public final class StatsActivity extends Activity {
     public static final String EXTRA_FAMILY_CHILD_STATS = "com.eyetimetracker.android.FAMILY_CHILD_STATS";
@@ -850,10 +859,7 @@ public final class StatsActivity extends Activity {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
 
-        TextView icon = text(initial(entry.appName.isEmpty() ? entry.appId : entry.appName), 18, Color.WHITE, true);
-        icon.setGravity(Gravity.CENTER);
-        icon.setBackground(rounded(appIconColor(index), dp(14), Color.TRANSPARENT, 0));
-        row.addView(icon, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        row.addView(appIconView(entry, index), new LinearLayout.LayoutParams(dp(48), dp(48)));
 
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -864,19 +870,18 @@ public final class StatsActivity extends Activity {
         LinearLayout nameRow = new LinearLayout(this);
         nameRow.setOrientation(LinearLayout.HORIZONTAL);
         nameRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView name = text(entry.appName.isEmpty() ? entry.appId : entry.appName, 18, COLOR_TEXT, false);
+        DeviceSourceIconView source = new DeviceSourceIconView(this, isPcSource(entry));
+        nameRow.addView(source, new LinearLayout.LayoutParams(dp(22), dp(22)));
+        TextView name = text(entry.appName.isEmpty() ? entry.appId : entry.appName, 16, COLOR_TEXT, false);
         name.setSingleLine(true);
         name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        nameRow.addView(name, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        TextView source = text(sourceLabel(entry), 12, COLOR_GREEN, true);
-        source.setGravity(Gravity.CENTER);
-        source.setBackground(rounded(COLOR_SOFT, dp(999), COLOR_LINE, 1));
-        LinearLayout.LayoutParams sourceParams = new LinearLayout.LayoutParams(dp(42), dp(23));
-        sourceParams.leftMargin = dp(4);
-        nameRow.addView(source, sourceParams);
-        TextView duration = text(formatDuration(entry.durationSeconds), 16, Color.rgb(142, 148, 160), true);
+        LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        nameParams.leftMargin = dp(7);
+        nameRow.addView(name, nameParams);
+        TextView duration = text(formatAppUsageDuration(entry.durationSeconds), 15, Color.rgb(142, 148, 160), true);
         duration.setGravity(Gravity.RIGHT);
-        LinearLayout.LayoutParams durationParams = new LinearLayout.LayoutParams(dp(76), LinearLayout.LayoutParams.WRAP_CONTENT);
+        duration.setSingleLine(true);
+        LinearLayout.LayoutParams durationParams = new LinearLayout.LayoutParams(dp(54), LinearLayout.LayoutParams.WRAP_CONTENT);
         durationParams.leftMargin = dp(6);
         nameRow.addView(duration, durationParams);
         content.addView(nameRow, matchWrap());
@@ -887,15 +892,75 @@ public final class StatsActivity extends Activity {
         return row;
     }
 
+    private View appIconView(AppUsageEntry entry, int index) {
+        Bitmap syncedIcon = decodeIconData(entry == null ? "" : entry.iconData);
+        if (syncedIcon != null) {
+            ImageView image = new ImageView(this);
+            image.setImageBitmap(syncedIcon);
+            image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            image.setAdjustViewBounds(false);
+            image.setPadding(dp(2), dp(2), dp(2), dp(2));
+            return image;
+        }
+
+        Drawable icon = loadAppIcon(entry);
+        if (icon != null) {
+            ImageView image = new ImageView(this);
+            image.setImageDrawable(icon);
+            image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            image.setAdjustViewBounds(false);
+            image.setPadding(dp(2), dp(2), dp(2), dp(2));
+            return image;
+        }
+
+        TextView fallback = text(initial(entry.appName.isEmpty() ? entry.appId : entry.appName), 18, Color.WHITE, true);
+        fallback.setGravity(Gravity.CENTER);
+        fallback.setBackground(rounded(appIconColor(index), dp(14), Color.TRANSPARENT, 0));
+        return fallback;
+    }
+
+    private Bitmap decodeIconData(String iconData) {
+        if (iconData == null || iconData.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            byte[] bytes = Base64.decode(iconData, Base64.DEFAULT);
+            return BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private Drawable loadAppIcon(AppUsageEntry entry) {
+        if (entry == null || isPcSource(entry) || entry.appId.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            return getPackageManager().getApplicationIcon(entry.appId);
+        } catch (PackageManager.NameNotFoundException ignored) {
+            return null;
+        } catch (RuntimeException ignored) {
+            return null;
+        }
+    }
+
     private static List<AppUsageEntry> rankAppUsage(List<AppUsageEntry> entries, int maxRows) {
-        List<AppUsageEntry> values = new ArrayList<>();
+        Map<String, AppUsageEntry> bestByName = new HashMap<>();
         if (entries != null) {
             for (AppUsageEntry entry : entries) {
                 if (entry != null && entry.durationSeconds > 0L) {
-                    values.add(entry);
+                    String key = appDisplayKey(entry);
+                    AppUsageEntry existing = bestByName.get(key);
+                    if (existing == null
+                            || entry.durationSeconds > existing.durationSeconds
+                            || (entry.durationSeconds == existing.durationSeconds
+                            && entry.updatedAtUnixSeconds > existing.updatedAtUnixSeconds)) {
+                        bestByName.put(key, entry);
+                    }
                 }
             }
         }
+        List<AppUsageEntry> values = new ArrayList<>(bestByName.values());
         values.sort((left, right) -> Long.compare(right.durationSeconds, left.durationSeconds));
         if (values.size() <= maxRows) {
             return values;
@@ -904,9 +969,26 @@ public final class StatsActivity extends Activity {
     }
 
     private String sourceLabel(AppUsageEntry entry) {
-        return "pc".equalsIgnoreCase(entry.source) || "windows".equalsIgnoreCase(entry.platform)
+        return isPcSource(entry)
                 ? getString(R.string.common_pc)
                 : getString(R.string.common_phone);
+    }
+
+    private static boolean isPcSource(AppUsageEntry entry) {
+        return entry != null
+                && ("pc".equalsIgnoreCase(entry.source) || "windows".equalsIgnoreCase(entry.platform));
+    }
+
+    private static String appDisplayKey(AppUsageEntry entry) {
+        String appName = entry.appName == null || entry.appName.trim().isEmpty()
+                ? entry.appId
+                : entry.appName;
+        return safeKey(entry.source) + ":" + safeKey(appName);
+    }
+
+    private static String safeKey(String value) {
+        String safe = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+        return safe.isEmpty() ? "_" : safe;
     }
 
     private static String initial(String value) {
@@ -1012,6 +1094,14 @@ public final class StatsActivity extends Activity {
                     String.format("%02d", minutes));
         }
         return formatResource(context, R.string.duration_minutes, "minutes", minutes);
+    }
+
+    private static String formatAppUsageDuration(long totalSeconds) {
+        long safeSeconds = Math.max(0L, totalSeconds);
+        long totalMinutes = safeSeconds / 60L;
+        long hours = totalMinutes / 60L;
+        long minutes = totalMinutes % 60L;
+        return hours + ":" + String.format(Locale.ROOT, "%02d", minutes);
     }
 
     private static String formatTooltipMinutes(Context context, long totalSeconds) {
@@ -1731,6 +1821,43 @@ public final class StatsActivity extends Activity {
             RectF fill = new RectF(0, centerY - radius, Math.max(dpLocal(8), getWidth() * progress), centerY + radius);
             paint.setColor(Color.rgb(66, 133, 244));
             canvas.drawRoundRect(fill, radius, radius, paint);
+        }
+
+        private float dpLocal(float value) {
+            return value * getResources().getDisplayMetrics().density;
+        }
+    }
+
+    public static final class DeviceSourceIconView extends View {
+        private final boolean pc;
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+        public DeviceSourceIconView(android.content.Context context, boolean pc) {
+            super(context);
+            this.pc = pc;
+        }
+
+        @Override protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            float width = getWidth();
+            float height = getHeight();
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(dpLocal(pc ? 2.1f : 2.3f));
+            paint.setStrokeCap(Paint.Cap.ROUND);
+            paint.setStrokeJoin(Paint.Join.ROUND);
+            paint.setColor(pc ? COLOR_GREEN : COLOR_BLUE);
+
+            if (pc) {
+                RectF screen = new RectF(width * 0.12f, height * 0.18f, width * 0.88f, height * 0.68f);
+                canvas.drawRoundRect(screen, dpLocal(2.5f), dpLocal(2.5f), paint);
+                canvas.drawLine(width * 0.50f, height * 0.68f, width * 0.50f, height * 0.86f, paint);
+                canvas.drawLine(width * 0.34f, height * 0.86f, width * 0.66f, height * 0.86f, paint);
+                return;
+            }
+
+            RectF phone = new RectF(width * 0.28f, height * 0.08f, width * 0.72f, height * 0.92f);
+            canvas.drawRoundRect(phone, dpLocal(3.2f), dpLocal(3.2f), paint);
+            canvas.drawLine(width * 0.43f, height * 0.80f, width * 0.57f, height * 0.80f, paint);
         }
 
         private float dpLocal(float value) {

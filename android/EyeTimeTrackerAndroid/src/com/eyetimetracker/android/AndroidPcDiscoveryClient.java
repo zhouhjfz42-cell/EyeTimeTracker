@@ -33,6 +33,38 @@ public final class AndroidPcDiscoveryClient {
         return broadcastResult.found ? broadcastResult : discoverTcpScan();
     }
 
+    public DiscoveryResult discoverKnownPeer(String preferredHost, int preferredPort) {
+        byte[] requestBytes = buildRequestJson().getBytes(StandardCharsets.UTF_8);
+        DiscoveryResult broadcastResult = discoverUdp(LanDiscoveryAddresses.broadcastAddresses(), DEFAULT_DISCOVERY_PORT, requestBytes);
+        if (broadcastResult.found) {
+            return broadcastResult;
+        }
+
+        if (preferredHost == null || preferredHost.trim().isEmpty()) {
+            return DiscoveryResult.empty();
+        }
+
+        String requestJson = buildRequestJson();
+        int perConnectTimeout = Math.max(80, Math.min(220, timeoutMillis / 8));
+        int perReadTimeout = Math.max(100, Math.min(300, timeoutMillis / 6));
+        if (preferredPort > 0 && preferredPort <= 65535) {
+            DiscoveryResult result = discoverTcp(preferredHost.trim(), preferredPort, requestJson, perConnectTimeout, perReadTimeout);
+            if (result.found) {
+                return result;
+            }
+        }
+        for (int port = FIRST_TCP_DISCOVERY_PORT; port <= LAST_TCP_DISCOVERY_PORT; port++) {
+            if (port == preferredPort) {
+                continue;
+            }
+            DiscoveryResult result = discoverTcp(preferredHost.trim(), port, requestJson, perConnectTimeout, perReadTimeout);
+            if (result.found) {
+                return result;
+            }
+        }
+        return DiscoveryResult.empty();
+    }
+
     public DiscoveryResult discover(String host, int port) {
         if (host == null || host.trim().isEmpty() || port <= 0 || port > 65535) {
             return DiscoveryResult.empty();

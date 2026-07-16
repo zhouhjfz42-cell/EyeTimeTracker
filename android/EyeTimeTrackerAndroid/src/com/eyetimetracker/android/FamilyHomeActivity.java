@@ -29,7 +29,10 @@ import android.widget.TextView;
 import android.widget.Toast;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 public final class FamilyHomeActivity extends Activity {
     private static final String DIAG_TAG = "EyeTimeDiag";
@@ -45,6 +48,8 @@ public final class FamilyHomeActivity extends Activity {
     private static final int COLOR_DISABLED_TEXT = Color.rgb(152, 162, 160);
     private static final long REFRESH_INTERVAL_MS = 10_000L;
     private static final long FAMILY_UPLOAD_INTERVAL_MS = 15_000L;
+    private static final long MANUAL_REFRESH_TIMEOUT_MS = 10_000L;
+    private static final long MANUAL_REFRESH_SERVER_WAIT_MS = 200L;
     private static final String DISPLAY_CACHE_PREFS = "family_home_display_cache";
     private static final String CACHE_TODAY_SECONDS = "todaySeconds";
     private static final String CACHE_YESTERDAY_SECONDS = "yesterdaySeconds";
@@ -66,6 +71,7 @@ public final class FamilyHomeActivity extends Activity {
     private boolean statsRefreshInFlight;
     private boolean statsRefreshQueued;
     private boolean childReminderDialogShowing;
+    private boolean manualRefreshInFlight;
     private long lastFamilyUploadStartedAt;
     private TextView todayValue;
     private TextView yesterdayValue;
@@ -73,6 +79,7 @@ public final class FamilyHomeActivity extends Activity {
     private TextView monthValue;
     private TextView reminderValue;
     private TextView syncStatusValue;
+    private TextView manualRefreshButton;
     private boolean loadedOnCreate;
 
     private final Runnable familyNetworkStartupRunnable = new Runnable() {
@@ -81,11 +88,6 @@ public final class FamilyHomeActivity extends Activity {
                 return;
             }
             startFamilyStatsServerIfNeeded();
-            requestFamilyChildUploadNow(false);
-            handler.removeCallbacks(familyUploadRequestRetryRunnable);
-            handler.removeCallbacks(familyUploadRequestFallbackRunnable);
-            handler.postDelayed(familyUploadRequestRetryRunnable, 1000L);
-            handler.postDelayed(familyUploadRequestFallbackRunnable, 3000L);
             triggerFamilyStatsUploadIfNeeded(false);
         }
     };
@@ -102,10 +104,38 @@ public final class FamilyHomeActivity extends Activity {
         }
     };
 
+    private final Runnable manualRefreshRequestRunnable = new Runnable() {
+        @Override public void run() {
+            if (!manualRefreshInFlight) {
+                return;
+            }
+            startFamilyStatsServerIfNeeded();
+            if (familyStatsServerPort <= 0) {
+                Log.i(DIAG_TAG, "FamilyStats manual refresh waiting for parent server port");
+                setSyncStatusText("（正在准备接收孩子设备数据...）");
+                handler.postDelayed(this, MANUAL_REFRESH_SERVER_WAIT_MS);
+                return;
+            }
+            Log.i(DIAG_TAG, "FamilyStats manual refresh send request parentPort=" + familyStatsServerPort);
+            setSyncStatusText("（正在请求孩子设备...）");
+            requestFamilyChildUploadNow(false);
+            handler.postDelayed(familyUploadRequestRetryRunnable, 1000L);
+            handler.postDelayed(familyUploadRequestFallbackRunnable, 3000L);
+        }
+    };
+
     private final Runnable refreshRunnable = new Runnable() {
         @Override public void run() {
             refreshStats();
             handler.postDelayed(this, REFRESH_INTERVAL_MS);
+        }
+    };
+
+    private final Runnable manualRefreshTimeoutRunnable = new Runnable() {
+        @Override public void run() {
+            if (manualRefreshInFlight) {
+                finishManualFamilyRefresh("（孩子设备暂时没有响应）");
+            }
         }
     };
 
@@ -138,7 +168,10 @@ public final class FamilyHomeActivity extends Activity {
         handler.removeCallbacks(familyNetworkStartupRunnable);
         handler.removeCallbacks(familyUploadRequestRetryRunnable);
         handler.removeCallbacks(familyUploadRequestFallbackRunnable);
+        handler.removeCallbacks(manualRefreshTimeoutRunnable);
         handler.removeCallbacks(refreshRunnable);
+        manualRefreshInFlight = false;
+        setManualRefreshButtonEnabled(true);
         stopFamilyStatsServer();
         super.onPause();
     }
@@ -204,22 +237,22 @@ public final class FamilyHomeActivity extends Activity {
         todayValue.setSingleLine(true);
         todayValue.setText(DurationFormatter.format(this, 0));
         todayValue.setTextColor(colorForTone(TodayTone.fromSeconds(0)));
-        root.addView(todayValue, matchWrapTop(18));
+        root.addView(todayValue, matchWrapTop(8));
+        syncStatusValue = helpText("");
+        syncStatusValue.setTextSize(12);
+        syncStatusValue.setGravity(Gravity.CENTER);
+        syncStatusValue.setVisibility(View.GONE);
+        root.addView(syncStatusValue, matchWrapTop(14));
 
         TextView note = helpText(state.deviceRole == DeviceRole.CHILD_DEVICE
                 ? getString(R.string.family_home_child_note)
                 : getString(R.string.family_home_parent_note));
         note.setTextSize(14);
-        root.addView(note, matchWrapTop(12));
-        syncStatusValue = helpText("");
-        syncStatusValue.setTextSize(12);
-        syncStatusValue.setVisibility(View.GONE);
-        root.addView(syncStatusValue, matchWrapTop(8));
 
         GridLayout cards = new GridLayout(this);
         cards.setColumnCount(2);
         cards.setUseDefaultMargins(false);
-        root.addView(cards, matchWrapTop(26));
+        root.addView(cards, matchWrapTop(22));
         addCard(cards, buildMetricCard(getString(R.string.main_card_yesterday), yesterdayValue = cardValueText()), 0, 0);
         addCard(cards, buildMetricCard(getString(R.string.main_card_week), weekValue = cardValueText()), 0, 1);
         addCard(cards, buildMetricCard(getString(R.string.main_card_month), monthValue = cardValueText()), 1, 0);
@@ -233,12 +266,23 @@ public final class FamilyHomeActivity extends Activity {
             applyFamilyStatsSnapshot(cachedSnapshot, false);
         }
 
+        if (state.deviceRole == DeviceRole.PARENT_DEVICE && state.hasBoundChildDevice) {
+            manualRefreshButton = topActionButton("获取最新数据");
+            manualRefreshButton.setOnClickListener(v -> requestLatestFamilyChildData());
+            LinearLayout refreshActions = new LinearLayout(this);
+            refreshActions.setGravity(Gravity.CENTER);
+            LinearLayout.LayoutParams refreshButtonParams = new LinearLayout.LayoutParams(dp(176), dp(44));
+            refreshActions.addView(manualRefreshButton, refreshButtonParams);
+            root.addView(refreshActions, matchWrapTop(22));
+        }
+
         TextView statsButton = actionButton(getString(R.string.common_stats_page), true);
         statsButton.setOnClickListener(v -> openStatsPage());
         LinearLayout actions = new LinearLayout(this);
         actions.setGravity(Gravity.CENTER);
         actions.addView(statsButton, centeredButtonParams());
         root.addView(actions, matchWrapTop(24));
+        root.addView(note, matchWrapTop(24));
         return scroll;
     }
 
@@ -1454,8 +1498,9 @@ public final class FamilyHomeActivity extends Activity {
         reminderValue.setText(snapshot.topAppText);
         if (syncStatusValue != null) {
             String status = familySnapshotStatusText(snapshot);
-            syncStatusValue.setText(status);
-            syncStatusValue.setVisibility(status.isEmpty() ? View.GONE : View.VISIBLE);
+            if (!manualRefreshInFlight) {
+                setSyncStatusText(status);
+            }
         }
         if (saveCache) {
             saveFamilyStatsDisplayCache(snapshot);
@@ -1469,9 +1514,9 @@ public final class FamilyHomeActivity extends Activity {
         long ageSeconds = Math.max(0L, System.currentTimeMillis() / 1000L - snapshot.updatedAtUnixSeconds);
         long ageMinutes = ageSeconds / 60L;
         if (ageMinutes <= 0L) {
-            return "刚刚更新";
+            return "（刚刚更新）";
         }
-        return ageMinutes + "分钟前更新";
+        return "（" + ageMinutes + "分钟前更新）";
     }
 
     private FamilyStatsSnapshot readFamilyStatsDisplayCache() {
@@ -1506,11 +1551,22 @@ public final class FamilyHomeActivity extends Activity {
         List<AppUsageEntry> entries = familyChildStats
                 ? store.getFamilyChildAppUsageEntries(date, date)
                 : store.getAppUsageEntries(date, date);
-        AppUsageEntry best = null;
+        Map<String, AppUsageEntry> bestByName = new HashMap<>();
         for (AppUsageEntry entry : entries) {
             if (entry == null || entry.durationSeconds <= 0L) {
                 continue;
             }
+            String key = appDisplayKey(entry);
+            AppUsageEntry existing = bestByName.get(key);
+            if (existing == null
+                    || entry.durationSeconds > existing.durationSeconds
+                    || (entry.durationSeconds == existing.durationSeconds
+                    && entry.updatedAtUnixSeconds > existing.updatedAtUnixSeconds)) {
+                bestByName.put(key, entry);
+            }
+        }
+        AppUsageEntry best = null;
+        for (AppUsageEntry entry : bestByName.values()) {
             if (best == null || entry.durationSeconds > best.durationSeconds) {
                 best = entry;
             }
@@ -1520,6 +1576,18 @@ public final class FamilyHomeActivity extends Activity {
         }
         String name = best.appName == null || best.appName.trim().isEmpty() ? best.appId : best.appName;
         return name + " " + DurationFormatter.formatMainCard(this, best.durationSeconds);
+    }
+
+    private static String appDisplayKey(AppUsageEntry entry) {
+        String appName = entry.appName == null || entry.appName.trim().isEmpty()
+                ? entry.appId
+                : entry.appName;
+        return safeKey(entry.source) + ":" + safeKey(appName);
+    }
+
+    private static String safeKey(String value) {
+        String safe = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+        return safe.isEmpty() ? "_" : safe;
     }
 
     private void maybeShowFamilyChildReminder(LocalDate today, long childTodaySeconds) {
@@ -1579,7 +1647,14 @@ public final class FamilyHomeActivity extends Activity {
                 Log.i(DIAG_TAG, "FamilyStatsLanServer uploaded child=" + childDeviceId
                         + " changed=" + changedSegments
                         + " host=" + childHost);
-                runOnUiThread(() -> refreshStats());
+                runOnUiThread(() -> {
+                    refreshStats();
+                    if (manualRefreshInFlight) {
+                        finishManualFamilyRefresh(changedSegments > 0
+                                ? "（已更新：刚刚）"
+                                : "（已收到孩子设备数据，暂无变化）");
+                    }
+                });
             }
 
             @Override public void onError(String message) {
@@ -1600,8 +1675,18 @@ public final class FamilyHomeActivity extends Activity {
         if (state == null
                 || state.deviceRole != DeviceRole.PARENT_DEVICE
                 || !state.isFamilyMode
-                || !state.hasBoundChildDevice
-                || familyUploadRequestRunning) {
+                || !state.hasBoundChildDevice) {
+            Log.i(DIAG_TAG, "FamilyStats upload request skipped invalid parent state");
+            return;
+        }
+        if (familyStatsServerPort <= 0) {
+            Log.i(DIAG_TAG, "FamilyStats upload request skipped parent server not ready scanFallback="
+                    + allowScanFallback);
+            return;
+        }
+        if (familyUploadRequestRunning) {
+            Log.i(DIAG_TAG, "FamilyStats upload request skipped already running scanFallback="
+                    + allowScanFallback);
             return;
         }
         familyUploadRequestRunning = true;
@@ -1623,6 +1708,56 @@ public final class FamilyHomeActivity extends Activity {
                     + " error=" + result.error);
             runOnUiThread(() -> familyUploadRequestRunning = false);
         }, "FamilyStatsUploadRequest").start();
+    }
+
+    private void requestLatestFamilyChildData() {
+        if (manualRefreshInFlight
+                || state == null
+                || state.deviceRole != DeviceRole.PARENT_DEVICE
+                || !state.isFamilyMode
+                || !state.hasBoundChildDevice) {
+            return;
+        }
+        manualRefreshInFlight = true;
+        setManualRefreshButtonEnabled(false);
+        setSyncStatusText("（正在请求孩子设备...）");
+        handler.removeCallbacks(manualRefreshTimeoutRunnable);
+        handler.removeCallbacks(manualRefreshRequestRunnable);
+        handler.removeCallbacks(familyUploadRequestRetryRunnable);
+        handler.removeCallbacks(familyUploadRequestFallbackRunnable);
+        Log.i(DIAG_TAG, "FamilyStats manual refresh clicked parentPort=" + familyStatsServerPort
+                + " childHost=" + store.getFamilyChildLastKnownHost());
+        startFamilyStatsServerIfNeeded();
+        handler.post(manualRefreshRequestRunnable);
+        handler.postDelayed(manualRefreshTimeoutRunnable, MANUAL_REFRESH_TIMEOUT_MS);
+    }
+
+    private void finishManualFamilyRefresh(String statusText) {
+        manualRefreshInFlight = false;
+        handler.removeCallbacks(manualRefreshTimeoutRunnable);
+        handler.removeCallbacks(manualRefreshRequestRunnable);
+        handler.removeCallbacks(familyUploadRequestRetryRunnable);
+        handler.removeCallbacks(familyUploadRequestFallbackRunnable);
+        setManualRefreshButtonEnabled(true);
+        setSyncStatusText(statusText);
+        Log.i(DIAG_TAG, "FamilyStats manual refresh finished status=" + statusText);
+    }
+
+    private void setManualRefreshButtonEnabled(boolean enabled) {
+        if (manualRefreshButton == null) {
+            return;
+        }
+        manualRefreshButton.setEnabled(enabled);
+        manualRefreshButton.setAlpha(enabled ? 1f : 0.56f);
+    }
+
+    private void setSyncStatusText(String value) {
+        if (syncStatusValue == null) {
+            return;
+        }
+        String text = value == null ? "" : value.trim();
+        syncStatusValue.setText(text);
+        syncStatusValue.setVisibility(text.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
     private void triggerFamilyStatsUploadIfNeeded(boolean respectInterval) {

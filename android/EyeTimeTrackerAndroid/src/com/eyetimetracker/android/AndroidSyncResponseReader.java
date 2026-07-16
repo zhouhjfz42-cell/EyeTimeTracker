@@ -129,6 +129,7 @@ public final class AndroidSyncResponseReader {
                 readString(json, "Source", "source"),
                 readString(json, "AppId", "appId"),
                 readString(json, "AppName", "appName"),
+                readString(json, "IconData", "iconData"),
                 readString(json, "LocalDate", "localDate"),
                 readLong(json, "DurationSeconds", "durationSeconds"),
                 readLong(json, "UpdatedAtUnixSeconds", "updatedAtUnixSeconds"));

@@ -408,10 +408,11 @@ public final class MainActivity extends Activity {
         monthValue.setText(DurationFormatter.formatMainCard(this, snapshot.stats.monthSeconds));
         reminderValue.setText(ReminderThreshold.format(this, snapshot.reminderMinutes));
         SyncSettings syncSettings = snapshot.syncSettings;
+        boolean peerOnline = SyncConnectionState.isPeerOnline(syncSettings, System.currentTimeMillis() / 1000L);
         statusValue.setText(formatConnectionStatus(
                 getString(R.string.main_status_tracking),
                 syncSettings.isPaired,
-                syncSettings.lastError == null || syncSettings.lastError.trim().isEmpty(),
+                peerOnline,
                 getString(R.string.common_pc)));
         if (pairingButton != null) {
             pairingButton.setText(syncSettings.isPaired ? getString(R.string.common_disconnect) : getString(R.string.pair_pc_title));
@@ -421,7 +422,7 @@ public final class MainActivity extends Activity {
                 pairingButton.setLayoutParams(buttonParams);
             }
         }
-        statusDot.setBackground(oval(COLOR_GREEN));
+        statusDot.setBackground(oval(peerOnline ? COLOR_GREEN : COLOR_MUTED));
         checkPcStillConnected(syncSettings);
         if (refreshQueued) {
             refreshQueued = false;

@@ -7,6 +7,7 @@ public final class AppUsageEntry {
     public final String source;
     public final String appId;
     public final String appName;
+    public final String iconData;
     public final String localDate;
     public final long durationSeconds;
     public final long updatedAtUnixSeconds;
@@ -18,6 +19,7 @@ public final class AppUsageEntry {
             String source,
             String appId,
             String appName,
+            String iconData,
             String localDate,
             long durationSeconds,
             long updatedAtUnixSeconds) {
@@ -27,6 +29,7 @@ public final class AppUsageEntry {
         this.source = safe(source);
         this.appId = safe(appId);
         this.appName = safe(appName);
+        this.iconData = safe(iconData);
         this.localDate = safe(localDate);
         this.durationSeconds = Math.max(0L, durationSeconds);
         this.updatedAtUnixSeconds = Math.max(0L, updatedAtUnixSeconds);
