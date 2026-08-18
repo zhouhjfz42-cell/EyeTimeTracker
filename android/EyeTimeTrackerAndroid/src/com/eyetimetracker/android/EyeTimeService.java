@@ -7,6 +7,7 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -36,14 +37,26 @@ public final class EyeTimeService extends Service implements SensorEventListener
 
     private static final String CHANNEL_ID = "eye_time_tracker";
     private static final String REMINDER_CHANNEL_ID = ReminderNotificationProfile.CHANNEL_ID;
+    private static final String WALKING_REMINDER_CHANNEL_ID = "eye_time_walking_reminder";
     private static final int FOREGROUND_ID = 1001;
     private static final int REMINDER_ID = 1002;
+    private static final int CONTINUOUS_REMINDER_ID = 1003;
+    private static final int WALKING_REMINDER_ID = 1004;
+    private static final long WALKING_NOTIFICATION_TIMEOUT_MS = 4_000L;
+    private static final long[] WALKING_VIBRATION_PATTERN = new long[] {0L, 120L};
     private static final long TICK_MS = 10_000L;
     private static final long MOTION_THRESHOLD_MS = 180_000L;
     private static final long MAX_COUNTABLE_TICK_MS = 30_000L;
     private static final long FAMILY_BACKGROUND_UPLOAD_INTERVAL_MS = 60_000L;
     private static final long FAMILY_PENDING_UPLOAD_WINDOW_MS = 30 * 60_000L;
+    private static final long WALKING_SENSOR_WINDOW_MS = 15_000L;
+    private static final long WALKING_STEP_WINDOW_MS = 10_000L;
+    private static final long WALKING_ACCEL_WINDOW_MS = 12_000L;
+    private static final long WALKING_EVENT_GAP_MS = 6_000L;
     private static final float MOTION_DELTA_THRESHOLD = 0.7f;
+    private static final float WALKING_ACCEL_DELTA_THRESHOLD = 1.2f;
+
+    private static volatile boolean running;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable tickRunnable = new Runnable() {
@@ -65,10 +78,15 @@ public final class EyeTimeService extends Service implements SensorEventListener
     private long lastTickAt;
     private LocalDate lastStatsCacheWarmDate;
     private boolean hasLastSensor;
+    private long lastStepAt;
+    private long walkingStepStartedAt;
+    private long walkingMotionStartedAt;
+    private long lastWalkingMotionAt;
     private float lastX;
     private float lastY;
     private float lastZ;
     private boolean counting;
+    private boolean walkingReminderShownInEpisode;
     private long currentSessionStartedUnixSeconds;
     private boolean syncInFlight;
     private boolean statsCacheWarmInFlight;
@@ -81,11 +99,13 @@ public final class EyeTimeService extends Service implements SensorEventListener
     private long pendingFamilyStatsUploadUntilAt = Long.MIN_VALUE;
     private long lastAppUsageRefreshAt = Long.MIN_VALUE;
     private boolean appUsageRefreshInFlight;
+    private final Object appUsageRefreshLock = new Object();
     private PowerManager.WakeLock familyStatsWakeLock;
     private WifiManager.WifiLock familyStatsWifiLock;
 
     @Override public void onCreate() {
         super.onCreate();
+        running = true;
         store = new EyeTimeStore(this);
         syncRunner = new AndroidSyncRunner(store, this);
         appUsageCollector = new AndroidAppUsageCollector(this);
@@ -100,6 +120,7 @@ public final class EyeTimeService extends Service implements SensorEventListener
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
+        running = true;
         if (intent != null && ACTION_STOP.equals(intent.getAction())) {
             stopSelf();
             return START_NOT_STICKY;
@@ -107,12 +128,14 @@ public final class EyeTimeService extends Service implements SensorEventListener
         startForeground(FOREGROUND_ID, buildStatusNotification(getString(R.string.sync_service_running)));
         maybeWarmPastDailyStatsCache(LocalDate.now());
         ensureFamilyStatsUploadRequestServer();
+        registerSensor();
         handler.removeCallbacks(tickRunnable);
         handler.post(tickRunnable);
         return START_STICKY;
     }
 
     @Override public void onDestroy() {
+        running = false;
         handler.removeCallbacks(tickRunnable);
         if (sensorManager != null) {
             sensorManager.unregisterListener(this);
@@ -122,11 +145,24 @@ public final class EyeTimeService extends Service implements SensorEventListener
         super.onDestroy();
     }
 
+    public static boolean isRunning() {
+        return running;
+    }
+
     @Override public IBinder onBind(Intent intent) {
         return null;
     }
 
     @Override public void onSensorChanged(SensorEvent event) {
+        if (event.sensor.getType() == Sensor.TYPE_STEP_DETECTOR) {
+            long now = System.currentTimeMillis();
+            if (lastStepAt <= 0L || now - lastStepAt > WALKING_EVENT_GAP_MS) {
+                walkingStepStartedAt = now;
+            }
+            lastStepAt = now;
+            maybeShowWalkingReminder(now);
+            return;
+        }
         if (event.sensor.getType() != Sensor.TYPE_ACCELEROMETER) {
             return;
         }
@@ -136,7 +172,15 @@ public final class EyeTimeService extends Service implements SensorEventListener
         if (hasLastSensor) {
             float delta = Math.abs(x - lastX) + Math.abs(y - lastY) + Math.abs(z - lastZ);
             if (delta >= MOTION_DELTA_THRESHOLD) {
-                lastMotionAt = System.currentTimeMillis();
+                long now = System.currentTimeMillis();
+                lastMotionAt = now;
+                if (delta >= WALKING_ACCEL_DELTA_THRESHOLD) {
+                    if (lastWalkingMotionAt <= 0L || now - lastWalkingMotionAt > WALKING_EVENT_GAP_MS) {
+                        walkingMotionStartedAt = now;
+                    }
+                    lastWalkingMotionAt = now;
+                    maybeShowWalkingReminder(now);
+                }
             }
         } else {
             hasLastSensor = true;
@@ -187,6 +231,8 @@ public final class EyeTimeService extends Service implements SensorEventListener
         LocalDate todayDate = LocalDate.now();
         maybeRefreshAppUsage(todayDate, now, countedThisTick || (wasCounting && !counting));
         maybeWarmPastDailyStatsCache(todayDate);
+        maybeShowContinuousReminder(now);
+        maybeShowWalkingReminder(now);
         DailySummary today = store.getDay(todayDate);
         int reminderMinutes = store.getReminderMinutes();
         boolean repeatReminder = store.isRepeatReminderEnabled();
@@ -204,6 +250,19 @@ public final class EyeTimeService extends Service implements SensorEventListener
                     store.getLocalReminderState(),
                     syncSettings.peerReminderState,
                     peerOnline)) {
+                store.recordReminderDiagnostic(
+                        "daily",
+                        now / 1000L,
+                        currentSessionStartedUnixSeconds,
+                        Math.max(0L, today.totalSeconds),
+                        reminderMinutes,
+                        reminderStep);
+                Log.i(
+                        DIAG_TAG,
+                        "dailyReminder triggeredAt=" + now / 1000L
+                                + " totalSeconds=" + today.totalSeconds
+                                + " thresholdMinutes=" + reminderMinutes
+                                + " step=" + reminderStep);
                 showReminder(reminderMinutes, repeatReminder, reminderStep);
             }
         }
@@ -222,29 +281,50 @@ public final class EyeTimeService extends Service implements SensorEventListener
     }
 
     private void maybeRefreshAppUsage(LocalDate today, long now, boolean force) {
-        if (appUsageCollector == null || appUsageRefreshInFlight) {
+        if (appUsageCollector == null) {
             return;
         }
         if (!force && lastAppUsageRefreshAt != Long.MIN_VALUE && now - lastAppUsageRefreshAt < 60_000L) {
             return;
         }
-        appUsageRefreshInFlight = true;
-        lastAppUsageRefreshAt = now;
         new Thread(() -> {
-            try {
-                java.util.List<AppUsageEntry> entries = appUsageCollector.collectDailyUsage(store, today, System.currentTimeMillis());
-                if (!entries.isEmpty()) {
-                    int changed = store.replacePhoneAppUsageEntries(today, entries);
-                    if (changed > 0) {
-                        syncPolicy.markLocalChange(System.currentTimeMillis());
-                        markPendingFamilyStatsUpload(System.currentTimeMillis());
-                    }
-                    Log.i(DIAG_TAG, "AndroidAppUsageCollector refreshed entries=" + entries.size() + " changed=" + changed);
-                }
-            } finally {
+            refreshAppUsageBlocking(today, force);
+        }, "EyeTimeAppUsageRefresh").start();
+    }
+
+    private int refreshAppUsageBlocking(LocalDate today, boolean force) {
+        if (appUsageCollector == null || today == null) {
+            return 0;
+        }
+        long now = System.currentTimeMillis();
+        synchronized (appUsageRefreshLock) {
+            if (appUsageRefreshInFlight) {
+                return 0;
+            }
+            if (!force && lastAppUsageRefreshAt != Long.MIN_VALUE && now - lastAppUsageRefreshAt < 60_000L) {
+                return 0;
+            }
+            appUsageRefreshInFlight = true;
+            lastAppUsageRefreshAt = now;
+        }
+        try {
+            java.util.List<AppUsageEntry> entries = appUsageCollector.collectDailyUsage(store, today, System.currentTimeMillis());
+            if (entries.isEmpty()) {
+                Log.i(DIAG_TAG, "AndroidAppUsageCollector refreshed entries=0 changed=0");
+                return 0;
+            }
+            int changed = store.replacePhoneAppUsageEntries(today, entries);
+            if (changed > 0) {
+                syncPolicy.markLocalChange(System.currentTimeMillis());
+                markPendingFamilyStatsUpload(System.currentTimeMillis());
+            }
+            Log.i(DIAG_TAG, "AndroidAppUsageCollector refreshed entries=" + entries.size() + " changed=" + changed);
+            return changed;
+        } finally {
+            synchronized (appUsageRefreshLock) {
                 appUsageRefreshInFlight = false;
             }
-        }, "EyeTimeAppUsageRefresh").start();
+        }
     }
 
     private void maybeWarmPastDailyStatsCache(LocalDate today) {
@@ -361,6 +441,9 @@ public final class EyeTimeService extends Service implements SensorEventListener
         int directParentPort = Math.max(0, parentStatsPort);
         new Thread(() -> {
             try {
+                if (force) {
+                    refreshAppUsageBlocking(LocalDate.now(), true);
+                }
                 FamilyStatsLanClient client = force
                         ? new FamilyStatsLanClient()
                         : new FamilyStatsLanClient(1200, 1800, 12000, useFullDiscovery);
@@ -505,9 +588,137 @@ public final class EyeTimeService extends Service implements SensorEventListener
         if (sensorManager == null) {
             return;
         }
+        sensorManager.unregisterListener(this);
         Sensor sensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         if (sensor != null) {
             sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_NORMAL);
+        }
+        if (hasActivityRecognitionPermission()) {
+            Sensor stepDetector = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
+            if (stepDetector != null) {
+                sensorManager.registerListener(this, stepDetector, SensorManager.SENSOR_DELAY_NORMAL);
+            }
+        }
+    }
+
+    private boolean hasActivityRecognitionPermission() {
+        return Build.VERSION.SDK_INT < 29
+                || checkSelfPermission(android.Manifest.permission.ACTIVITY_RECOGNITION) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void maybeShowContinuousReminder(long now) {
+        if (!counting || currentSessionStartedUnixSeconds <= 0L) {
+            return;
+        }
+
+        long nowUnixSeconds = now / 1000L;
+        SyncSettings syncSettings = store.getSyncSettings();
+        boolean peerOnline = SyncConnectionState.isPeerOnline(syncSettings, nowUnixSeconds);
+        long sessionStarted = ContinuousReminderBaseline.resolve(
+                store.getLocalReminderState(),
+                syncSettings.peerReminderState,
+                peerOnline);
+        if (sessionStarted <= 0L) {
+            return;
+        }
+
+        long sessionSeconds = Math.max(0L, nowUnixSeconds - sessionStarted);
+        if (store.tryClaimContinuousReminder(
+                currentSessionStartedUnixSeconds,
+                sessionStarted,
+                sessionSeconds,
+                nowUnixSeconds)) {
+            int thresholdMinutes = store.getContinuousReminderMinutes();
+            int step = ReminderPolicy.reachedStep(sessionSeconds, thresholdMinutes);
+            store.recordReminderDiagnostic(
+                    "continuous",
+                    nowUnixSeconds,
+                    sessionStarted,
+                    sessionSeconds,
+                    thresholdMinutes,
+                    step);
+            Log.i(
+                    DIAG_TAG,
+                    "continuousReminder triggeredAt=" + nowUnixSeconds
+                            + " localSessionStartedAt=" + currentSessionStartedUnixSeconds
+                            + " sessionStartedAt=" + sessionStarted
+                            + " sessionSeconds=" + sessionSeconds
+                            + " thresholdMinutes=" + thresholdMinutes
+                            + " step=" + step);
+            showSimpleReminder(
+                    CONTINUOUS_REMINDER_ID,
+                    getString(R.string.eye_care_reminders_continuous_alert_title),
+                    getString(R.string.eye_care_reminders_continuous_alert_message));
+        }
+    }
+
+    private void maybeShowWalkingReminder(long now) {
+        boolean sensorWalking = lastStepAt > 0L
+                && walkingStepStartedAt > 0L
+                && now - lastStepAt <= WALKING_SENSOR_WINDOW_MS
+                && now - walkingStepStartedAt >= WALKING_STEP_WINDOW_MS;
+        boolean motionWalking = lastWalkingMotionAt > 0L
+                && walkingMotionStartedAt > 0L
+                && now - lastWalkingMotionAt <= WALKING_EVENT_GAP_MS
+                && now - walkingMotionStartedAt >= WALKING_ACCEL_WINDOW_MS;
+        boolean walkingNow = sensorWalking || motionWalking;
+        if (!counting || !walkingNow) {
+            walkingReminderShownInEpisode = false;
+            return;
+        }
+        if (!store.isWalkingReminderEnabled() || walkingReminderShownInEpisode) {
+            return;
+        }
+        walkingReminderShownInEpisode = true;
+        long sessionSeconds = currentSessionStartedUnixSeconds <= 0L
+                ? 0L
+                : Math.max(0L, now / 1000L - currentSessionStartedUnixSeconds);
+        store.recordReminderDiagnostic(
+                "walking",
+                now / 1000L,
+                currentSessionStartedUnixSeconds,
+                sessionSeconds,
+                0,
+                1);
+        Log.i(
+                DIAG_TAG,
+                "walkingReminder triggeredAt=" + now / 1000L
+                        + " sessionStartedAt=" + currentSessionStartedUnixSeconds
+                        + " sessionSeconds=" + sessionSeconds);
+        showWalkingReminderNotification();
+    }
+
+    private void showWalkingReminderNotification() {
+        Intent openIntent = new Intent(this, MainActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent pendingIntent = PendingIntent.getActivity(
+                this,
+                WALKING_REMINDER_ID,
+                openIntent,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                ? new Notification.Builder(this, WALKING_REMINDER_CHANNEL_ID)
+                : new Notification.Builder(this);
+        String message = getString(R.string.eye_care_reminders_walking_alert_message);
+        builder.setContentTitle(message)
+                .setContentText(message)
+                .setSmallIcon(R.drawable.ic_launcher)
+                .setContentIntent(pendingIntent)
+                .setAutoCancel(true)
+                .setPriority(Notification.PRIORITY_HIGH)
+                .setCategory(Notification.CATEGORY_REMINDER)
+                .setVisibility(Notification.VISIBILITY_PUBLIC)
+                .setVibrate(WALKING_VIBRATION_PATTERN)
+                .setSound(null);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            builder.setTimeoutAfter(WALKING_NOTIFICATION_TIMEOUT_MS);
+        }
+        NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager != null) {
+            manager.notify(WALKING_REMINDER_ID, builder.build());
+            handler.postDelayed(
+                    () -> manager.cancel(WALKING_REMINDER_ID),
+                    WALKING_NOTIFICATION_TIMEOUT_MS + 500L);
         }
     }
 
@@ -535,6 +746,16 @@ public final class EyeTimeService extends Service implements SensorEventListener
             }
             reminderChannel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
             manager.createNotificationChannel(reminderChannel);
+            NotificationChannel walkingChannel = new NotificationChannel(
+                    WALKING_REMINDER_CHANNEL_ID,
+                    getString(R.string.eye_care_reminders_walking_title),
+                    NotificationManager.IMPORTANCE_HIGH);
+            walkingChannel.setDescription(getString(R.string.eye_care_reminders_walking_alert_message));
+            walkingChannel.enableVibration(true);
+            walkingChannel.setVibrationPattern(WALKING_VIBRATION_PATTERN);
+            walkingChannel.setSound(null, null);
+            walkingChannel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+            manager.createNotificationChannel(walkingChannel);
         }
     }
 
@@ -605,6 +826,39 @@ public final class EyeTimeService extends Service implements SensorEventListener
         if (manager != null) {
             manager.notify(REMINDER_ID, notification);
         }
+    }
+
+    private void showSimpleReminder(int notificationId, String title, String message) {
+        Intent alertIntent = new Intent(this, ReminderActivity.class)
+                .putExtra(ReminderActivity.EXTRA_TITLE, title)
+                .putExtra(ReminderActivity.EXTRA_MESSAGE, message)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent alertPendingIntent = PendingIntent.getActivity(
+                this,
+                notificationId,
+                alertIntent,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                ? new Notification.Builder(this, REMINDER_CHANNEL_ID)
+                : new Notification.Builder(this);
+        Notification notification = builder
+                .setContentTitle(title)
+                .setContentText(message)
+                .setSmallIcon(R.drawable.ic_launcher)
+                .setContentIntent(alertPendingIntent)
+                .setAutoCancel(true)
+                .setPriority(ReminderNotificationProfile.NOTIFICATION_PRIORITY)
+                .setCategory(Notification.CATEGORY_REMINDER)
+                .setVisibility(Notification.VISIBILITY_PUBLIC)
+                .setDefaults(Notification.DEFAULT_ALL)
+                .setStyle(new Notification.BigTextStyle().bigText(message))
+                .setFullScreenIntent(alertPendingIntent, ReminderNotificationProfile.USE_FULL_SCREEN_INTENT)
+                .build();
+        NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager != null) {
+            manager.notify(notificationId, notification);
+        }
+        startActivity(alertIntent);
     }
 
     private Uri defaultReminderSound() {

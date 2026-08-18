@@ -6,4 +6,9 @@ public static class AppPaths
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "EyeTimeTracker",
         "state.json");
+
+    public static string ReminderDiagnosticLogPath { get; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "EyeTimeTracker",
+        "reminder-diagnostics.log");
 }

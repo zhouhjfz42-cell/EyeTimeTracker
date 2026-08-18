@@ -221,25 +221,46 @@ public sealed class StatsForm : Form
         DateOnly selectedRangeStart,
         DateOnly selectedRangeEnd)
     {
-        var records = _controller.GetRecordsSnapshot();
         var actualToday = DateOnly.FromDateTime(DateTime.Now);
-        var todayRecord = records.FirstOrDefault(record => record.Date == selectedDay) ?? new DailyRecord(selectedDay);
+        var weekDates = Enumerable.Range(0, 7)
+            .Select(offset => selectedWeekStart.AddDays(offset))
+            .ToList();
+
+        var daysInMonth = selectedMonthStart.Year == actualToday.Year && selectedMonthStart.Month == actualToday.Month
+            ? actualToday.Day
+            : DateTime.DaysInMonth(selectedMonthStart.Year, selectedMonthStart.Month);
+        var monthDates = Enumerable.Range(0, daysInMonth)
+            .Select(offset => selectedMonthStart.AddDays(offset))
+            .ToList();
+
+        var rangeStart = selectedRangeStart <= selectedRangeEnd ? selectedRangeStart : selectedRangeEnd;
+        var rangeEnd = selectedRangeStart <= selectedRangeEnd ? selectedRangeEnd : selectedRangeStart;
+        var rangeDates = DatesBetween(rangeStart, rangeEnd).ToList();
+        var statsByDate = _controller.GetDailyStatsSnapshots(
+            new[] { selectedDay }
+                .Concat(weekDates)
+                .Concat(monthDates)
+                .Concat(rangeDates));
+
+        DailyStatsSnapshot StatsFor(DateOnly date)
+        {
+            return statsByDate.TryGetValue(date, out var snapshot)
+                ? snapshot
+                : new DailyStatsSnapshot(new DailyRecord(date), new UsageDeviceBreakdown(0, 0));
+        }
+
+        var dayStats = StatsFor(selectedDay);
+        var todayRecord = dayStats.Record;
         AppState.NormalizeRecord(todayRecord);
 
-        var weekRecords = Enumerable.Range(0, 7)
-            .Select(offset => records.FirstOrDefault(record => record.Date == selectedWeekStart.AddDays(offset)) ?? new DailyRecord(selectedWeekStart.AddDays(offset)))
-            .ToList();
+        var weekStats = weekDates.Select(StatsFor).ToList();
+        var weekRecords = weekStats.Select(snapshot => snapshot.Record).ToList();
         foreach (var record in weekRecords)
         {
             AppState.NormalizeRecord(record);
         }
 
-        var daysInMonth = selectedMonthStart.Year == actualToday.Year && selectedMonthStart.Month == actualToday.Month
-            ? actualToday.Day
-            : DateTime.DaysInMonth(selectedMonthStart.Year, selectedMonthStart.Month);
-        var monthRecords = Enumerable.Range(0, daysInMonth)
-            .Select(offset => records.FirstOrDefault(record => record.Date == selectedMonthStart.AddDays(offset)) ?? new DailyRecord(selectedMonthStart.AddDays(offset)))
-            .ToList();
+        var monthRecords = monthDates.Select(date => StatsFor(date).Record).ToList();
         foreach (var record in monthRecords)
         {
             AppState.NormalizeRecord(record);
@@ -247,17 +268,12 @@ public sealed class StatsForm : Form
 
         var sessions = SessionValues(todayRecord).ToList();
         var longest = sessions.Count == 0 ? todayRecord.CurrentSessionSeconds : sessions.Max();
-        var deviceBreakdown = _controller.GetDeviceBreakdown(selectedDay);
-        var weekBreakdowns = Enumerable.Range(0, 7)
-            .Select(offset => _controller.GetDeviceBreakdown(selectedWeekStart.AddDays(offset)))
-            .ToList();
+        var deviceBreakdown = dayStats.Breakdown;
+        var weekBreakdowns = weekStats.Select(snapshot => snapshot.Breakdown).ToList();
         var appUsageRows = BuildAppUsageRows(_controller.GetAppUsageEntries(selectedDay, selectedDay), 4);
 
-        var rangeStart = selectedRangeStart <= selectedRangeEnd ? selectedRangeStart : selectedRangeEnd;
-        var rangeEnd = selectedRangeStart <= selectedRangeEnd ? selectedRangeEnd : selectedRangeStart;
-        var rangeRecords = records
-            .Where(record => record.Date >= rangeStart && record.Date <= rangeEnd)
-            .ToList();
+        var rangeStats = rangeDates.Select(StatsFor).ToList();
+        var rangeRecords = rangeStats.Select(snapshot => snapshot.Record).ToList();
         foreach (var record in rangeRecords)
         {
             AppState.NormalizeRecord(record);
@@ -266,7 +282,9 @@ public sealed class StatsForm : Form
         var rangeSessions = rangeRecords.SelectMany(SessionValues).ToList();
         var rangeLongest = rangeSessions.Count == 0 ? 0L : rangeSessions.Max();
         var rangeHourly = SumHourlySeconds(rangeRecords);
-        var rangeBreakdown = SumDeviceBreakdowns(rangeStart, rangeEnd);
+        var rangeBreakdown = new UsageDeviceBreakdown(
+            rangeStats.Sum(snapshot => snapshot.Breakdown.PcSeconds),
+            rangeStats.Sum(snapshot => snapshot.Breakdown.PhoneSeconds));
 
         return new StatsViewModel(
             actualToday,
@@ -281,6 +299,14 @@ public sealed class StatsForm : Form
             rangeLongest,
             rangeHourly,
             rangeBreakdown);
+    }
+
+    private static IEnumerable<DateOnly> DatesBetween(DateOnly start, DateOnly end)
+    {
+        for (var date = start; date <= end; date = date.AddDays(1))
+        {
+            yield return date;
+        }
     }
 
     private void ApplyStats(StatsViewModel model)
@@ -391,7 +417,7 @@ public sealed class StatsForm : Form
                     group.Key.Source,
                     best.AppId,
                     best.Platform,
-                    best.IconData,
+                    string.Empty,
                     best.DurationSeconds);
             })
             .OrderByDescending(row => row.DurationSeconds)
@@ -1856,26 +1882,17 @@ public sealed class StatsForm : Form
         {
             var y = index * 47;
             var iconBounds = new Rectangle(0, y + 4, 34, 34);
-            var iconImage = GetAppIcon(entry);
-            if (iconImage is not null)
+            var iconColor = IconColor(index);
+            using (var iconBrush = new SolidBrush(iconColor))
+            using (var iconPath = CreateRoundRect(iconBounds, 10))
             {
-                graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                graphics.DrawImage(iconImage, iconBounds);
+                graphics.FillPath(iconBrush, iconPath);
             }
-            else
-            {
-                var iconColor = IconColor(index);
-                using (var iconBrush = new SolidBrush(iconColor))
-                using (var iconPath = CreateRoundRect(iconBounds, 10))
-                {
-                    graphics.FillPath(iconBrush, iconPath);
-                }
 
-                using var iconFont = AppFonts.Create(11F, FontStyle.Bold);
-                using var iconTextBrush = new SolidBrush(Color.White);
-                using var iconFormat = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-                graphics.DrawString(Initial(entry.AppName), iconFont, iconTextBrush, iconBounds, iconFormat);
-            }
+            using var iconFont = AppFonts.Create(11F, FontStyle.Bold);
+            using var iconTextBrush = new SolidBrush(Color.White);
+            using var iconFormat = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+            graphics.DrawString(Initial(entry.AppName), iconFont, iconTextBrush, iconBounds, iconFormat);
 
             var textLeft = 48;
             var durationWidth = 64;
@@ -1915,61 +1932,6 @@ public sealed class StatsForm : Form
                 using var fillPath = CreateRoundRect(new Rectangle(track.X, track.Y, Math.Min(track.Width, fillWidth), track.Height), 4);
                 graphics.FillPath(fillBrush, fillPath);
             }
-        }
-
-        private Image? GetAppIcon(AppUsageRow entry)
-        {
-            if (!string.IsNullOrWhiteSpace(entry.IconData))
-            {
-                var cacheKey = "data:" + entry.IconData.GetHashCode(StringComparison.Ordinal);
-                if (_iconCache.TryGetValue(cacheKey, out var cachedDataIcon))
-                {
-                    return cachedDataIcon;
-                }
-
-                Image? dataImage = null;
-                try
-                {
-                    var bytes = Convert.FromBase64String(entry.IconData);
-                    using var stream = new MemoryStream(bytes);
-                    using var loaded = Image.FromStream(stream);
-                    dataImage = new Bitmap(loaded);
-                }
-                catch
-                {
-                    dataImage = null;
-                }
-
-                _iconCache[cacheKey] = dataImage;
-                if (dataImage is not null)
-                {
-                    return dataImage;
-                }
-            }
-
-            if (!IsPcSource(entry) || string.IsNullOrWhiteSpace(entry.AppId) || !File.Exists(entry.AppId))
-            {
-                return null;
-            }
-
-            if (_iconCache.TryGetValue(entry.AppId, out var cached))
-            {
-                return cached;
-            }
-
-            Image? image = null;
-            try
-            {
-                using var icon = Icon.ExtractAssociatedIcon(entry.AppId);
-                image = icon?.ToBitmap();
-            }
-            catch
-            {
-                image = null;
-            }
-
-            _iconCache[entry.AppId] = image;
-            return image;
         }
 
         private static void DrawSourceIcon(Graphics graphics, Rectangle bounds, bool pc)

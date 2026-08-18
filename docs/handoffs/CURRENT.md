@@ -246,3 +246,65 @@ Android：
   - 家长端同步后看到的孩子统计。
 - 重点判断差异来源：后台保活、省电策略、计时 tick 漏计，还是厂商统计口径不同。
 - 在拿到对照数据前，不要猜修复方案。
+
+## 2026-07-29 最新交接补充
+
+### 当前商业化前整理方向
+
+- 商业化 v1 先以“个人 PC + 手机联合用眼统计”为核心价值。
+- 家庭护眼不单独售卖为主功能，建议 Pro 试用期和付费期赠送 1 个儿童设备，更多儿童设备后续再加购。
+- 上架前需要补登录、支付、云同步、权限引导、英文界面、网站和 Google Play 上架材料。
+- 免费版可支持个人手机合并数据，全功能试用 3 天；试用结束后统计页可进入但数据虚焦，聚焦付费引导。
+
+### 本轮新增文档
+
+- `docs/superpowers/specs/2026-07-28-commercial-v1-product-technical-plan.md`
+- `docs/superpowers/plans/2026-07-28-stats-engine-commercial-phase0.md`
+- `docs/superpowers/plans/2026-07-28-eye-care-reminders-prelaunch.md`
+
+### 本轮新增统计引擎旁路实现
+
+- 新增 PC 端精确区间合并器：`src/EyeTimeTracker.Core/Sync/UsageIntervalMerger.cs`。
+- 新增 Android 端同口径精确区间合并器：`android/EyeTimeTrackerAndroid/src/com/eyetimetracker/android/UsageIntervalMerger.java`。
+- 新增/补充 PC 与 Android 逻辑测试，覆盖精确秒数、跨小时、局部重叠、连续间隔和 PC/手机 50/50 来源分摊。
+- 注意：本轮只是旁路实现，没有把当前统计页从旧 `UsageSegmentMerger` 切换到新 `UsageIntervalMerger`。
+- 旧 10 秒桶逻辑仍保留，用于对照、回滚和后续逐步切换。
+
+### 本轮提醒功能规划口径
+
+- 连续用眼远眺提醒默认开启，默认 20 分钟。
+- 走路用手机提醒只做 Android 端，需要身体活动权限。
+- 距离过近提醒暂不进入上架前主线。
+
+### 已验证与限制
+
+- `dotnet test tests\EyeTimeTracker.Tests\EyeTimeTracker.Tests.csproj -c Release` 已执行通过。
+- 独立输出目录下的 PC Release 构建已通过，普通 Release 目录构建会被正在运行的 PC 客户端锁住 DLL。
+- Android APK 已构建并签名验证通过：`outputs/android/EyeTimeTrackerAndroid-debug.apk`。
+- 当前未检测到连接中的 Android 设备，因此本轮未安装到手机。
+- Android 单独 Java 逻辑测试命令被当前沙箱策略拦截，未能独立运行；但 APK 编译已覆盖新增 Android 源码的语法与依赖检查。
+
+### 下一步建议
+
+1. 如果继续统计引擎整理：用同一批真实片段同时输出旧 10 秒桶结果和新区间结果，生成差异日志。
+2. 差异可接受后，再单独切换过去日期缓存生成逻辑。
+3. 再切换统计页当天实时计算逻辑，避免一次性改变用户可见统计口径。
+4. 如果继续上架前功能整理：先做“护眼提醒”入口和配置模型，再做 Android 走路提醒权限引导。
+5. 账号、支付、云同步属于大块改造，开始前必须先定技术方案和回滚方案。
+
+## 2026-08-05 最新交接补充
+
+### 连续用眼提醒豁免时间
+
+- 连续用眼提醒设置新增“豁免时间”，默认关闭；开启后可以添加、编辑和删除多个时间段。
+- 时间段支持跨午夜，例如 `22:00 - 次日 07:30`。提醒触发时如果当前本地时间落入任一豁免段，则跳过本次提醒，不改变用眼统计数据。
+- Android 使用与家庭护眼禁用时段相同的自定义滚轮时间选择器；PC 使用对应的开始/结束时间编辑窗口。
+- 豁免时间已加入 `TrackerSettings`，随现有 Android 到 PC 的同步设置传输；旧状态文件缺少该字段时按空列表兼容。
+
+### 本轮验证
+
+- `dotnet run --project tests\EyeTimeTracker.Tests\EyeTimeTracker.Tests.csproj -c Release --no-restore` 已通过。
+- `dotnet build src\EyeTimeTracker.App\EyeTimeTracker.App.csproj -c Release --no-restore` 已通过。
+- `powershell -NoProfile -ExecutionPolicy Bypass -File android\EyeTimeTrackerAndroid\build-android.ps1` 已通过，APK 签名校验通过。
+- APK 已安装到无线连接设备 `192.168.31.244:5555`。
+- Android 独立 Java 测试因本机 Java 进程权限被拒绝，未能运行；新增 Android 源码已随 APK 编译检查。

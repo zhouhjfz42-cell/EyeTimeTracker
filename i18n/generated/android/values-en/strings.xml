@@ -47,6 +47,36 @@
     <string name="duration_hours_minutes_padded" formatted="false">{hours} hr {minutes:00} min</string>
     <string name="duration_minutes" formatted="false">{minutes} min</string>
     <string name="duration_zero_minutes" formatted="false">0 min</string>
+    <string name="eye_care_reminders_continuous_alert_message" formatted="false">You have been looking at the screen continuously. Look far away and relax your eyes.</string>
+    <string name="eye_care_reminders_continuous_alert_title" formatted="false">Look far away</string>
+    <string name="eye_care_reminders_continuous_desc" formatted="false">Reminds you to look far away after continuous screen use.</string>
+    <string name="eye_care_reminders_continuous_title" formatted="false">Continuous Use Reminder</string>
+    <string name="eye_care_reminders_cumulative_desc" formatted="false">Reminds you when today\'s total screen time reaches the set limit.</string>
+    <string name="eye_care_reminders_cumulative_title" formatted="false">Daily Total Reminder</string>
+    <string name="eye_care_reminders_dialog_lead" formatted="false">Tap a card to change its settings.</string>
+    <string name="eye_care_reminders_dialog_title" formatted="false">Eye-care Reminders</string>
+    <string name="eye_care_reminders_disabled" formatted="false">Off</string>
+    <string name="eye_care_reminders_enabled" formatted="false">On</string>
+    <string name="eye_care_reminders_enable_reminder" formatted="false">Enable reminder</string>
+    <string name="eye_care_reminders_entry_title" formatted="false">Eye-care Reminders</string>
+    <string name="eye_care_reminders_entry_value" formatted="false">Settings</string>
+    <string name="eye_care_reminders_exemption_add" formatted="false">Add exemption time</string>
+    <string name="eye_care_reminders_exemption_desc" formatted="false">No continuous-use reminder is shown during these times.</string>
+    <string name="eye_care_reminders_exemption_empty" formatted="false">No exemption time set</string>
+    <string name="eye_care_reminders_exemption_invalid" formatted="false">Start and end times cannot be the same</string>
+    <string name="eye_care_reminders_exemption_title" formatted="false">Exemption times</string>
+    <string name="eye_care_reminders_footer" formatted="false">Reminders cannot judge whether your eyes have fully rested. They only remind you to pause at a reasonable time.</string>
+    <string name="eye_care_reminders_minutes_input_hint" formatted="false">minutes</string>
+    <string name="eye_care_reminders_permission_needed" formatted="false">Permission</string>
+    <string name="eye_care_reminders_reminder_time" formatted="false">Reminder time</string>
+    <string name="eye_care_reminders_settings_saved" formatted="false">Eye-care reminders saved</string>
+    <string name="eye_care_reminders_walking_alert_message" formatted="false">You seem to be walking while using your phone. Stop first, then continue.</string>
+    <string name="eye_care_reminders_walking_alert_title" formatted="false">Stop before using your phone</string>
+    <string name="eye_care_reminders_walking_desc" formatted="false">Reminds you to stop before using your phone while walking.</string>
+    <string name="eye_care_reminders_walking_permission_action" formatted="false">Allow</string>
+    <string name="eye_care_reminders_walking_permission_desc" formatted="false">The app only checks whether you are walking. It does not record routes or read location.</string>
+    <string name="eye_care_reminders_walking_permission_title" formatted="false">Physical activity permission required</string>
+    <string name="eye_care_reminders_walking_title" formatted="false">Walking Phone Reminder</string>
     <string name="family_binding_child_desc" formatted="false">After joining, this device will record and remind based on the parent settings.</string>
     <string name="family_binding_child_joined_status" formatted="false">Child device joined</string>
     <string name="family_binding_child_title" formatted="false">Enter the code on the parent phone</string>
@@ -284,4 +314,24 @@
     <string name="tray_quit" formatted="false">Quit</string>
     <string name="tray_stats_page" formatted="false">Stats</string>
     <string name="tray_status" formatted="false">Tracking</string>
+    <string name="usage_status_activity_desc" formatted="false">Only used to tell whether you are walking. It does not read location or routes.</string>
+    <string name="usage_status_activity_title" formatted="false">Physical activity permission</string>
+    <string name="usage_status_background_desc" formatted="false">Allow background operation in battery settings for more reliable tracking and reminders.</string>
+    <string name="usage_status_background_hint" formatted="false">In the app details battery settings, choose Unrestricted or allow background activity.</string>
+    <string name="usage_status_background_title" formatted="false">Background operation</string>
+    <string name="usage_status_entry" formatted="false">Status</string>
+    <string name="usage_status_instructions" formatted="false">Tap a card to open the related system setting.</string>
+    <string name="usage_status_lead" formatted="false">Check the settings needed for tracking and reminders.</string>
+    <string name="usage_status_needs_attention" formatted="false">{count} settings need attention</string>
+    <string name="usage_status_notifications_desc" formatted="false">Used to show walking and eye-care reminders in the background.</string>
+    <string name="usage_status_notifications_title" formatted="false">Notifications</string>
+    <string name="usage_status_ready" formatted="false">Ready to use</string>
+    <string name="usage_status_state_missing" formatted="false">Set up</string>
+    <string name="usage_status_state_ready" formatted="false">Ready</string>
+    <string name="usage_status_state_recommended" formatted="false">Recommended</string>
+    <string name="usage_status_title" formatted="false">Usage Status</string>
+    <string name="usage_status_tracking_desc" formatted="false">The service starts automatically and tracks when the screen is on.</string>
+    <string name="usage_status_tracking_title" formatted="false">Screen-time tracking</string>
+    <string name="usage_status_usage_desc" formatted="false">Used to show how long each app is used.</string>
+    <string name="usage_status_usage_title" formatted="false">App usage tracking</string>
 </resources>

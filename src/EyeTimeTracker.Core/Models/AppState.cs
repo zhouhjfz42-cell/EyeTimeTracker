@@ -5,6 +5,7 @@ public sealed class AppState
     public string DeviceId { get; set; } = Guid.NewGuid().ToString("N");
     public string Platform { get; set; } = "windows";
     public bool StartWithWindowsDefaultApplied { get; set; }
+    public long LastTrackingStateSavedUnixSeconds { get; set; }
     public TrackerSettings Settings { get; set; } = TrackerSettings.Default;
     public List<DailyRecord> Records { get; set; } = new();
     public List<UsageSegment> Segments { get; set; } = new();
@@ -48,6 +49,13 @@ public sealed class AppState
     public static void Normalize(AppState state)
     {
         state.Settings ??= TrackerSettings.Default;
+        state.Settings = state.Settings with
+        {
+            ContinuousReminderExemptionPeriods = state.Settings.ContinuousReminderExemptionPeriods?
+                .Where(period => period is not null && period.IsValid)
+                .Distinct()
+                .ToList() ?? new List<ReminderExemptionPeriod>()
+        };
         if (!state.StartWithWindowsDefaultApplied)
         {
             state.Settings = state.Settings with { StartWithWindows = true };
@@ -67,6 +75,11 @@ public sealed class AppState
         if (string.IsNullOrWhiteSpace(state.Platform))
         {
             state.Platform = "windows";
+        }
+
+        if (state.LastTrackingStateSavedUnixSeconds < 0)
+        {
+            state.LastTrackingStateSavedUnixSeconds = 0;
         }
 
         foreach (var record in state.Records)

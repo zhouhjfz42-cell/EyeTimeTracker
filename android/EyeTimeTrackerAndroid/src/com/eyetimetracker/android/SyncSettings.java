@@ -9,6 +9,7 @@ public final class SyncSettings {
     public String sharedSecret = "";
     public long lastSyncUnixSeconds;
     public String lastError = "";
+    public boolean peerSupportsMutableSegments;
     public ReminderRuntimeState peerReminderState = new ReminderRuntimeState();
 
     public static SyncSettings unpaired() {

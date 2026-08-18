@@ -14,6 +14,8 @@ public final class ReminderActivity extends Activity {
     public static final String EXTRA_REMINDER_MINUTES = "reminder_minutes";
     public static final String EXTRA_REMINDER_REPEAT = "reminder_repeat";
     public static final String EXTRA_REMINDER_STEP = "reminder_step";
+    public static final String EXTRA_TITLE = "title";
+    public static final String EXTRA_MESSAGE = "message";
 
     private static final int COLOR_BG = Color.rgb(248, 252, 250);
     private static final int COLOR_TEXT = Color.rgb(17, 24, 39);
@@ -27,10 +29,18 @@ public final class ReminderActivity extends Activity {
                 getIntent().getIntExtra(EXTRA_REMINDER_MINUTES, ReminderThreshold.DEFAULT_MINUTES));
         boolean repeatReminder = getIntent().getBooleanExtra(EXTRA_REMINDER_REPEAT, false);
         int reminderStep = Math.max(0, getIntent().getIntExtra(EXTRA_REMINDER_STEP, 0));
-        setContentView(buildUi(reminderMinutes, repeatReminder, reminderStep));
+        String customTitle = getIntent().getStringExtra(EXTRA_TITLE);
+        String customMessage = getIntent().getStringExtra(EXTRA_MESSAGE);
+        String title = customTitle == null || customTitle.trim().isEmpty()
+                ? ReminderAlert.title(this)
+                : customTitle;
+        String message = customMessage == null || customMessage.trim().isEmpty()
+                ? ReminderAlert.message(this, reminderMinutes, repeatReminder, reminderStep)
+                : customMessage;
+        setContentView(buildUi(title, message));
     }
 
-    private LinearLayout buildUi(int reminderMinutes, boolean repeatReminder, int reminderStep) {
+    private LinearLayout buildUi(String titleText, String messageText) {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER);
@@ -46,7 +56,7 @@ public final class ReminderActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView title = new TextView(this);
-        title.setText(ReminderAlert.title(this));
+        title.setText(titleText);
         title.setTextSize(28);
         title.setTextColor(COLOR_TEXT);
         title.setTypeface(AppFonts.bold(this));
@@ -54,7 +64,7 @@ public final class ReminderActivity extends Activity {
         card.addView(title, matchWrap());
 
         TextView message = new TextView(this);
-        message.setText(ReminderAlert.message(this, reminderMinutes, repeatReminder, reminderStep));
+        message.setText(messageText);
         message.setTextSize(18);
         message.setTextColor(COLOR_MUTED);
         message.setLineSpacing(0f, 1.15f);

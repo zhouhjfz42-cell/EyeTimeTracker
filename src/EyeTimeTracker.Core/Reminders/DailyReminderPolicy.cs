@@ -12,9 +12,7 @@ public sealed class DailyReminderPolicy
             return false;
         }
 
-        return settings.RepeatReminder
-            ? step > record.LastReminderStep
-            : !record.ReminderShown;
+        return step > record.LastReminderStep;
     }
 
     public void MarkShown(DailyRecord record, TrackerSettings settings)

@@ -19,6 +19,18 @@ static void AssertEqual<T>(T expected, T actual, string name)
     }
 }
 
+static void AssertSettingsEqual(TrackerSettings expected, TrackerSettings actual, string name)
+{
+    AssertEqual(expected.IdleThresholdSeconds, actual.IdleThresholdSeconds, name + " idle");
+    AssertEqual(expected.CountAudio, actual.CountAudio, name + " audio");
+    AssertEqual(expected.ReminderThresholdSeconds, actual.ReminderThresholdSeconds, name + " reminder");
+    AssertEqual(expected.StartWithWindows, actual.StartWithWindows, name + " startup");
+    AssertEqual(expected.RepeatReminder, actual.RepeatReminder, name + " repeat");
+    AssertEqual(expected.ContinuousReminderEnabled, actual.ContinuousReminderEnabled, name + " continuous enabled");
+    AssertEqual(expected.ContinuousReminderThresholdSeconds, actual.ContinuousReminderThresholdSeconds, name + " continuous threshold");
+    AssertEqual(true, expected.ContinuousReminderExemptionPeriods.SequenceEqual(actual.ContinuousReminderExemptionPeriods), name + " exemptions");
+}
+
 static ActivitySnapshot Snapshot(DateTimeOffset now, int idleSeconds, bool audio = false, bool unlocked = true)
 {
     return new ActivitySnapshot(now, TimeSpan.FromSeconds(idleSeconds), audio, unlocked, false);
@@ -81,6 +93,75 @@ static void TestContinuousRecentInputCountsEachNormalTick()
     }
 
     AssertEqual(300L, acc.Today.TotalSeconds, nameof(TestContinuousRecentInputCountsEachNormalTick));
+}
+
+static void TestContinuousSessionRecoveryKeepsRecentSession()
+{
+    var record = new DailyRecord(new DateOnly(2026, 7, 31))
+    {
+        CurrentSessionSeconds = 1200
+    };
+
+    var changed = ContinuousSessionRecovery.FinalizeInterruptedSessions(
+        new[] { record },
+        record.Date,
+        lastStateSavedUnixSeconds: 1_785_000_000,
+        resumedAtUnixSeconds: 1_785_000_180);
+
+    AssertEqual(false, changed, nameof(TestContinuousSessionRecoveryKeepsRecentSession) + " changed");
+    AssertEqual(1200L, record.CurrentSessionSeconds, nameof(TestContinuousSessionRecoveryKeepsRecentSession) + " current");
+    AssertEqual(0, record.SessionSeconds.Count, nameof(TestContinuousSessionRecoveryKeepsRecentSession) + " sessions");
+}
+
+static void TestContinuousReminderExemptionPeriodsHandleDayBoundaries()
+{
+    var overnight = new ReminderExemptionPeriod(22 * 60, 7 * 60 + 30);
+    AssertEqual(true, overnight.ContainsMinuteOfDay(23 * 60), nameof(TestContinuousReminderExemptionPeriodsHandleDayBoundaries) + " night");
+    AssertEqual(true, overnight.ContainsMinuteOfDay(7 * 60 + 29), nameof(TestContinuousReminderExemptionPeriodsHandleDayBoundaries) + " morning");
+    AssertEqual(false, overnight.ContainsMinuteOfDay(12 * 60), nameof(TestContinuousReminderExemptionPeriodsHandleDayBoundaries) + " noon");
+
+    var daytime = new ReminderExemptionPeriod(13 * 60, 14 * 60);
+    AssertEqual(true, daytime.ContainsMinuteOfDay(13 * 60 + 30), nameof(TestContinuousReminderExemptionPeriodsHandleDayBoundaries) + " daytime");
+    AssertEqual(false, daytime.ContainsMinuteOfDay(14 * 60), nameof(TestContinuousReminderExemptionPeriodsHandleDayBoundaries) + " end exclusive");
+
+    var now = new DateTimeOffset(2026, 8, 5, 23, 10, 0, TimeSpan.FromHours(8));
+    AssertEqual(true, ContinuousReminderExemptionPolicy.IsExempt(now, new[] { overnight }), nameof(TestContinuousReminderExemptionPeriodsHandleDayBoundaries) + " policy");
+}
+
+static void TestContinuousSessionRecoveryFinalizesStaleSession()
+{
+    var record = new DailyRecord(new DateOnly(2026, 7, 31))
+    {
+        CurrentSessionSeconds = 1200
+    };
+
+    var changed = ContinuousSessionRecovery.FinalizeInterruptedSessions(
+        new[] { record },
+        record.Date,
+        lastStateSavedUnixSeconds: 1_785_000_000,
+        resumedAtUnixSeconds: 1_785_000_181);
+
+    AssertEqual(true, changed, nameof(TestContinuousSessionRecoveryFinalizesStaleSession) + " changed");
+    AssertEqual(0L, record.CurrentSessionSeconds, nameof(TestContinuousSessionRecoveryFinalizesStaleSession) + " current");
+    AssertEqual(1, record.SessionSeconds.Count, nameof(TestContinuousSessionRecoveryFinalizesStaleSession) + " sessions");
+    AssertEqual(1200L, record.SessionSeconds[0], nameof(TestContinuousSessionRecoveryFinalizesStaleSession) + " duration");
+}
+
+static void TestContinuousSessionRecoveryFinalizesLegacySession()
+{
+    var record = new DailyRecord(new DateOnly(2026, 7, 31))
+    {
+        CurrentSessionSeconds = 1200
+    };
+
+    var changed = ContinuousSessionRecovery.FinalizeInterruptedSessions(
+        new[] { record },
+        record.Date,
+        lastStateSavedUnixSeconds: 0,
+        resumedAtUnixSeconds: 1_785_000_000);
+
+    AssertEqual(true, changed, nameof(TestContinuousSessionRecoveryFinalizesLegacySession) + " changed");
+    AssertEqual(0L, record.CurrentSessionSeconds, nameof(TestContinuousSessionRecoveryFinalizesLegacySession) + " current");
 }
 
 static void TestHourlyAndSessionStatsAreRecorded()
@@ -251,7 +332,7 @@ static void TestReminderSettingsChangeResetsWhenBelowNewThreshold()
 static void TestReminderDisplayCountUsesVisibleTotal()
 {
     AssertEqual(0, ReminderDisplayCount.FromSeconds(44 * 60, TrackerSettings.Default with { ReminderThresholdSeconds = 45 * 60 }), nameof(TestReminderDisplayCountUsesVisibleTotal) + " below threshold");
-    AssertEqual(1, ReminderDisplayCount.FromSeconds(90 * 60, TrackerSettings.Default with { ReminderThresholdSeconds = 45 * 60, RepeatReminder = false }), nameof(TestReminderDisplayCountUsesVisibleTotal) + " once policy");
+    AssertEqual(2, ReminderDisplayCount.FromSeconds(90 * 60, TrackerSettings.Default with { ReminderThresholdSeconds = 45 * 60, RepeatReminder = false }), nameof(TestReminderDisplayCountUsesVisibleTotal) + " old once setting is ignored");
     AssertEqual(2, ReminderDisplayCount.FromSeconds(90 * 60, TrackerSettings.Default with { ReminderThresholdSeconds = 45 * 60, RepeatReminder = true }), nameof(TestReminderDisplayCountUsesVisibleTotal) + " repeat policy");
 }
 
@@ -305,6 +386,35 @@ static void TestPcReminderShowsWhenLocalIsCounting()
     peer.IsCounting = false;
     AssertEqual(true, ReminderDevicePolicy.ShouldPcShowReminder(offline, now, 90), nameof(TestPcReminderShowsWhenLocalIsCounting) + " offline");
     AssertEqual(true, ReminderDevicePolicy.ShouldPcShowReminder(unpaired, now, 90), nameof(TestPcReminderShowsWhenLocalIsCounting) + " unpaired");
+}
+
+static void TestContinuousReminderUsesSharedEarlierSessionStart()
+{
+    var local = new ReminderRuntimeState
+    {
+        IsCounting = true,
+        CurrentSessionStartedUnixSeconds = 1_000
+    };
+    var peer = new ReminderRuntimeState
+    {
+        IsCounting = true,
+        CurrentSessionStartedUnixSeconds = 700
+    };
+
+    AssertEqual(
+        700L,
+        ContinuousReminderBaseline.Resolve(local, peer, peerOnline: true),
+        nameof(TestContinuousReminderUsesSharedEarlierSessionStart) + " shared online");
+    AssertEqual(
+        1_000L,
+        ContinuousReminderBaseline.Resolve(local, peer, peerOnline: false),
+        nameof(TestContinuousReminderUsesSharedEarlierSessionStart) + " local offline");
+
+    peer.IsCounting = false;
+    AssertEqual(
+        1_000L,
+        ContinuousReminderBaseline.Resolve(local, peer, peerOnline: true),
+        nameof(TestContinuousReminderUsesSharedEarlierSessionStart) + " peer idle");
 }
 
 static void TestReminderShowsOnEveryActiveDevice()
@@ -453,6 +563,7 @@ static void TestJsonStateRoundTrip()
         DeviceId = "pc-test",
         Platform = "windows",
         StartWithWindowsDefaultApplied = true,
+        LastTrackingStateSavedUnixSeconds = 1_782_000_000,
         Settings = TrackerSettings.Default with
         {
             IdleThresholdSeconds = 240,
@@ -483,7 +594,14 @@ static void TestJsonStateRoundTrip()
     var loaded = store.Load();
     var loadedRecord = loaded.Records[0];
 
-    AssertEqual(state.Settings, loaded.Settings, nameof(TestJsonStateRoundTrip) + " settings");
+    AssertEqual(state.Settings.IdleThresholdSeconds, loaded.Settings.IdleThresholdSeconds, nameof(TestJsonStateRoundTrip) + " settings idle");
+    AssertEqual(state.Settings.CountAudio, loaded.Settings.CountAudio, nameof(TestJsonStateRoundTrip) + " settings audio");
+    AssertEqual(state.Settings.ReminderThresholdSeconds, loaded.Settings.ReminderThresholdSeconds, nameof(TestJsonStateRoundTrip) + " settings reminder");
+    AssertEqual(state.Settings.StartWithWindows, loaded.Settings.StartWithWindows, nameof(TestJsonStateRoundTrip) + " settings startup");
+    AssertEqual(state.Settings.RepeatReminder, loaded.Settings.RepeatReminder, nameof(TestJsonStateRoundTrip) + " settings repeat");
+    AssertEqual(state.Settings.ContinuousReminderEnabled, loaded.Settings.ContinuousReminderEnabled, nameof(TestJsonStateRoundTrip) + " settings continuous enabled");
+    AssertEqual(state.Settings.ContinuousReminderThresholdSeconds, loaded.Settings.ContinuousReminderThresholdSeconds, nameof(TestJsonStateRoundTrip) + " settings continuous threshold");
+    AssertEqual(true, state.Settings.ContinuousReminderExemptionPeriods.SequenceEqual(loaded.Settings.ContinuousReminderExemptionPeriods), nameof(TestJsonStateRoundTrip) + " settings exemptions");
     AssertEqual(1, loaded.Records.Count, nameof(TestJsonStateRoundTrip) + " records count");
     AssertEqual(savedRecord.Date, loadedRecord.Date, nameof(TestJsonStateRoundTrip) + " date");
     AssertEqual(savedRecord.TotalSeconds, loadedRecord.TotalSeconds, nameof(TestJsonStateRoundTrip) + " seconds");
@@ -494,6 +612,7 @@ static void TestJsonStateRoundTrip()
     AssertEqual(savedRecord.LastReminderStep, loadedRecord.LastReminderStep, nameof(TestJsonStateRoundTrip) + " reminder step");
     AssertEqual("pc-test", loaded.DeviceId, nameof(TestJsonStateRoundTrip) + " device");
     AssertEqual("windows", loaded.Platform, nameof(TestJsonStateRoundTrip) + " platform");
+    AssertEqual(1_782_000_000L, loaded.LastTrackingStateSavedUnixSeconds, nameof(TestJsonStateRoundTrip) + " tracking save time");
     AssertEqual(1, loaded.Segments.Count, nameof(TestJsonStateRoundTrip) + " segments count");
     AssertEqual(10L, loaded.Segments[0].DurationSeconds, nameof(TestJsonStateRoundTrip) + " segment duration");
     AssertEqual(true, loaded.Sync.IsPaired, nameof(TestJsonStateRoundTrip) + " sync paired");
@@ -523,7 +642,7 @@ static void TestMissingJsonReturnsDefaultState()
 
     var loaded = store.Load();
 
-    AssertEqual(TrackerSettings.Default, loaded.Settings, nameof(TestMissingJsonReturnsDefaultState) + " settings");
+    AssertSettingsEqual(TrackerSettings.Default, loaded.Settings, nameof(TestMissingJsonReturnsDefaultState) + " settings");
     AssertEqual(0, loaded.Records.Count, nameof(TestMissingJsonReturnsDefaultState) + " records count");
 }
 
@@ -536,7 +655,7 @@ static void TestInvalidJsonReturnsDefaultState()
 
     var loaded = store.Load();
 
-    AssertEqual(TrackerSettings.Default, loaded.Settings, nameof(TestInvalidJsonReturnsDefaultState) + " settings");
+    AssertSettingsEqual(TrackerSettings.Default, loaded.Settings, nameof(TestInvalidJsonReturnsDefaultState) + " settings");
     AssertEqual(0, loaded.Records.Count, nameof(TestInvalidJsonReturnsDefaultState) + " records count");
 }
 
@@ -627,6 +746,34 @@ static void TestUsageSegmentIdIsStable()
     var second = UsageSegmentId.Create("pc-1", "pc-input", start, end);
 
     AssertEqual(first, second, nameof(TestUsageSegmentIdIsStable));
+}
+
+static void TestMutableUsageSegmentsCompactContiguousTicks()
+{
+    var start = new DateTimeOffset(2026, 7, 31, 8, 0, 0, TimeSpan.Zero);
+    var first = UsageSegmentFactory.CreateMutable("pc-1", "windows", "pc-input", start, start.AddSeconds(10));
+    var second = UsageSegmentFactory.CreateMutable("pc-1", "windows", "pc-input", start.AddSeconds(10), start.AddSeconds(20));
+    var segments = new List<UsageSegment> { first };
+
+    var compacted = UsageSegmentCompactor.TryExtendMutableSegment(segments, second);
+
+    AssertEqual(true, compacted, nameof(TestMutableUsageSegmentsCompactContiguousTicks) + " compacted");
+    AssertEqual(1, segments.Count, nameof(TestMutableUsageSegmentsCompactContiguousTicks) + " count");
+    AssertEqual(first.SegmentId, segments[0].SegmentId, nameof(TestMutableUsageSegmentsCompactContiguousTicks) + " id");
+    AssertEqual(20L, segments[0].DurationSeconds, nameof(TestMutableUsageSegmentsCompactContiguousTicks) + " duration");
+}
+
+static void TestMutableUsageSegmentsKeepGaps()
+{
+    var start = new DateTimeOffset(2026, 7, 31, 8, 0, 0, TimeSpan.Zero);
+    var first = UsageSegmentFactory.CreateMutable("pc-1", "windows", "pc-input", start, start.AddSeconds(10));
+    var second = UsageSegmentFactory.CreateMutable("pc-1", "windows", "pc-input", start.AddSeconds(20), start.AddSeconds(30));
+    var segments = new List<UsageSegment> { first };
+
+    var compacted = UsageSegmentCompactor.TryExtendMutableSegment(segments, second);
+
+    AssertEqual(false, compacted, nameof(TestMutableUsageSegmentsKeepGaps) + " compacted");
+    AssertEqual(10L, segments[0].DurationSeconds, nameof(TestMutableUsageSegmentsKeepGaps) + " duration");
 }
 
 static void TestAppStateNormalizesSegmentsAndDeviceId()
@@ -729,6 +876,7 @@ static void TestPcSyncCoordinatorAppliesAndroidSegmentsAndReturnsPcSegments()
     {
         DeviceId = "phone-test",
         Platform = "android",
+        SupportsMutableSegments = true,
         Segments = [androidSegment],
         Settings = TrackerSettings.Default with
         {
@@ -745,7 +893,48 @@ static void TestPcSyncCoordinatorAppliesAndroidSegmentsAndReturnsPcSegments()
     AssertEqual(pcSegment.SegmentId, response.Segments[0].SegmentId, nameof(TestPcSyncCoordinatorAppliesAndroidSegmentsAndReturnsPcSegments) + " response segment");
     AssertEqual(2400, saved.Settings.ReminderThresholdSeconds, nameof(TestPcSyncCoordinatorAppliesAndroidSegmentsAndReturnsPcSegments) + " settings");
     AssertEqual(true, saved.Settings.RepeatReminder, nameof(TestPcSyncCoordinatorAppliesAndroidSegmentsAndReturnsPcSegments) + " repeat");
+    AssertEqual(true, saved.Sync.PeerSupportsMutableSegments, nameof(TestPcSyncCoordinatorAppliesAndroidSegmentsAndReturnsPcSegments) + " peer capability");
+    AssertEqual(true, response.SupportsMutableSegments, nameof(TestPcSyncCoordinatorAppliesAndroidSegmentsAndReturnsPcSegments) + " local capability");
     AssertEqual(1_783_000_000L, saved.Sync.LastSyncUnixSeconds, nameof(TestPcSyncCoordinatorAppliesAndroidSegmentsAndReturnsPcSegments) + " last sync");
+}
+
+static void TestPcSyncCoordinatorUpdatesMutableSegments()
+{
+    var t0 = new DateTimeOffset(2026, 7, 2, 12, 0, 0, TimeSpan.Zero);
+    var initial = UsageSegmentFactory.CreateMutable("phone-test", "android", "android-screen", t0, t0.AddSeconds(10));
+    var updated = UsageSegmentFactory.CreateMutable("phone-test", "android", "android-screen", t0, t0.AddSeconds(20));
+    var store = SeedState(new AppState
+    {
+        DeviceId = "pc-test",
+        Platform = "windows",
+        Sync = new SyncSettings
+        {
+            IsPaired = true,
+            PeerDeviceId = "phone-test",
+            PeerPlatform = "android",
+            SharedSecret = "shared-secret"
+        }
+    });
+    var coordinator = new PcSyncCoordinator(store, () => 1_783_000_000);
+
+    coordinator.HandleSync(SignedSyncRequest(new SyncRequest
+    {
+        DeviceId = "phone-test",
+        Platform = "android",
+        Settings = TrackerSettings.Default,
+        Segments = [initial]
+    }));
+    coordinator.HandleSync(SignedSyncRequest(new SyncRequest
+    {
+        DeviceId = "phone-test",
+        Platform = "android",
+        Settings = TrackerSettings.Default,
+        Segments = [updated]
+    }));
+
+    var saved = store.Load();
+    AssertEqual(1, saved.Segments.Count, nameof(TestPcSyncCoordinatorUpdatesMutableSegments) + " count");
+    AssertEqual(20L, saved.Segments[0].DurationSeconds, nameof(TestPcSyncCoordinatorUpdatesMutableSegments) + " duration");
 }
 
 static void TestPcSyncCoordinatorRejectsUnpairedSync()
@@ -1396,6 +1585,122 @@ static void TestSegmentsSplitFixedBucketsAcrossHours()
     AssertEqual(10L, summary.HourlySeconds[9], nameof(TestSegmentsSplitFixedBucketsAcrossHours) + " next hour");
 }
 
+static void TestIntervalMergerKeepsExactSeconds()
+{
+    var local = new DateTime(2026, 7, 2, 8, 9, 18);
+    var t0 = new DateTimeOffset(local, TimeZoneInfo.Local.GetUtcOffset(local));
+    var segments = new[]
+    {
+        Segment("pc", "windows", "pc-input", t0, 1),
+        Segment("phone", "android", "android-screen", t0.AddSeconds(1), 1)
+    };
+
+    var summary = UsageIntervalMerger.BuildDailyRecord(DateOnly.FromDateTime(local), segments);
+
+    AssertEqual(2L, summary.TotalSeconds, nameof(TestIntervalMergerKeepsExactSeconds) + " total");
+    AssertEqual(2L, summary.HourlySeconds[8], nameof(TestIntervalMergerKeepsExactSeconds) + " hourly");
+}
+
+static void TestIntervalMergerSplitsExactSecondsAcrossHours()
+{
+    var local = new DateTime(2026, 7, 2, 8, 59, 58);
+    var t0 = new DateTimeOffset(local, TimeZoneInfo.Local.GetUtcOffset(local));
+    var segments = new[]
+    {
+        Segment("pc", "windows", "pc-input", t0, 5)
+    };
+
+    var summary = UsageIntervalMerger.BuildDailyRecord(DateOnly.FromDateTime(local), segments);
+
+    AssertEqual(5L, summary.TotalSeconds, nameof(TestIntervalMergerSplitsExactSecondsAcrossHours) + " total");
+    AssertEqual(2L, summary.HourlySeconds[8], nameof(TestIntervalMergerSplitsExactSecondsAcrossHours) + " previous hour");
+    AssertEqual(3L, summary.HourlySeconds[9], nameof(TestIntervalMergerSplitsExactSecondsAcrossHours) + " next hour");
+}
+
+static void TestIntervalMergerDeDuplicatesPartialOverlap()
+{
+    var t0 = new DateTimeOffset(2026, 7, 2, 12, 0, 0, TimeSpan.Zero);
+    var segments = new[]
+    {
+        Segment("pc", "windows", "pc-input", t0, 60),
+        Segment("phone", "android", "android-screen", t0.AddSeconds(30), 60)
+    };
+
+    var summary = UsageIntervalMerger.BuildDailyRecord(new DateOnly(2026, 7, 2), segments);
+
+    AssertEqual(90L, summary.TotalSeconds, nameof(TestIntervalMergerDeDuplicatesPartialOverlap));
+}
+
+static void TestIntervalMergerKeepsSessionWhenGapIsThreeMinutes()
+{
+    var t0 = new DateTimeOffset(2026, 7, 2, 9, 0, 0, TimeSpan.Zero);
+    var segments = new[]
+    {
+        Segment("pc", "windows", "pc-input", t0, 60),
+        Segment("pc", "windows", "pc-input", t0.AddMinutes(4), 60)
+    };
+
+    var summary = UsageIntervalMerger.BuildDailyRecord(new DateOnly(2026, 7, 2), segments);
+
+    AssertEqual(1, summary.SessionSeconds.Count, nameof(TestIntervalMergerKeepsSessionWhenGapIsThreeMinutes) + " count");
+    AssertEqual(120L, summary.SessionSeconds[0], nameof(TestIntervalMergerKeepsSessionWhenGapIsThreeMinutes) + " seconds");
+}
+
+static void TestIntervalBreakdownSplitsOverlappingSourcesEvenly()
+{
+    var t0 = new DateTimeOffset(2026, 7, 2, 12, 0, 0, TimeSpan.Zero);
+    var segments = new[]
+    {
+        Segment("pc", "windows", "pc-input", t0, 3600),
+        Segment("phone", "android", "android-screen", t0, 3600)
+    };
+
+    var breakdown = UsageIntervalMerger.BuildDeviceBreakdown(new DateOnly(2026, 7, 2), segments);
+
+    AssertEqual(1800L, breakdown.PcSeconds, nameof(TestIntervalBreakdownSplitsOverlappingSourcesEvenly) + " pc seconds");
+    AssertEqual(1800L, breakdown.PhoneSeconds, nameof(TestIntervalBreakdownSplitsOverlappingSourcesEvenly) + " phone seconds");
+    AssertEqual(50, breakdown.PcPercent, nameof(TestIntervalBreakdownSplitsOverlappingSourcesEvenly) + " pc percent");
+    AssertEqual(50, breakdown.PhonePercent, nameof(TestIntervalBreakdownSplitsOverlappingSourcesEvenly) + " phone percent");
+}
+
+static void TestIntervalBreakdownSplitsPartialOverlap()
+{
+    var t0 = new DateTimeOffset(2026, 7, 2, 12, 0, 0, TimeSpan.Zero);
+    var segments = new[]
+    {
+        Segment("pc", "windows", "pc-input", t0, 60),
+        Segment("phone", "android", "android-screen", t0.AddSeconds(30), 60)
+    };
+
+    var breakdown = UsageIntervalMerger.BuildDeviceBreakdown(new DateOnly(2026, 7, 2), segments);
+
+    AssertEqual(45L, breakdown.PcSeconds, nameof(TestIntervalBreakdownSplitsPartialOverlap) + " pc seconds");
+    AssertEqual(45L, breakdown.PhoneSeconds, nameof(TestIntervalBreakdownSplitsPartialOverlap) + " phone seconds");
+}
+
+static void TestIntervalBreakdownConservesOddOverlapAcrossHours()
+{
+    var local = new DateTime(2026, 7, 2, 8, 59, 59, DateTimeKind.Unspecified);
+    var t0 = new DateTimeOffset(local, TimeZoneInfo.Local.GetUtcOffset(local));
+    var segments = new[]
+    {
+        Segment("pc", "windows", "pc-input", t0, 3),
+        Segment("phone", "android", "android-screen", t0, 3)
+    };
+
+    var summary = UsageIntervalMerger.BuildDailyRecord(new DateOnly(2026, 7, 2), segments);
+    var breakdown = UsageIntervalMerger.BuildDeviceBreakdown(new DateOnly(2026, 7, 2), segments);
+
+    AssertEqual(3L, summary.TotalSeconds, nameof(TestIntervalBreakdownConservesOddOverlapAcrossHours) + " total seconds");
+    AssertEqual(1L, breakdown.PcSeconds, nameof(TestIntervalBreakdownConservesOddOverlapAcrossHours) + " pc seconds");
+    AssertEqual(2L, breakdown.PhoneSeconds, nameof(TestIntervalBreakdownConservesOddOverlapAcrossHours) + " phone seconds");
+    AssertEqual(summary.TotalSeconds, breakdown.PcSeconds + breakdown.PhoneSeconds, nameof(TestIntervalBreakdownConservesOddOverlapAcrossHours) + " source total");
+    AssertEqual(0L, breakdown.PcHourlySeconds[8], nameof(TestIntervalBreakdownConservesOddOverlapAcrossHours) + " previous hour pc");
+    AssertEqual(1L, breakdown.PhoneHourlySeconds[8], nameof(TestIntervalBreakdownConservesOddOverlapAcrossHours) + " previous hour phone");
+    AssertEqual(1L, breakdown.PcHourlySeconds[9], nameof(TestIntervalBreakdownConservesOddOverlapAcrossHours) + " next hour pc");
+    AssertEqual(1L, breakdown.PhoneHourlySeconds[9], nameof(TestIntervalBreakdownConservesOddOverlapAcrossHours) + " next hour phone");
+}
+
 static void TestSegmentRecordsReplaceLegacyRecordsForSyncedDays()
 {
     var t0 = new DateTimeOffset(2026, 7, 2, 10, 0, 0, TimeSpan.Zero);
@@ -1526,6 +1831,10 @@ static void TestSyncMessageSigningRejectsStaleTimestamp()
 TestDoesNotBackfillLongIdleGap();
 TestIdleThresholdStopsCounting();
 TestContinuousRecentInputCountsEachNormalTick();
+TestContinuousSessionRecoveryKeepsRecentSession();
+TestContinuousReminderExemptionPeriodsHandleDayBoundaries();
+TestContinuousSessionRecoveryFinalizesStaleSession();
+TestContinuousSessionRecoveryFinalizesLegacySession();
 TestHourlyAndSessionStatsAreRecorded();
 TestAudioCountsWithoutInput();
 TestSparseAudioDoesNotBackfillElapsed();
@@ -1559,8 +1868,11 @@ TestLegacyStartupOffMigratesToOnOnce();
 TestStartupOffRemainsOffAfterDefaultMigrationApplied();
 TestOldJsonWithoutRepeatReminderFieldsLoadsSafely();
 TestUsageSegmentIdIsStable();
+TestMutableUsageSegmentsCompactContiguousTicks();
+TestMutableUsageSegmentsKeepGaps();
 TestAppStateNormalizesSegmentsAndDeviceId();
 TestPcSyncCoordinatorAppliesAndroidSegmentsAndReturnsPcSegments();
+TestPcSyncCoordinatorUpdatesMutableSegments();
 TestPcSyncCoordinatorRejectsUnpairedSync();
 TestPcSyncCoordinatorRejectsUnsignedPairedSync();
 TestPcSyncCoordinatorBackfillsPcSegmentsWhenAndroidCursorIsStale();
@@ -1586,11 +1898,19 @@ TestPcDiscoveryServerRespondsWithSyncPort();
 TestSegmentsDeDuplicateOverlappingDevices();
 TestSegmentsUseFixedTenSecondBucketsForArbitraryStartSeconds();
 TestSegmentsSplitFixedBucketsAcrossHours();
+TestIntervalMergerKeepsExactSeconds();
+TestIntervalMergerSplitsExactSecondsAcrossHours();
+TestIntervalMergerDeDuplicatesPartialOverlap();
+TestIntervalMergerKeepsSessionWhenGapIsThreeMinutes();
+TestIntervalBreakdownSplitsOverlappingSourcesEvenly();
+TestIntervalBreakdownSplitsPartialOverlap();
+TestIntervalBreakdownConservesOddOverlapAcrossHours();
 TestSegmentRecordsReplaceLegacyRecordsForSyncedDays();
 TestUsageDeviceBreakdownCountsPcAndPhone();
 TestUsageDeviceBreakdownDeDuplicatesOverlappingSources();
 TestUsageSegmentFactoryCreatesExpectedSegment();
 TestContinuousBreaksAfterThreeMinutes();
+TestContinuousReminderUsesSharedEarlierSessionStart();
 TestSyncMessageSigningIsStable();
 TestSyncMessageSigningRejectsWrongSecret();
 TestSyncMessageSigningRejectsStaleTimestamp();

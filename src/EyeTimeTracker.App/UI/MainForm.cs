@@ -283,10 +283,10 @@ public sealed class MainForm : Form
     private Control BuildReminderCard(Rectangle bounds, out FitTextLabel value)
     {
         var card = CreateMetricShell(bounds);
-        AddMetricTitle(card, AppText.Get("main.card.reminderClickable"));
+        AddMetricTitle(card, AppText.Get("eyeCareReminders.entryTitle"));
         value = new FitTextLabel
         {
-            Text = ReminderThreshold.Format(_controller.Settings.ReminderThresholdSeconds),
+            Text = AppText.Get("eyeCareReminders.entryValue"),
             Bounds = new Rectangle(24, 58, bounds.Width - 40, 66),
             MaxFontSize = 22F,
             MinFontSize = 14F,
@@ -296,7 +296,7 @@ public sealed class MainForm : Form
             BackColor = Color.Transparent
         };
         card.Controls.Add(value);
-        WireClick(card, (_, _) => ShowReminderDialog());
+        WireClick(card, (_, _) => ShowEyeCareRemindersPage());
         return card;
     }
 
@@ -415,31 +415,23 @@ public sealed class MainForm : Form
             ("device", peerName));
     }
 
-    private void ShowReminderDialog()
+    private void ShowEyeCareRemindersPage()
     {
-        using var dialog = new ReminderThresholdDialog(
-            ReminderThreshold.ToMinutes(_controller.Settings.ReminderThresholdSeconds),
-            _controller.Settings.RepeatReminder,
-            !_controller.IsPaired,
-            Icon);
+        using var dialog = new EyeCareRemindersForm(_controller.Settings, !_controller.IsPaired, Icon);
 
         if (dialog.ShowDialog(this) != DialogResult.OK)
         {
             return;
         }
 
-        _controller.Settings = _controller.Settings with
-        {
-            ReminderThresholdSeconds = ReminderThreshold.FromMinutes(dialog.ReminderMinutes),
-            RepeatReminder = dialog.RepeatReminder
-        };
+        _controller.Settings = dialog.Settings;
         _controller.SaveNow();
         UpdateReminderDisplay();
     }
 
     private void UpdateReminderDisplay()
     {
-        _reminderValue.Text = ReminderThreshold.Format(_controller.Settings.ReminderThresholdSeconds);
+        _reminderValue.Text = AppText.Get("eyeCareReminders.entryValue");
     }
 
     private void UpdateStartupSetting(bool enabled)
@@ -775,8 +767,6 @@ public sealed class MainForm : Form
     {
         private readonly TextBox _minutesInput;
         private readonly FitTextLabel _hintLabel;
-        private readonly ToggleSwitch _repeatSwitch;
-        private readonly FitTextLabel _repeatLabel;
         private readonly bool _canEdit;
 
         public int ReminderMinutes { get; private set; }
@@ -785,7 +775,7 @@ public sealed class MainForm : Form
         public ReminderThresholdDialog(int currentMinutes, bool repeatReminder, bool canEdit, Icon? icon)
         {
             ReminderMinutes = Math.Clamp(currentMinutes, ReminderThreshold.MinMinutes, ReminderThreshold.MaxMinutes);
-            RepeatReminder = repeatReminder;
+            RepeatReminder = true;
             _canEdit = canEdit;
             AutoScaleMode = AutoScaleMode.None;
             Text = AppText.Get("reminder.title");
@@ -799,7 +789,7 @@ public sealed class MainForm : Form
             MaximizeBox = false;
             MinimizeBox = false;
             ShowInTaskbar = false;
-            ClientSize = new Size(470, 340);
+            ClientSize = new Size(470, 284);
             BackColor = Color.White;
             Font = AppFonts.Create(9F, FontStyle.Regular, GraphicsUnit.Point);
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
@@ -877,35 +867,10 @@ public sealed class MainForm : Form
             });
             Controls.Add(inputShell);
 
-            _repeatSwitch = new ToggleSwitch
-            {
-                Bounds = new Rectangle(30, 216, 48, 28),
-                Checked = RepeatReminder
-            };
-            _repeatSwitch.Click += (_, _) => RepeatReminder = _repeatSwitch.Checked;
-            Controls.Add(_repeatSwitch);
-
-            _repeatLabel = new FitTextLabel
-            {
-                Bounds = new Rectangle(84, 203, 372, 52),
-                MaxFontSize = 8F,
-                MinFontSize = 7.2F,
-                FontStyle = FontStyle.Regular,
-                ForeColor = TextSecondary,
-                BackColor = Color.Transparent,
-                TextAlign = ContentAlignment.MiddleLeft
-            };
-            _repeatLabel.Click += (_, _) =>
-            {
-                _repeatSwitch.Checked = !_repeatSwitch.Checked;
-                RepeatReminder = _repeatSwitch.Checked;
-            };
-            Controls.Add(_repeatLabel);
-
             var cancelButton = new RoundedButton
             {
                 Text = AppText.Get("common.cancel"),
-                Bounds = new Rectangle(28, 270, 190, 48),
+                Bounds = new Rectangle(28, 216, 190, 48),
                 ButtonColor = Color.FromArgb(242, 244, 247),
                 HoverColor = Color.FromArgb(232, 236, 240),
                 PressedColor = Color.FromArgb(220, 226, 232),
@@ -922,7 +887,7 @@ public sealed class MainForm : Form
             var okButton = new RoundedButton
             {
                 Text = _canEdit ? AppText.Get("common.save") : AppText.Get("common.ok"),
-                Bounds = new Rectangle(238, 270, 204, 48),
+                Bounds = new Rectangle(238, 216, 204, 48),
                 ButtonColor = AccentGreen,
                 HoverColor = Color.FromArgb(19, 145, 111),
                 PressedColor = Color.FromArgb(17, 124, 96),
@@ -936,7 +901,6 @@ public sealed class MainForm : Form
             {
                 _minutesInput.ReadOnly = true;
                 _minutesInput.ForeColor = TextSecondary;
-                _repeatSwitch.Enabled = false;
             }
 
             UpdateHint();
@@ -1009,7 +973,7 @@ public sealed class MainForm : Form
             }
 
             ReminderMinutes = minutes;
-            RepeatReminder = _repeatSwitch.Checked;
+            RepeatReminder = true;
             DialogResult = DialogResult.OK;
             Close();
         }
@@ -1024,7 +988,6 @@ public sealed class MainForm : Form
                         "reminder.unitHint",
                         ("equivalent", ReminderThreshold.FormatEquivalent(ReminderThreshold.FromMinutes(minutes))))
                     : AppText.Get("reminder.pcConnectedReadonly");
-                _repeatLabel.Text = AppText.Get("reminder.repeatLabel");
                 return;
             }
 
@@ -1033,7 +996,6 @@ public sealed class MainForm : Form
                 "reminder.validation.minutesRange",
                 ("min", ReminderThreshold.MinMinutes),
                 ("max", ReminderThreshold.MaxMinutes));
-            _repeatLabel.Text = AppText.Get("reminder.repeatShort");
         }
 
         private bool TryReadMinutes(out int minutes)

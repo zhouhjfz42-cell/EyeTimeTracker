@@ -56,6 +56,7 @@ public final class LanDiscoveryAddresses {
                     }
                     String localHost = address.getHostAddress();
                     localHosts.add(localHost);
+                    addNearbySubnetCandidates(hosts, (Inet4Address) address, interfaceAddress.getNetworkPrefixLength());
                     addSubnetCandidates(hosts, (Inet4Address) address, interfaceAddress.getNetworkPrefixLength());
                     if (hosts.size() >= MAX_CANDIDATE_HOSTS) {
                         break;
@@ -83,6 +84,36 @@ public final class LanDiscoveryAddresses {
     }
 
     private static void addSubnetCandidates(Set<String> hosts, Inet4Address address, short prefixLength) {
+        int[] range = subnetRange(address, prefixLength);
+        int network = range[0];
+        int broadcast = range[1];
+        for (int candidate = network + 1; candidate < broadcast && hosts.size() < MAX_CANDIDATE_HOSTS; candidate++) {
+            hosts.add(toHost(candidate));
+        }
+    }
+
+    private static void addNearbySubnetCandidates(Set<String> hosts, Inet4Address address, short prefixLength) {
+        int[] range = subnetRange(address, prefixLength);
+        byte[] bytes = address.getAddress();
+        int ip = ((bytes[0] & 0xff) << 24)
+                | ((bytes[1] & 0xff) << 16)
+                | ((bytes[2] & 0xff) << 8)
+                | (bytes[3] & 0xff);
+        int network = range[0];
+        int broadcast = range[1];
+        for (int offset = 1; offset < MAX_CANDIDATE_HOSTS && hosts.size() < MAX_CANDIDATE_HOSTS; offset++) {
+            int lower = ip - offset;
+            if (lower > network && lower < broadcast) {
+                hosts.add(toHost(lower));
+            }
+            int upper = ip + offset;
+            if (upper > network && upper < broadcast) {
+                hosts.add(toHost(upper));
+            }
+        }
+    }
+
+    private static int[] subnetRange(Inet4Address address, short prefixLength) {
         byte[] bytes = address.getAddress();
         int ip = ((bytes[0] & 0xff) << 24)
                 | ((bytes[1] & 0xff) << 16)
@@ -92,12 +123,14 @@ public final class LanDiscoveryAddresses {
         int mask = (int) (0xffffffffL << (32 - effectivePrefix));
         int network = ip & mask;
         int broadcast = network | ~mask;
-        for (int candidate = network + 1; candidate < broadcast && hosts.size() < MAX_CANDIDATE_HOSTS; candidate++) {
-            hosts.add(((candidate >>> 24) & 0xff) + "."
-                    + ((candidate >>> 16) & 0xff) + "."
-                    + ((candidate >>> 8) & 0xff) + "."
-                    + (candidate & 0xff));
-        }
+        return new int[]{network, broadcast};
+    }
+
+    private static String toHost(int ip) {
+        return ((ip >>> 24) & 0xff) + "."
+                + ((ip >>> 16) & 0xff) + "."
+                + ((ip >>> 8) & 0xff) + "."
+                + (ip & 0xff);
     }
 
     private static List<InetAddress> toAddresses(Set<String> hosts) {

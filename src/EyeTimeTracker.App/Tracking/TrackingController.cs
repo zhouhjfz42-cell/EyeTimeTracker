@@ -1,6 +1,5 @@
-using System.Drawing;
-using System.Drawing.Imaging;
 using System.Windows.Forms;
+using EyeTimeTracker.App.Diagnostics;
 using EyeTimeTracker.App.Platform;
 using EyeTimeTracker.App.Sync;
 using EyeTimeTracker.Core.Models;
@@ -36,7 +35,11 @@ public sealed class TrackingController : IDisposable
     private bool _hasPendingImmediateSave;
     private bool _pendingReminderNotification;
     private int _pendingReminderStep;
+    private int _lastContinuousReminderStep;
+    private long _continuousReminderSessionStart;
     private bool _disposed;
+    private long _statsDataVersion;
+    private readonly Dictionary<DateOnly, CachedDailyStats> _dailyStatsCache = new();
 
     public TrackingController(NotificationService notificationService)
         : this(
@@ -65,10 +68,19 @@ public sealed class TrackingController : IDisposable
         _reminderPolicy = reminderPolicy ?? new DailyReminderPolicy();
 
         _state = _stateStore.Load();
-        var today = DateOnly.FromDateTime(DateTime.Now);
+        var now = DateTimeOffset.Now;
+        var today = DateOnly.FromDateTime(now.DateTime);
+        _hasPendingImmediateSave = ContinuousSessionRecovery.FinalizeInterruptedSessions(
+            _state.Records,
+            today,
+            _state.LastTrackingStateSavedUnixSeconds,
+            now.ToUnixTimeSeconds());
         var record = _state.GetOrCreateRecord(today);
         _accumulator = new EyeTimeAccumulator(record);
-        _lastSaveAt = DateTimeOffset.Now;
+        _lastContinuousReminderStep = _state.Settings.ContinuousReminderEnabled
+            ? (int)Math.Max(0, record.CurrentSessionSeconds / Math.Max(60, _state.Settings.ContinuousReminderThresholdSeconds))
+            : 0;
+        _lastSaveAt = now;
 
         _timer = new System.Threading.Timer(OnTimerTick, null, TimeSpan.Zero, TickInterval);
     }
@@ -101,7 +113,10 @@ public sealed class TrackingController : IDisposable
             {
                 var nextSettings = value ?? throw new ArgumentNullException(nameof(value));
                 var reminderChanged = _state.Settings.ReminderThresholdSeconds != nextSettings.ReminderThresholdSeconds
-                    || _state.Settings.RepeatReminder != nextSettings.RepeatReminder;
+                    || _state.Settings.RepeatReminder != nextSettings.RepeatReminder
+                    || _state.Settings.ContinuousReminderThresholdSeconds != nextSettings.ContinuousReminderThresholdSeconds
+                    || _state.Settings.ContinuousReminderEnabled != nextSettings.ContinuousReminderEnabled
+                    || !_state.Settings.ContinuousReminderExemptionPeriods.SequenceEqual(nextSettings.ContinuousReminderExemptionPeriods);
                 _state.Settings = nextSettings;
                 if (reminderChanged)
                 {
@@ -153,7 +168,19 @@ public sealed class TrackingController : IDisposable
         lock (_gate)
         {
             PersistAccumulatorLocked();
-            return UsageDeviceBreakdown.Build(date, CreateEffectiveSegmentsLocked());
+            return CloneBreakdown(GetDailyStatsSnapshotLocked(date).Breakdown);
+        }
+    }
+
+    public IReadOnlyDictionary<DateOnly, DailyStatsSnapshot> GetDailyStatsSnapshots(IEnumerable<DateOnly> dates)
+    {
+        lock (_gate)
+        {
+            PersistAccumulatorLocked();
+            return GetDailyStatsSnapshotsLocked(dates)
+                .ToDictionary(
+                    pair => pair.Key,
+                    pair => new DailyStatsSnapshot(CloneRecord(pair.Value.Record), CloneBreakdown(pair.Value.Breakdown)));
         }
     }
 
@@ -235,6 +262,9 @@ public sealed class TrackingController : IDisposable
         StateSaveSnapshot? snapshotToSave = null;
         var shouldShowReminder = false;
         var shouldShowReminderStep = 0;
+        var dailyReminderSessionSeconds = 0L;
+        var dailyReminderThresholdSeconds = 0;
+        ContinuousReminderRequest? continuousReminderRequest = null;
         var saveIsImmediate = false;
 
         try
@@ -264,6 +294,7 @@ public sealed class TrackingController : IDisposable
                 {
                     AddUsageSegmentLocked(snapshot, _state.Settings, countedSeconds);
                     AddAppUsageLocked(snapshot, countedSeconds);
+                    InvalidateStatsCacheLocked(_accumulator.Today.Date);
                 }
 
                 var record = PersistAccumulatorLocked();
@@ -283,7 +314,11 @@ public sealed class TrackingController : IDisposable
                         now.ToUnixTimeSeconds(),
                         PeerOfflineAfterSeconds);
                     _pendingReminderStep = _pendingReminderNotification ? record.LastReminderStep : 0;
+                    dailyReminderSessionSeconds = record.CurrentSessionSeconds;
+                    dailyReminderThresholdSeconds = _state.Settings.ReminderThresholdSeconds;
                 }
+
+                continuousReminderRequest = ShouldShowContinuousReminderLocked(record, now);
 
                 if (_hasPendingImmediateSave)
                 {
@@ -311,6 +346,17 @@ public sealed class TrackingController : IDisposable
                 }
 
                 TryShowDailyReminder(shouldShowReminderStep);
+                ReminderDiagnosticLog.Record(
+                    "累计用眼提醒",
+                    triggeredAt: DateTimeOffset.Now,
+                    sessionSeconds: dailyReminderSessionSeconds,
+                    thresholdSeconds: dailyReminderThresholdSeconds,
+                    step: shouldShowReminderStep);
+            }
+
+            if (continuousReminderRequest is not null)
+            {
+                TryShowContinuousReminder(continuousReminderRequest);
             }
 
             if (saveIsImmediate && saveSucceeded)
@@ -357,14 +403,22 @@ public sealed class TrackingController : IDisposable
             && snapshot.IdleTime.TotalSeconds > settings.IdleThresholdSeconds
                 ? "pc-media"
                 : "pc-input";
-        var segment = UsageSegmentFactory.Create(
-            _state.DeviceId,
-            _state.Platform,
-            source,
-            intervalStart,
-            intervalEnd);
+        var canUseMutableSegments = _state.Sync.IsPaired && _state.Sync.PeerSupportsMutableSegments;
+        var segment = canUseMutableSegments
+            ? UsageSegmentFactory.CreateMutable(
+                _state.DeviceId,
+                _state.Platform,
+                source,
+                intervalStart,
+                intervalEnd)
+            : UsageSegmentFactory.Create(
+                _state.DeviceId,
+                _state.Platform,
+                source,
+                intervalStart,
+                intervalEnd);
 
-        if (_state.Segments.Any(existing => existing.SegmentId == segment.SegmentId))
+        if (canUseMutableSegments && UsageSegmentCompactor.TryExtendMutableSegment(_state.Segments, segment))
         {
             return;
         }
@@ -402,49 +456,21 @@ public sealed class TrackingController : IDisposable
                 Source = "pc",
                 AppId = foreground.AppId,
                 AppName = foreground.AppName,
-                IconData = ReadAppIconData(foreground.AppId),
+                IconData = string.Empty,
                 LocalDate = date
             };
             _state.AppUsageEntries.Add(entry);
         }
 
         entry.AppName = string.IsNullOrWhiteSpace(foreground.AppName) ? entry.AppName : foreground.AppName;
-        if (string.IsNullOrWhiteSpace(entry.IconData))
-        {
-            entry.IconData = ReadAppIconData(foreground.AppId);
-        }
+        entry.IconData = string.Empty;
         entry.DurationSeconds += countedSeconds;
         entry.UpdatedAtUnixSeconds = snapshot.Timestamp.ToUnixTimeSeconds();
     }
 
-    private static string ReadAppIconData(string appId)
-    {
-        if (string.IsNullOrWhiteSpace(appId) || !File.Exists(appId))
-        {
-            return string.Empty;
-        }
-
-        try
-        {
-            using var icon = Icon.ExtractAssociatedIcon(appId);
-            if (icon is null)
-            {
-                return string.Empty;
-            }
-
-            using var bitmap = new Bitmap(icon.ToBitmap(), new Size(48, 48));
-            using var stream = new MemoryStream();
-            bitmap.Save(stream, ImageFormat.Png);
-            return Convert.ToBase64String(stream.ToArray());
-        }
-        catch
-        {
-            return string.Empty;
-        }
-    }
-
     private StateSaveSnapshot CreateSaveSnapshotLocked(DateTimeOffset savedAt)
     {
+        _state.LastTrackingStateSavedUnixSeconds = savedAt.ToUnixTimeSeconds();
         return new StateSaveSnapshot(CloneStateLocked(), savedAt, ++_nextSaveVersion);
     }
 
@@ -476,6 +502,7 @@ public sealed class TrackingController : IDisposable
                 .ToList();
             _state.Sync = CloneSyncSettings(syncedState.Sync);
             _state.Sync.LocalReminderState = CreateLocalReminderStateLocked();
+            InvalidateStatsCacheLocked();
             snapshot = CreateSaveSnapshotLocked(now);
         }
 
@@ -490,6 +517,7 @@ public sealed class TrackingController : IDisposable
             DeviceId = _state.DeviceId,
             Platform = _state.Platform,
             StartWithWindowsDefaultApplied = _state.StartWithWindowsDefaultApplied,
+            LastTrackingStateSavedUnixSeconds = _state.LastTrackingStateSavedUnixSeconds,
             Settings = _state.Settings,
             Records = _state.Records
                 .Select(CloneRecord)
@@ -520,24 +548,125 @@ public sealed class TrackingController : IDisposable
 
     private List<DailyRecord> CreateVisibleRecordsSnapshotLocked()
     {
-        var recordsByDate = _state.Records
-            .Select(CloneRecord)
-            .ToDictionary(record => record.Date);
-        var effectiveSegments = CreateEffectiveSegmentsLocked();
-
-        foreach (var date in effectiveSegments
-            .Where(segment => segment.LocalDate != default)
-            .Select(segment => segment.LocalDate)
-            .Distinct())
+        var dates = _state.Records
+            .Where(record => record.Date != default)
+            .Select(record => record.Date)
+            .ToHashSet();
+        foreach (var segment in _state.Segments)
         {
-            var segmentRecord = UsageSegmentMerger.BuildDailyRecord(date, effectiveSegments);
-            recordsByDate.TryGetValue(date, out var existing);
-            recordsByDate[date] = DailyRecordReconciler.UseSegmentRecordForSyncedDay(existing, segmentRecord);
+            foreach (var date in SegmentDates(segment))
+            {
+                dates.Add(date);
+            }
         }
 
-        return recordsByDate.Values
+        return GetDailyStatsSnapshotsLocked(dates)
+            .Values
+            .Select(snapshot => CloneRecord(snapshot.Record))
             .OrderBy(record => record.Date)
             .ToList();
+    }
+
+    private Dictionary<DateOnly, DailyStatsSnapshot> GetDailyStatsSnapshotsLocked(IEnumerable<DateOnly> dates)
+    {
+        var requestedDates = (dates ?? Array.Empty<DateOnly>())
+            .Where(date => date != default)
+            .Distinct()
+            .ToList();
+        var result = new Dictionary<DateOnly, DailyStatsSnapshot>();
+        var missingDates = new List<DateOnly>();
+
+        foreach (var date in requestedDates)
+        {
+            if (_dailyStatsCache.TryGetValue(date, out var cached) && cached.Version == _statsDataVersion)
+            {
+                result[date] = new DailyStatsSnapshot(CloneRecord(cached.Record), CloneBreakdown(cached.Breakdown));
+            }
+            else
+            {
+                missingDates.Add(date);
+            }
+        }
+
+        if (missingDates.Count == 0)
+        {
+            return result;
+        }
+
+        var effectiveSegments = CreateEffectiveSegmentsLocked();
+        var segmentsByDate = IndexSegmentsByDate(effectiveSegments, missingDates);
+        foreach (var date in missingDates)
+        {
+            var snapshot = BuildDailyStatsSnapshotLocked(
+                date,
+                segmentsByDate.TryGetValue(date, out var segments) ? segments : Array.Empty<UsageSegment>());
+            _dailyStatsCache[date] = new CachedDailyStats(_statsDataVersion, CloneRecord(snapshot.Record), CloneBreakdown(snapshot.Breakdown));
+            result[date] = snapshot;
+        }
+
+        return result;
+    }
+
+    private DailyStatsSnapshot GetDailyStatsSnapshotLocked(DateOnly date)
+    {
+        return GetDailyStatsSnapshotsLocked(new[] { date })[date];
+    }
+
+    private DailyStatsSnapshot BuildDailyStatsSnapshotLocked(DateOnly date, IReadOnlyList<UsageSegment> dateSegments)
+    {
+        var existing = _state.Records.FirstOrDefault(record => record.Date == date);
+        var record = dateSegments.Count > 0
+            ? DailyRecordReconciler.UseSegmentRecordForSyncedDay(existing, UsageSegmentMerger.BuildDailyRecord(date, dateSegments))
+            : existing is null ? new DailyRecord(date) : CloneRecord(existing);
+        var breakdown = UsageDeviceBreakdown.Build(date, dateSegments);
+        return new DailyStatsSnapshot(record, breakdown);
+    }
+
+    private static Dictionary<DateOnly, List<UsageSegment>> IndexSegmentsByDate(IEnumerable<UsageSegment> segments, IEnumerable<DateOnly> dates)
+    {
+        var result = dates
+            .Where(date => date != default)
+            .Distinct()
+            .ToDictionary(date => date, _ => new List<UsageSegment>());
+        foreach (var segment in segments)
+        {
+            foreach (var date in SegmentDates(segment))
+            {
+                if (result.TryGetValue(date, out var list))
+                {
+                    list.Add(segment);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private static IEnumerable<DateOnly> SegmentDates(UsageSegment segment)
+    {
+        if (segment.EndUnixSeconds <= segment.StartUnixSeconds)
+        {
+            yield break;
+        }
+
+        var startDate = DateOnly.FromDateTime(DateTimeOffset.FromUnixTimeSeconds(segment.StartUnixSeconds).LocalDateTime);
+        var endDate = DateOnly.FromDateTime(DateTimeOffset.FromUnixTimeSeconds(segment.EndUnixSeconds - 1).LocalDateTime);
+        for (var date = startDate; date <= endDate; date = date.AddDays(1))
+        {
+            yield return date;
+        }
+    }
+
+    private void InvalidateStatsCacheLocked(DateOnly? date = null)
+    {
+        if (date is null)
+        {
+            _statsDataVersion++;
+            _dailyStatsCache.Clear();
+            return;
+        }
+
+        _dailyStatsCache.Remove(date.Value);
     }
 
     private List<UsageSegment> CreateEffectiveSegmentsLocked()
@@ -579,6 +708,15 @@ public sealed class TrackingController : IDisposable
         };
     }
 
+    private static UsageDeviceBreakdown CloneBreakdown(UsageDeviceBreakdown breakdown)
+    {
+        return new UsageDeviceBreakdown(
+            breakdown.PcSeconds,
+            breakdown.PhoneSeconds,
+            (long[])breakdown.PcHourlySeconds.Clone(),
+            (long[])breakdown.PhoneHourlySeconds.Clone());
+    }
+
     private static AppUsageEntry CloneAppUsageEntry(AppUsageEntry entry)
     {
         return new AppUsageEntry
@@ -589,7 +727,7 @@ public sealed class TrackingController : IDisposable
             Source = entry.Source,
             AppId = entry.AppId,
             AppName = entry.AppName,
-            IconData = entry.IconData,
+            IconData = string.Empty,
             LocalDate = entry.LocalDate,
             DurationSeconds = entry.DurationSeconds,
             UpdatedAtUnixSeconds = entry.UpdatedAtUnixSeconds
@@ -608,6 +746,7 @@ public sealed class TrackingController : IDisposable
             LastKnownPort = sync.LastKnownPort,
             LastSyncUnixSeconds = sync.LastSyncUnixSeconds,
             LastError = sync.LastError,
+            PeerSupportsMutableSegments = sync.PeerSupportsMutableSegments,
             LocalReminderState = CloneReminderState(sync.LocalReminderState),
             PeerReminderState = CloneReminderState(sync.PeerReminderState)
         };
@@ -685,6 +824,93 @@ public sealed class TrackingController : IDisposable
         }
     }
 
+    private ContinuousReminderRequest? ShouldShowContinuousReminderLocked(DailyRecord record, DateTimeOffset now)
+    {
+        if (!_accumulator.IsCounting || !_state.Settings.ContinuousReminderEnabled)
+        {
+            _lastContinuousReminderStep = 0;
+            _continuousReminderSessionStart = 0;
+            return null;
+        }
+
+        var localState = CreateLocalReminderStateLocked();
+        var peerOnline = SyncPeerConnectionState.IsOnline(
+            _state.Sync,
+            now.ToUnixTimeSeconds(),
+            PeerOfflineAfterSeconds);
+        var sessionStarted = ContinuousReminderBaseline.Resolve(
+            localState,
+            _state.Sync.PeerReminderState,
+            peerOnline);
+        if (sessionStarted <= 0)
+        {
+            _lastContinuousReminderStep = 0;
+            _continuousReminderSessionStart = 0;
+            return null;
+        }
+
+        if (_continuousReminderSessionStart == 0)
+        {
+            _continuousReminderSessionStart = sessionStarted;
+        }
+        else if (sessionStarted > _continuousReminderSessionStart)
+        {
+            // A later start means a new local/shared episode. Reset its reminder steps.
+            _lastContinuousReminderStep = 0;
+            _continuousReminderSessionStart = sessionStarted;
+        }
+        else if (sessionStarted < _continuousReminderSessionStart)
+        {
+            // A peer may reveal an earlier start for the same episode. Keep the steps
+            // already shown so the earlier baseline cannot cause a duplicate alert.
+            _continuousReminderSessionStart = sessionStarted;
+        }
+
+        var thresholdSeconds = Math.Max(60, _state.Settings.ContinuousReminderThresholdSeconds);
+        var sessionSeconds = Math.Max(0, now.ToUnixTimeSeconds() - sessionStarted);
+        var step = (int)Math.Max(0, sessionSeconds / thresholdSeconds);
+        if (step <= 0 || step <= _lastContinuousReminderStep
+            || ContinuousReminderExemptionPolicy.IsExempt(now, _state.Settings.ContinuousReminderExemptionPeriods))
+        {
+            return null;
+        }
+
+        _lastContinuousReminderStep = step;
+        var requestId = Guid.NewGuid().ToString("N")[..12];
+        ReminderDiagnosticLog.Record(
+            "连续用眼提醒",
+            now,
+            sessionSeconds,
+            thresholdSeconds,
+            step);
+        ReminderDiagnosticLog.RecordEvent(
+            "连续用眼提醒/达到阈值",
+            now,
+            requestId,
+            $"连续={sessionSeconds}秒;阈值={thresholdSeconds}秒;第{step}次");
+        return new ContinuousReminderRequest(requestId, sessionSeconds, thresholdSeconds, step);
+    }
+
+    private void TryShowContinuousReminder(ContinuousReminderRequest request)
+    {
+        try
+        {
+            ReminderDiagnosticLog.RecordEvent(
+                "连续用眼提醒/请求显示",
+                DateTimeOffset.Now,
+                request.RequestId);
+            _notificationService.ShowContinuousReminder(request.RequestId);
+        }
+        catch (Exception exception)
+        {
+            ReminderDiagnosticLog.RecordEvent(
+                "连续用眼提醒/请求显示失败",
+                DateTimeOffset.Now,
+                request.RequestId,
+                $"{exception.GetType().Name}: {exception.Message}");
+        }
+    }
+
     private TrackingUpdatedEventArgs CreateUpdateLocked(DailyRecord record)
     {
         return new TrackingUpdatedEventArgs(
@@ -728,4 +954,14 @@ public sealed record TrackingUpdatedEventArgs(
     bool ReminderShown,
     bool IsCounting);
 
+public sealed record DailyStatsSnapshot(DailyRecord Record, UsageDeviceBreakdown Breakdown);
+
+internal sealed record CachedDailyStats(long Version, DailyRecord Record, UsageDeviceBreakdown Breakdown);
+
 internal sealed record StateSaveSnapshot(AppState State, DateTimeOffset SavedAt, long Version);
+
+internal sealed record ContinuousReminderRequest(
+    string RequestId,
+    long SessionSeconds,
+    int ThresholdSeconds,
+    int Step);

@@ -82,6 +82,13 @@ public final class AndroidSyncResponseReader {
         return readLong(json, "TimestampUnixSeconds", "timestampUnixSeconds");
     }
 
+    public static boolean supportsMutableSegments(String responseJson) {
+        String json = safe(responseJson);
+        return !json.isEmpty()
+                && isAccepted(json)
+                && readBoolean(json, "SupportsMutableSegments", "supportsMutableSegments");
+    }
+
     public static ReminderRuntimeState readReminderState(String responseJson) {
         String json = safe(responseJson);
         if (json.isEmpty() || !isAccepted(json)) {

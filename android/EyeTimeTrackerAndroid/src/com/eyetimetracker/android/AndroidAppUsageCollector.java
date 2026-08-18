@@ -8,12 +8,7 @@ import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
-import android.graphics.Bitmap;
-import android.graphics.Canvas;
-import android.graphics.drawable.Drawable;
-import android.util.Base64;
 import android.util.Log;
-import java.io.ByteArrayOutputStream;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -25,8 +20,6 @@ import java.util.Map;
 public final class AndroidAppUsageCollector {
     private static final String DIAG_TAG = "EyeTimeDiag";
     private static final long MIN_APP_USAGE_SECONDS = 30L;
-    private static final int ICON_SIZE_PX = 48;
-
     private final Context context;
 
     public AndroidAppUsageCollector(Context context) {
@@ -54,8 +47,12 @@ public final class AndroidAppUsageCollector {
         PackageManager packageManager = context.getPackageManager();
         Map<String, String> installedApps = readInstalledLaunchableApps(packageManager);
         Map<String, Long> eventSecondsByPackage = readForegroundSeconds(manager, startMillis, endMillis);
-        Map<String, Long> statsSecondsByPackage = readAggregatedUsageSeconds(manager, startMillis, endMillis);
-        Map<String, Long> secondsByPackage = mergeUsageSeconds(eventSecondsByPackage, statsSecondsByPackage);
+        Map<String, Long> statsSecondsByPackage = eventSecondsByPackage.isEmpty()
+                ? readAggregatedUsageSeconds(manager, startMillis, endMillis)
+                : new HashMap<>();
+        Map<String, Long> secondsByPackage = eventSecondsByPackage.isEmpty()
+                ? statsSecondsByPackage
+                : eventSecondsByPackage;
         String deviceId = store.getDeviceId();
         long updatedAt = nowMillis / 1000L;
         int skippedShort = 0;
@@ -94,12 +91,12 @@ public final class AndroidAppUsageCollector {
                     "phone",
                     packageName,
                     label,
-                    readIconData(packageManager, packageName),
+                    "",
                     date.toString(),
                     seconds,
                     updatedAt));
         }
-        List<AppUsageEntry> dedupedEntries = dedupeSameNamedApps(entries);
+        List<AppUsageEntry> dedupedEntries = capToPhoneUsageSeconds(dedupeSameNamedApps(entries), store, date);
         int duplicateNames = entries.size() - dedupedEntries.size();
         Log.i(DIAG_TAG, "AndroidAppUsageCollector date=" + date
                 + " launchable=" + installedApps.size()
@@ -206,28 +203,6 @@ public final class AndroidAppUsageCollector {
         }
     }
 
-    private String readIconData(PackageManager packageManager, String packageName) {
-        if (packageManager == null || packageName == null || packageName.trim().isEmpty()) {
-            return "";
-        }
-        try {
-            Drawable drawable = packageManager.getApplicationIcon(packageName);
-            if (drawable == null) {
-                return "";
-            }
-            Bitmap bitmap = Bitmap.createBitmap(ICON_SIZE_PX, ICON_SIZE_PX, Bitmap.Config.ARGB_8888);
-            Canvas canvas = new Canvas(bitmap);
-            drawable.setBounds(0, 0, ICON_SIZE_PX, ICON_SIZE_PX);
-            drawable.draw(canvas);
-            ByteArrayOutputStream output = new ByteArrayOutputStream();
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, output);
-            bitmap.recycle();
-            return Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP);
-        } catch (Exception ignored) {
-            return "";
-        }
-    }
-
     private Map<String, Long> readAggregatedUsageSeconds(UsageStatsManager manager, long startMillis, long endMillis) {
         Map<String, Long> secondsByPackage = new HashMap<>();
         Map<String, UsageStats> statsByPackage;
@@ -255,24 +230,6 @@ public final class AndroidAppUsageCollector {
             }
         }
         return secondsByPackage;
-    }
-
-    private static Map<String, Long> mergeUsageSeconds(Map<String, Long> eventSecondsByPackage, Map<String, Long> statsSecondsByPackage) {
-        Map<String, Long> merged = new HashMap<>();
-        if (eventSecondsByPackage != null) {
-            merged.putAll(eventSecondsByPackage);
-        }
-        if (statsSecondsByPackage != null) {
-            for (Map.Entry<String, Long> value : statsSecondsByPackage.entrySet()) {
-                String packageName = value.getKey();
-                long seconds = value.getValue() == null ? 0L : value.getValue();
-                if (packageName == null || packageName.trim().isEmpty() || seconds <= 0L) {
-                    continue;
-                }
-                merged.put(packageName, Math.max(merged.getOrDefault(packageName, 0L), seconds));
-            }
-        }
-        return merged;
     }
 
     private static void addSample(List<String> samples, String reason, String packageName, long seconds) {
@@ -311,6 +268,61 @@ public final class AndroidAppUsageCollector {
             }
         }
         return values;
+    }
+
+    private static List<AppUsageEntry> capToPhoneUsageSeconds(List<AppUsageEntry> entries, EyeTimeStore store, LocalDate date) {
+        if (entries == null || entries.isEmpty() || store == null || date == null) {
+            return entries == null ? new ArrayList<>() : entries;
+        }
+        long totalUsageSeconds;
+        try {
+            totalUsageSeconds = date.equals(LocalDate.now())
+                    ? store.displayHomeStats(date).todaySeconds
+                    : store.getDay(date).totalSeconds;
+        } catch (Exception ex) {
+            return entries;
+        }
+        if (totalUsageSeconds < MIN_APP_USAGE_SECONDS) {
+            return entries;
+        }
+        long total = 0L;
+        for (AppUsageEntry entry : entries) {
+            if (entry != null) {
+                total += Math.max(0L, entry.durationSeconds);
+            }
+        }
+        if (total <= totalUsageSeconds || total <= 0L) {
+            return entries;
+        }
+
+        List<AppUsageEntry> capped = new ArrayList<>();
+        long cappedTotal = 0L;
+        for (AppUsageEntry entry : entries) {
+            if (entry == null || entry.durationSeconds <= 0L) {
+                continue;
+            }
+            long scaledSeconds = Math.max(1L, (entry.durationSeconds * totalUsageSeconds) / total);
+            if (scaledSeconds < MIN_APP_USAGE_SECONDS) {
+                continue;
+            }
+            cappedTotal += scaledSeconds;
+            capped.add(new AppUsageEntry(
+                    entry.entryId,
+                    entry.deviceId,
+                    entry.platform,
+                    entry.source,
+                    entry.appId,
+                    entry.appName,
+                    "",
+                    entry.localDate,
+                    scaledSeconds,
+                    entry.updatedAtUnixSeconds));
+        }
+        Log.i(DIAG_TAG, "AndroidAppUsageCollector capped app total raw=" + total
+                + " visibleTotal=" + totalUsageSeconds
+                + " capped=" + cappedTotal
+                + " entries=" + capped.size());
+        return capped;
     }
 
     private static String appDisplayKey(AppUsageEntry entry) {

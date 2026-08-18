@@ -9,8 +9,14 @@ function Invoke-Checked {
 
 $project = Split-Path -Parent $MyInvocation.MyCommand.Path
 $root = Resolve-Path (Join-Path $project '..\..')
-$sdkRoot = [Environment]::GetEnvironmentVariable('ANDROID_SDK_ROOT', 'User')
-$javaHome = [Environment]::GetEnvironmentVariable('JAVA_HOME', 'User')
+$sdkRoot = $env:ANDROID_SDK_ROOT
+if (-not $sdkRoot) {
+  $sdkRoot = [Environment]::GetEnvironmentVariable('ANDROID_SDK_ROOT', 'User')
+}
+$javaHome = $env:JAVA_HOME
+if (-not $javaHome) {
+  $javaHome = [Environment]::GetEnvironmentVariable('JAVA_HOME', 'User')
+}
 if (-not $sdkRoot) { throw 'ANDROID_SDK_ROOT is not set' }
 if (-not $javaHome) { throw 'JAVA_HOME is not set' }
 $env:JAVA_HOME = $javaHome

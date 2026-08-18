@@ -14,6 +14,8 @@ public sealed class SyncSettings
     public int LastKnownPort { get; set; }
     public long LastSyncUnixSeconds { get; set; }
     public string LastError { get; set; } = string.Empty;
+    // Negotiated before either side creates mutable, update-in-place segments.
+    public bool PeerSupportsMutableSegments { get; set; }
     public ReminderRuntimeState LocalReminderState { get; set; } = new();
     public ReminderRuntimeState PeerReminderState { get; set; } = new();
 }

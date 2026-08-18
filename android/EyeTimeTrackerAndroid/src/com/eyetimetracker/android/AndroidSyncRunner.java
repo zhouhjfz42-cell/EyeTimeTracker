@@ -90,6 +90,7 @@ public final class AndroidSyncRunner {
                 int changed = store.addSegments(AndroidSyncResponseReader.readSegments(responseJson));
                 int changedApps = store.addAppUsageEntries(AndroidSyncResponseReader.readAppUsageEntries(responseJson));
                 store.savePeerReminderState(AndroidSyncResponseReader.readReminderState(responseJson));
+                settings.peerSupportsMutableSegments = AndroidSyncResponseReader.supportsMutableSegments(responseJson);
                 Log.i(DIAG_TAG, "AndroidSyncRunner merged segments changed=" + changed + " appUsageChanged=" + changedApps);
                 long responseTimestamp = AndroidSyncResponseReader.readTimestampUnixSeconds(responseJson);
                 if (responseTimestamp > 0L) {
@@ -137,6 +138,7 @@ public final class AndroidSyncRunner {
             request.put("AppUsageEntries", appUsageEntriesToJson(store.getAppUsageEntries(LocalDate.now().minusDays(30), LocalDate.now())));
             request.put("Settings", settingsToJson());
             request.put("ReminderState", reminderStateToJson(store.getLocalReminderState()));
+            request.put("SupportsMutableSegments", true);
             request.put("SinceUnixSeconds", settings.lastSyncUnixSeconds);
             request.put("TimestampUnixSeconds", nowSeconds);
             request.put("Signature", SyncMessageSigner.sign(
@@ -158,6 +160,16 @@ public final class AndroidSyncRunner {
         json.put("ReminderThresholdSeconds", store.getReminderMinutes() * 60);
         json.put("StartWithWindows", false);
         json.put("RepeatReminder", store.isRepeatReminderEnabled());
+        json.put("ContinuousReminderEnabled", store.isContinuousReminderEnabled());
+        json.put("ContinuousReminderThresholdSeconds", store.getContinuousReminderMinutes() * 60);
+        JSONArray exemptions = new JSONArray();
+        for (ReminderExemptionPeriod period : store.getContinuousReminderExemptions()) {
+            JSONObject item = new JSONObject();
+            item.put("StartMinuteOfDay", period.startMinutes);
+            item.put("EndMinuteOfDay", period.endMinutes);
+            exemptions.put(item);
+        }
+        json.put("ContinuousReminderExemptionPeriods", exemptions);
         return json;
     }
 
@@ -221,7 +233,7 @@ public final class AndroidSyncRunner {
             item.put("Source", entry.source);
             item.put("AppId", entry.appId);
             item.put("AppName", entry.appName);
-            item.put("IconData", entry.iconData);
+            item.put("IconData", "");
             item.put("LocalDate", entry.localDate);
             item.put("DurationSeconds", entry.durationSeconds);
             item.put("UpdatedAtUnixSeconds", entry.updatedAtUnixSeconds);

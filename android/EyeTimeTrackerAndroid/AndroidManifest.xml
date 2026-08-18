@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
 
@@ -34,6 +36,12 @@
             android:exported="false" />
         <activity
             android:name=".StatsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".EyeCareRemindersActivity"
+            android:exported="false" />
+        <activity
+            android:name=".UsageStatusActivity"
             android:exported="false" />
         <activity
             android:name=".FamilySetupActivity"

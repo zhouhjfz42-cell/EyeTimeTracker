@@ -35,6 +35,7 @@ public sealed class PcSyncCoordinator
 
         MergeSegments(state, request.Segments);
         MergeAppUsageEntries(state, request.AppUsageEntries);
+        state.Sync.PeerSupportsMutableSegments = request.SupportsMutableSegments;
         state.Sync.PeerReminderState = CloneReminderState(request.ReminderState);
         state.Settings = MergeSyncedSettings(state.Settings, request.Settings);
         state.Sync.LastSyncUnixSeconds = _unixClock();
@@ -49,6 +50,7 @@ public sealed class PcSyncCoordinator
             Segments = GetLocalSegments(state),
             AppUsageEntries = GetLocalAppUsageEntries(state),
             ReminderState = CloneReminderState(state.Sync.LocalReminderState),
+            SupportsMutableSegments = true,
             TimestampUnixSeconds = state.Sync.LastSyncUnixSeconds
         };
     }
@@ -198,19 +200,31 @@ public sealed class PcSyncCoordinator
 
     private static void MergeSegments(AppState state, IEnumerable<UsageSegment> incomingSegments)
     {
-        var knownSegmentIds = state.Segments
+        var existingById = state.Segments
             .Where(segment => !string.IsNullOrWhiteSpace(segment.SegmentId))
-            .Select(segment => segment.SegmentId)
-            .ToHashSet(StringComparer.Ordinal);
+            .GroupBy(segment => segment.SegmentId, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.OrderByDescending(segment => segment.UpdatedAtUnixSeconds).First(), StringComparer.Ordinal);
 
-        foreach (var segment in incomingSegments)
+        foreach (var segment in incomingSegments ?? Array.Empty<UsageSegment>())
         {
-            if (!IsUsableSegment(segment) || !knownSegmentIds.Add(segment.SegmentId))
+            if (!IsUsableSegment(segment))
             {
                 continue;
             }
 
-            state.Segments.Add(CloneSegment(segment));
+            if (existingById.TryGetValue(segment.SegmentId, out var existing))
+            {
+                if (segment.UpdatedAtUnixSeconds > existing.UpdatedAtUnixSeconds)
+                {
+                    CopySegment(existing, segment);
+                }
+
+                continue;
+            }
+
+            var added = CloneSegment(segment);
+            state.Segments.Add(added);
+            existingById[added.SegmentId] = added;
         }
     }
 
@@ -259,10 +273,7 @@ public sealed class PcSyncCoordinator
                 if (normalized.UpdatedAtUnixSeconds >= existing.UpdatedAtUnixSeconds)
                 {
                     existing.AppName = normalized.AppName;
-                    if (!string.IsNullOrWhiteSpace(normalized.IconData))
-                    {
-                        existing.IconData = normalized.IconData;
-                    }
+                    existing.IconData = string.Empty;
                     existing.DurationSeconds = normalized.DurationSeconds;
                     existing.UpdatedAtUnixSeconds = normalized.UpdatedAtUnixSeconds;
                 }
@@ -316,6 +327,18 @@ public sealed class PcSyncCoordinator
         };
     }
 
+    private static void CopySegment(UsageSegment destination, UsageSegment source)
+    {
+        destination.DeviceId = source.DeviceId;
+        destination.Platform = source.Platform;
+        destination.Source = source.Source;
+        destination.StartUnixSeconds = source.StartUnixSeconds;
+        destination.EndUnixSeconds = source.EndUnixSeconds;
+        destination.LocalDate = source.LocalDate;
+        destination.CreatedAtUnixSeconds = source.CreatedAtUnixSeconds;
+        destination.UpdatedAtUnixSeconds = source.UpdatedAtUnixSeconds;
+    }
+
     private static AppUsageEntry CloneAppUsageEntry(AppUsageEntry entry)
     {
         return new AppUsageEntry
@@ -326,7 +349,7 @@ public sealed class PcSyncCoordinator
             Source = entry.Source,
             AppId = entry.AppId,
             AppName = entry.AppName,
-            IconData = entry.IconData,
+            IconData = string.Empty,
             LocalDate = entry.LocalDate,
             DurationSeconds = Math.Max(0, entry.DurationSeconds),
             UpdatedAtUnixSeconds = entry.UpdatedAtUnixSeconds

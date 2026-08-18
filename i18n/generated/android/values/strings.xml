@@ -47,6 +47,36 @@
     <string name="duration_hours_minutes_padded" formatted="false">{hours}小时{minutes:00}分</string>
     <string name="duration_minutes" formatted="false">{minutes}分钟</string>
     <string name="duration_zero_minutes" formatted="false">0分钟</string>
+    <string name="eye_care_reminders_continuous_alert_message" formatted="false">你已经连续看屏幕一段时间了。请看向远处，放松一下眼睛。</string>
+    <string name="eye_care_reminders_continuous_alert_title" formatted="false">该望向远处了</string>
+    <string name="eye_care_reminders_continuous_desc" formatted="false">连续看屏幕后提醒望向远处。</string>
+    <string name="eye_care_reminders_continuous_title" formatted="false">连续用眼提醒</string>
+    <string name="eye_care_reminders_cumulative_desc" formatted="false">当天累计用眼达到设定时间后提醒休息。</string>
+    <string name="eye_care_reminders_cumulative_title" formatted="false">累计用眼提醒</string>
+    <string name="eye_care_reminders_dialog_lead" formatted="false">点击卡片进行设置。</string>
+    <string name="eye_care_reminders_dialog_title" formatted="false">护眼提醒</string>
+    <string name="eye_care_reminders_disabled" formatted="false">已关</string>
+    <string name="eye_care_reminders_enabled" formatted="false">已开</string>
+    <string name="eye_care_reminders_enable_reminder" formatted="false">开启提醒</string>
+    <string name="eye_care_reminders_entry_title" formatted="false">护眼提醒</string>
+    <string name="eye_care_reminders_entry_value" formatted="false">设置</string>
+    <string name="eye_care_reminders_exemption_add" formatted="false">添加豁免时间</string>
+    <string name="eye_care_reminders_exemption_desc" formatted="false">在这些时间段内，不弹出连续用眼提醒。</string>
+    <string name="eye_care_reminders_exemption_empty" formatted="false">暂未设置豁免时间</string>
+    <string name="eye_care_reminders_exemption_invalid" formatted="false">开始和结束时间不能相同</string>
+    <string name="eye_care_reminders_exemption_title" formatted="false">豁免时间</string>
+    <string name="eye_care_reminders_footer" formatted="false">提醒不会替你判断眼睛是否已经休息，只在合适的时间提醒你停一下。</string>
+    <string name="eye_care_reminders_minutes_input_hint" formatted="false">分钟</string>
+    <string name="eye_care_reminders_permission_needed" formatted="false">需授权</string>
+    <string name="eye_care_reminders_reminder_time" formatted="false">提醒时间</string>
+    <string name="eye_care_reminders_settings_saved" formatted="false">护眼提醒已保存</string>
+    <string name="eye_care_reminders_walking_alert_message" formatted="false">边走路边看手机很伤眼哦</string>
+    <string name="eye_care_reminders_walking_alert_title" formatted="false">先停下来再看手机</string>
+    <string name="eye_care_reminders_walking_desc" formatted="false">走路时看手机会提醒先停下来。</string>
+    <string name="eye_care_reminders_walking_permission_action" formatted="false">去授权</string>
+    <string name="eye_care_reminders_walking_permission_desc" formatted="false">应用只判断你是否正在步行，不记录路线，也不读取位置。</string>
+    <string name="eye_care_reminders_walking_permission_title" formatted="false">需要身体活动权限</string>
+    <string name="eye_care_reminders_walking_title" formatted="false">走路用手机提醒</string>
     <string name="family_binding_child_desc" formatted="false">加入后，这台设备会按家长设置记录和提醒。</string>
     <string name="family_binding_child_joined_status" formatted="false">孩子设备已加入</string>
     <string name="family_binding_child_title" formatted="false">输入家长手机上的绑定码</string>
@@ -284,4 +314,24 @@
     <string name="tray_quit" formatted="false">退出</string>
     <string name="tray_stats_page" formatted="false">统计页</string>
     <string name="tray_status" formatted="false">统计</string>
+    <string name="usage_status_activity_desc" formatted="false">仅用于判断是否正在走路，不读取位置或路线。</string>
+    <string name="usage_status_activity_title" formatted="false">身体活动权限</string>
+    <string name="usage_status_background_desc" formatted="false">建议在电池设置中允许后台运行，让统计和提醒更稳定。</string>
+    <string name="usage_status_background_hint" formatted="false">请在应用详情的电池设置中选择不限制或允许后台活动。</string>
+    <string name="usage_status_background_title" formatted="false">后台保持运行</string>
+    <string name="usage_status_entry" formatted="false">使用状态</string>
+    <string name="usage_status_instructions" formatted="false">点击卡片可前往对应的系统设置。</string>
+    <string name="usage_status_lead" formatted="false">检查统计和提醒所需的设置。</string>
+    <string name="usage_status_needs_attention" formatted="false">还差 {count} 项设置</string>
+    <string name="usage_status_notifications_desc" formatted="false">用于在后台显示走路和用眼提醒。</string>
+    <string name="usage_status_notifications_title" formatted="false">通知提醒</string>
+    <string name="usage_status_ready" formatted="false">已准备好</string>
+    <string name="usage_status_state_missing" formatted="false">需要设置</string>
+    <string name="usage_status_state_ready" formatted="false">已开启</string>
+    <string name="usage_status_state_recommended" formatted="false">建议设置</string>
+    <string name="usage_status_title" formatted="false">使用状态</string>
+    <string name="usage_status_tracking_desc" formatted="false">服务已自动启动，亮屏后会开始统计。</string>
+    <string name="usage_status_tracking_title" formatted="false">用眼统计</string>
+    <string name="usage_status_usage_desc" formatted="false">用于显示各个 App 的使用时长。</string>
+    <string name="usage_status_usage_title" formatted="false">应用使用统计</string>
 </resources>

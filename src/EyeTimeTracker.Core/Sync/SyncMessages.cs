@@ -58,6 +58,7 @@ public sealed class SyncRequest
     public List<AppUsageEntry> AppUsageEntries { get; set; } = new();
     public TrackerSettings Settings { get; set; } = TrackerSettings.Default;
     public ReminderRuntimeState ReminderState { get; set; } = new();
+    public bool SupportsMutableSegments { get; set; }
     public long SinceUnixSeconds { get; set; }
     public long TimestampUnixSeconds { get; set; }
     public string Signature { get; set; } = string.Empty;
@@ -72,6 +73,7 @@ public sealed class SyncResponse
     public List<UsageSegment> Segments { get; set; } = new();
     public List<AppUsageEntry> AppUsageEntries { get; set; } = new();
     public ReminderRuntimeState ReminderState { get; set; } = new();
+    public bool SupportsMutableSegments { get; set; }
     public string Error { get; set; } = string.Empty;
     public long TimestampUnixSeconds { get; set; }
     public string Signature { get; set; } = string.Empty;

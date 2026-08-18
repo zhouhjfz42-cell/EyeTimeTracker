@@ -50,6 +50,14 @@ public final class EyeTimeStore {
     private static final String DEVICE_ID = "device_id";
     private static final String REMINDER_MINUTES = "reminder_minutes";
     private static final String REPEAT_REMINDER = "repeat_reminder";
+    private static final String CONTINUOUS_REMINDER_ENABLED = "continuous_reminder_enabled";
+    private static final String CONTINUOUS_REMINDER_MINUTES = "continuous_reminder_minutes";
+    private static final String CONTINUOUS_REMINDER_EXEMPTIONS = "continuous_reminder_exemptions";
+    private static final String CONTINUOUS_REMINDER_SESSION_STARTED = "continuous_reminder_session_started";
+    private static final String CONTINUOUS_REMINDER_LOCAL_SESSION_STARTED = "continuous_reminder_local_session_started";
+    private static final String CONTINUOUS_REMINDER_LAST_STEP = "continuous_reminder_last_step";
+    private static final String REMINDER_DIAGNOSTICS = "reminder_diagnostics";
+    private static final String WALKING_REMINDER_ENABLED = "walking_reminder_enabled";
     private static final String SYNC_IS_PAIRED = "sync_is_paired";
     private static final String SYNC_PEER_DEVICE_ID = "sync_peer_device_id";
     private static final String SYNC_PEER_PLATFORM = "sync_peer_platform";
@@ -58,6 +66,7 @@ public final class EyeTimeStore {
     private static final String SYNC_SHARED_SECRET = "sync_shared_secret";
     private static final String SYNC_LAST_SYNC_UNIX_SECONDS = "sync_last_sync_unix_seconds";
     private static final String SYNC_LAST_ERROR = "sync_last_error";
+    private static final String SYNC_PEER_SUPPORTS_MUTABLE_SEGMENTS = "sync_peer_supports_mutable_segments";
     private static final String LOCAL_REMINDER_COUNTING = "local_reminder_counting";
     private static final String LOCAL_REMINDER_SESSION_STARTED = "local_reminder_session_started";
     private static final String PEER_REMINDER_DEVICE_ID = "peer_reminder_device_id";
@@ -100,6 +109,8 @@ public final class EyeTimeStore {
     private static final int PARENT_PASSCODE_ITERATIONS = 120_000;
     private static final int PARENT_PASSCODE_HASH_BITS = 256;
     private static final String PARENT_PASSCODE_ALGORITHM = "PBKDF2WithHmacSHA256";
+    private static final int MAX_STORED_STRING_LENGTH = 8192;
+    public static final int DEFAULT_CONTINUOUS_REMINDER_MINUTES = 20;
 
     private final SharedPreferences prefs;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
@@ -107,6 +118,7 @@ public final class EyeTimeStore {
     public EyeTimeStore(Context context) {
         prefs = context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         ensureDeviceId();
+        stripStoredAppUsageIcons();
     }
 
     public synchronized String getDeviceId() {
@@ -218,7 +230,10 @@ public final class EyeTimeStore {
         }
         try {
             JSONObject state = loadState();
-            int changed = replacePhoneAppUsageEntries(state, date, entries);
+            long capSeconds = date.equals(LocalDate.now())
+                    ? displayHomeStats(date).todaySeconds
+                    : getDay(date).totalSeconds;
+            int changed = replacePhoneAppUsageEntries(state, date, capAppUsageEntriesToTotal(entries, capSeconds));
             if (changed > 0) {
                 saveState(state);
             }
@@ -882,16 +897,241 @@ public final class EyeTimeStore {
     }
 
     public synchronized boolean isRepeatReminderEnabled() {
-        return prefs.getBoolean(REPEAT_REMINDER, false);
+        return true;
     }
 
     public synchronized void saveReminderSettings(int reminderMinutes, boolean repeatReminder) {
         int safeMinutes = ReminderThreshold.clampMinutes(reminderMinutes);
         prefs.edit()
                 .putInt(REMINDER_MINUTES, safeMinutes)
-                .putBoolean(REPEAT_REMINDER, repeatReminder)
+                .putBoolean(REPEAT_REMINDER, true)
                 .apply();
         alignTodayReminderAfterSettingsChange(safeMinutes);
+    }
+
+    public synchronized boolean isContinuousReminderEnabled() {
+        return prefs.getBoolean(CONTINUOUS_REMINDER_ENABLED, true);
+    }
+
+    public synchronized int getContinuousReminderMinutes() {
+        return ReminderThreshold.clampMinutes(
+                prefs.getInt(CONTINUOUS_REMINDER_MINUTES, DEFAULT_CONTINUOUS_REMINDER_MINUTES));
+    }
+
+    public synchronized void saveContinuousReminderSettings(boolean enabled, int minutes) {
+        saveContinuousReminderSettings(enabled, minutes, getContinuousReminderExemptions());
+    }
+
+    public synchronized void saveContinuousReminderSettings(
+            boolean enabled,
+            int minutes,
+            List<ReminderExemptionPeriod> periods) {
+        prefs.edit()
+                .putBoolean(CONTINUOUS_REMINDER_ENABLED, enabled)
+                .putInt(CONTINUOUS_REMINDER_MINUTES, ReminderThreshold.clampMinutes(minutes))
+                .putString(CONTINUOUS_REMINDER_EXEMPTIONS, encodeReminderExemptions(periods))
+                .apply();
+    }
+
+    public synchronized List<ReminderExemptionPeriod> getContinuousReminderExemptions() {
+        List<ReminderExemptionPeriod> periods = new ArrayList<>();
+        try {
+            JSONArray values = new JSONArray(prefs.getString(CONTINUOUS_REMINDER_EXEMPTIONS, "[]"));
+            for (int i = 0; i < values.length(); i++) {
+                JSONObject value = values.optJSONObject(i);
+                if (value == null) {
+                    continue;
+                }
+                ReminderExemptionPeriod period = ReminderExemptionPeriod.create(
+                        value.optInt("StartMinuteOfDay", 0),
+                        value.optInt("EndMinuteOfDay", 0));
+                if (period.isValid()) {
+                    periods.add(period);
+                }
+            }
+        } catch (JSONException ignored) {
+        }
+        return periods;
+    }
+
+    private String encodeReminderExemptions(List<ReminderExemptionPeriod> periods) {
+        JSONArray values = new JSONArray();
+        if (periods != null) {
+            for (ReminderExemptionPeriod period : periods) {
+                if (period == null || !period.isValid()) {
+                    continue;
+                }
+                JSONObject value = new JSONObject();
+                try {
+                    value.put("StartMinuteOfDay", period.startMinutes);
+                    value.put("EndMinuteOfDay", period.endMinutes);
+                    values.put(value);
+                } catch (JSONException ignored) {
+                }
+            }
+        }
+        return values.toString();
+    }
+
+    public synchronized boolean shouldShowContinuousReminder(long sessionStartedUnixSeconds, long sessionSeconds) {
+        return shouldShowContinuousReminder(
+                getLocalReminderState().currentSessionStartedUnixSeconds,
+                sessionStartedUnixSeconds,
+                sessionSeconds,
+                System.currentTimeMillis() / 1000L);
+    }
+
+    public synchronized boolean shouldShowContinuousReminder(
+            long sessionStartedUnixSeconds,
+            long sessionSeconds,
+            long nowUnixSeconds) {
+        return shouldShowContinuousReminder(
+                getLocalReminderState().currentSessionStartedUnixSeconds,
+                sessionStartedUnixSeconds,
+                sessionSeconds,
+                nowUnixSeconds);
+    }
+
+    public synchronized boolean shouldShowContinuousReminder(
+            long localSessionStartedUnixSeconds,
+            long sessionStartedUnixSeconds,
+            long sessionSeconds,
+            long nowUnixSeconds) {
+        if (!isContinuousReminderEnabled()) {
+            return false;
+        }
+        if (ReminderExemptionPolicy.isExempt(nowUnixSeconds, getContinuousReminderExemptions())) {
+            return false;
+        }
+        int step = ReminderPolicy.reachedStep(sessionSeconds, getContinuousReminderMinutes());
+        if (step <= 0 || sessionStartedUnixSeconds <= 0L) {
+            return false;
+        }
+        long storedLocalSession = prefs.getLong(CONTINUOUS_REMINDER_LOCAL_SESSION_STARTED, 0L);
+        int storedLastStep = prefs.getInt(CONTINUOUS_REMINDER_LAST_STEP, 0);
+        return ContinuousReminderGuard.shouldClaim(
+                localSessionStartedUnixSeconds,
+                sessionSeconds,
+                getContinuousReminderMinutes(),
+                storedLocalSession,
+                storedLastStep);
+    }
+
+    public synchronized boolean tryClaimContinuousReminder(
+            long localSessionStartedUnixSeconds,
+            long sessionStartedUnixSeconds,
+            long sessionSeconds,
+            long nowUnixSeconds) {
+        if (!isContinuousReminderEnabled()
+                || ReminderExemptionPolicy.isExempt(nowUnixSeconds, getContinuousReminderExemptions())
+                || sessionStartedUnixSeconds <= 0L) {
+            return false;
+        }
+
+        int thresholdMinutes = getContinuousReminderMinutes();
+        int step = ReminderPolicy.reachedStep(sessionSeconds, thresholdMinutes);
+        long storedLocalSession = prefs.getLong(CONTINUOUS_REMINDER_LOCAL_SESSION_STARTED, 0L);
+        long storedResolvedSession = prefs.getLong(CONTINUOUS_REMINDER_SESSION_STARTED, 0L);
+        int storedLastStep = prefs.getInt(CONTINUOUS_REMINDER_LAST_STEP, 0);
+        int lastStep = ContinuousReminderGuard.effectiveLastStep(
+                storedLocalSession,
+                localSessionStartedUnixSeconds,
+                storedLastStep);
+        boolean claim = ContinuousReminderGuard.shouldClaim(
+                localSessionStartedUnixSeconds,
+                sessionSeconds,
+                thresholdMinutes,
+                storedLocalSession,
+                storedLastStep);
+
+        if (step > 0
+                && (claim
+                || storedLocalSession != localSessionStartedUnixSeconds
+                || storedResolvedSession != sessionStartedUnixSeconds)) {
+            Log.i(
+                    DIAG_TAG,
+                    "continuousReminder decision=" + (claim ? "claim" : "skip")
+                            + " localSessionStartedAt=" + localSessionStartedUnixSeconds
+                            + " resolvedSessionStartedAt=" + sessionStartedUnixSeconds
+                            + " storedLocalSessionStartedAt=" + storedLocalSession
+                            + " storedResolvedSessionStartedAt=" + storedResolvedSession
+                            + " sessionSeconds=" + sessionSeconds
+                            + " thresholdMinutes=" + thresholdMinutes
+                            + " step=" + step
+                            + " lastStep=" + lastStep);
+        }
+
+        if (!claim) {
+            return false;
+        }
+
+        prefs.edit()
+                .putLong(CONTINUOUS_REMINDER_LOCAL_SESSION_STARTED, Math.max(0L, localSessionStartedUnixSeconds))
+                .putLong(CONTINUOUS_REMINDER_SESSION_STARTED, Math.max(0L, sessionStartedUnixSeconds))
+                .putInt(CONTINUOUS_REMINDER_LAST_STEP, Math.max(lastStep, step))
+                .apply();
+        return true;
+    }
+
+    public synchronized void markContinuousReminderShown(long sessionStartedUnixSeconds, long sessionSeconds) {
+        markContinuousReminderShown(
+                getLocalReminderState().currentSessionStartedUnixSeconds,
+                sessionStartedUnixSeconds,
+                sessionSeconds);
+    }
+
+    public synchronized void markContinuousReminderShown(
+            long localSessionStartedUnixSeconds,
+            long sessionStartedUnixSeconds,
+            long sessionSeconds) {
+        int step = ReminderPolicy.reachedStep(sessionSeconds, getContinuousReminderMinutes());
+        long storedLocalSession = prefs.getLong(CONTINUOUS_REMINDER_LOCAL_SESSION_STARTED, 0L);
+        int storedLastStep = prefs.getInt(CONTINUOUS_REMINDER_LAST_STEP, 0);
+        int lastStep = ContinuousReminderGuard.effectiveLastStep(
+                storedLocalSession,
+                localSessionStartedUnixSeconds,
+                storedLastStep);
+        prefs.edit()
+                .putLong(CONTINUOUS_REMINDER_LOCAL_SESSION_STARTED, Math.max(0L, localSessionStartedUnixSeconds))
+                .putLong(CONTINUOUS_REMINDER_SESSION_STARTED, Math.max(0L, sessionStartedUnixSeconds))
+                .putInt(CONTINUOUS_REMINDER_LAST_STEP, Math.max(lastStep, Math.max(0, step)))
+                .apply();
+    }
+
+    public synchronized void recordReminderDiagnostic(
+            String reminderType,
+            long triggeredAtUnixSeconds,
+            long sessionStartedUnixSeconds,
+            long sessionSeconds,
+            int thresholdMinutes,
+            int step) {
+        try {
+            JSONArray entries = new JSONArray(prefs.getString(REMINDER_DIAGNOSTICS, "[]"));
+            JSONArray retained = new JSONArray();
+            int firstRetainedIndex = Math.max(0, entries.length() - 49);
+            for (int index = firstRetainedIndex; index < entries.length(); index++) {
+                retained.put(entries.get(index));
+            }
+
+            JSONObject entry = new JSONObject();
+            entry.put("type", safe(reminderType));
+            entry.put("triggeredAt", Math.max(0L, triggeredAtUnixSeconds));
+            entry.put("sessionStartedAt", Math.max(0L, sessionStartedUnixSeconds));
+            entry.put("sessionSeconds", Math.max(0L, sessionSeconds));
+            entry.put("thresholdMinutes", Math.max(0, thresholdMinutes));
+            entry.put("step", Math.max(0, step));
+            retained.put(entry);
+            prefs.edit().putString(REMINDER_DIAGNOSTICS, retained.toString()).apply();
+        } catch (JSONException ignored) {
+        }
+    }
+
+    public synchronized boolean isWalkingReminderEnabled() {
+        return prefs.getBoolean(WALKING_REMINDER_ENABLED, false);
+    }
+
+    public synchronized void saveWalkingReminderEnabled(boolean enabled) {
+        prefs.edit().putBoolean(WALKING_REMINDER_ENABLED, enabled).apply();
     }
 
     private void alignTodayReminderAfterSettingsChange(int reminderMinutes) {
@@ -1188,6 +1428,7 @@ public final class EyeTimeStore {
         settings.sharedSecret = prefs.getString(SYNC_SHARED_SECRET, "");
         settings.lastSyncUnixSeconds = prefs.getLong(SYNC_LAST_SYNC_UNIX_SECONDS, 0L);
         settings.lastError = prefs.getString(SYNC_LAST_ERROR, "");
+        settings.peerSupportsMutableSegments = prefs.getBoolean(SYNC_PEER_SUPPORTS_MUTABLE_SEGMENTS, false);
         settings.peerReminderState = getPeerReminderState();
         return settings;
     }
@@ -1250,13 +1491,15 @@ public final class EyeTimeStore {
             JSONArray records = state.optJSONArray("records");
             JSONArray segments = state.optJSONArray("segments");
             SyncSettings settings = getSyncSettings();
+            String rawState = prefs.getString(STATE, "");
             return "records=" + (records == null ? 0 : records.length())
                     + " segments=" + (segments == null ? 0 : segments.length())
-                    + " stateChars=" + state.toString().length()
+                    + " stateChars=" + (rawState == null ? 0 : rawState.length())
                     + " paired=" + settings.isPaired
                     + " peerHost=" + safe(settings.peerHost)
                     + " peerPort=" + settings.peerPort
                     + " lastSync=" + settings.lastSyncUnixSeconds
+                    + " reminderDiagnostics=" + prefs.getString(REMINDER_DIAGNOSTICS, "[]")
                     + " lastError=" + safe(settings.lastError);
         } catch (Exception ex) {
             return "diagnosticError=" + (ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage());
@@ -1276,6 +1519,7 @@ public final class EyeTimeStore {
                 .putString(SYNC_SHARED_SECRET, safe(settings.sharedSecret))
                 .putLong(SYNC_LAST_SYNC_UNIX_SECONDS, settings.lastSyncUnixSeconds)
                 .putString(SYNC_LAST_ERROR, safe(settings.lastError))
+                .putBoolean(SYNC_PEER_SUPPORTS_MUTABLE_SEGMENTS, settings.peerSupportsMutableSegments)
                 .apply();
     }
 
@@ -1286,6 +1530,7 @@ public final class EyeTimeStore {
         prefs.edit()
                 .putLong(SYNC_LAST_SYNC_UNIX_SECONDS, settings.lastSyncUnixSeconds)
                 .putString(SYNC_LAST_ERROR, safe(settings.lastError))
+                .putBoolean(SYNC_PEER_SUPPORTS_MUTABLE_SEGMENTS, settings.peerSupportsMutableSegments)
                 .apply();
     }
 
@@ -1485,10 +1730,56 @@ public final class EyeTimeStore {
                 prefs.edit().putString(STATE, state.toString()).apply();
             } catch (JSONException | OutOfMemoryError retryError) {
                 Log.e(DIAG_TAG, "EyeTimeStore saveState failed after compaction", retryError);
+                try {
+                    state.remove(APP_USAGE_ENTRIES);
+                    state.remove(FAMILY_CHILD_APP_USAGE_ENTRIES);
+                    state.put(APP_USAGE_ENTRIES, new JSONArray());
+                    state.put(FAMILY_CHILD_APP_USAGE_ENTRIES, new JSONArray());
+                    compactStateForStorage(state, true);
+                    prefs.edit().putString(STATE, state.toString()).apply();
+                    Log.i(DIAG_TAG, "EyeTimeStore saveState recovered by dropping app usage cache");
+                } catch (JSONException | OutOfMemoryError finalError) {
+                    Log.e(DIAG_TAG, "EyeTimeStore saveState failed after dropping app usage cache", finalError);
+                }
             }
         } catch (JSONException ex) {
             Log.e(DIAG_TAG, "EyeTimeStore saveState failed while compacting", ex);
         }
+    }
+
+    private synchronized void stripStoredAppUsageIcons() {
+        try {
+            JSONObject state = loadState();
+            boolean changed = stripAppUsageIcons(state.optJSONArray(APP_USAGE_ENTRIES));
+            changed = stripAppUsageIcons(state.optJSONArray(FAMILY_CHILD_APP_USAGE_ENTRIES)) || changed;
+            if (changed) {
+                saveState(state);
+            }
+        } catch (JSONException | OutOfMemoryError ex) {
+            Log.e(DIAG_TAG, "EyeTimeStore stripStoredAppUsageIcons failed", ex);
+        }
+    }
+
+    private static boolean stripAppUsageIcons(JSONArray entries) {
+        if (entries == null) {
+            return false;
+        }
+        boolean changed = false;
+        for (int i = 0; i < entries.length(); i++) {
+            JSONObject entry = entries.optJSONObject(i);
+            if (entry == null) {
+                continue;
+            }
+            if (entry.has("iconData")) {
+                entry.remove("iconData");
+                changed = true;
+            }
+            if (entry.has("IconData")) {
+                entry.remove("IconData");
+                changed = true;
+            }
+        }
+        return changed;
     }
 
     private void saveFamilyChildCacheIfChanged(JSONObject state) {
@@ -1565,8 +1856,12 @@ public final class EyeTimeStore {
     private UsageSegment createSegment(LocalDate date, long secondsToAdd, long endUnixSeconds, String source) {
         long startUnixSeconds = endUnixSeconds - secondsToAdd;
         String safeSource = source == null || source.trim().isEmpty() ? "android-screen" : source;
+        SyncSettings syncSettings = getSyncSettings();
+        boolean canUseMutableSegments = syncSettings.isPaired && syncSettings.peerSupportsMutableSegments;
         return new UsageSegment(
-                UsageSegmentId.create(ensureDeviceId(), safeSource, startUnixSeconds, endUnixSeconds),
+                canUseMutableSegments
+                        ? UsageSegmentId.createMutable(ensureDeviceId(), safeSource, startUnixSeconds)
+                        : UsageSegmentId.create(ensureDeviceId(), safeSource, startUnixSeconds, endUnixSeconds),
                 ensureDeviceId(),
                 PLATFORM,
                 safeSource,
@@ -1578,7 +1873,50 @@ public final class EyeTimeStore {
     }
 
     private static void addSegment(JSONObject state, UsageSegment segment) throws JSONException {
+        if (tryExtendMutableSegment(state, segment)) {
+            return;
+        }
         mergeSegments(state, java.util.Collections.singletonList(segment));
+    }
+
+    private static boolean tryExtendMutableSegment(JSONObject state, UsageSegment incoming) throws JSONException {
+        if (incoming == null || !UsageSegmentId.isMutable(incoming.segmentId)
+                || incoming.endUnixSeconds <= incoming.startUnixSeconds) {
+            return false;
+        }
+
+        JSONArray segments = ensureSegments(state);
+        for (int index = segments.length() - 1; index >= 0; index--) {
+            JSONObject existingJson = segments.optJSONObject(index);
+            if (existingJson == null) {
+                continue;
+            }
+
+            UsageSegment existing = segmentFromJson(existingJson);
+            if (!UsageSegmentId.isMutable(existing.segmentId)
+                    || !safe(existing.deviceId).equals(safe(incoming.deviceId))
+                    || !safe(existing.platform).equals(safe(incoming.platform))
+                    || !safe(existing.source).equals(safe(incoming.source))
+                    || !safe(existing.localDate).equals(safe(incoming.localDate))
+                    || incoming.startUnixSeconds < existing.startUnixSeconds
+                    || incoming.startUnixSeconds > existing.endUnixSeconds) {
+                continue;
+            }
+
+            segments.put(index, segmentToJson(new UsageSegment(
+                    existing.segmentId,
+                    existing.deviceId,
+                    existing.platform,
+                    existing.source,
+                    existing.startUnixSeconds,
+                    Math.max(existing.endUnixSeconds, incoming.endUnixSeconds),
+                    existing.localDate,
+                    existing.createdAtUnixSeconds,
+                    Math.max(existing.updatedAtUnixSeconds, incoming.updatedAtUnixSeconds))));
+            return true;
+        }
+
+        return false;
     }
 
     static int mergeSegments(JSONObject state, List<UsageSegment> newSegments) throws JSONException {
@@ -1594,11 +1932,11 @@ public final class EyeTimeStore {
             return 0;
         }
         JSONArray segments = ensureSegments(state, key);
-        Set<String> existingIds = new HashSet<>();
+        Map<String, Integer> existingIndexes = new HashMap<>();
         for (int i = 0; i < segments.length(); i++) {
             JSONObject existing = segments.optJSONObject(i);
             if (existing != null) {
-                existingIds.add(existing.optString("segmentId"));
+                existingIndexes.put(existing.optString("segmentId"), i);
             }
         }
 
@@ -1607,8 +1945,17 @@ public final class EyeTimeStore {
             if (segment == null || segment.segmentId == null || segment.segmentId.trim().isEmpty()) {
                 continue;
             }
-            if (existingIds.add(segment.segmentId)) {
+            Integer existingIndex = existingIndexes.get(segment.segmentId);
+            if (existingIndex == null) {
                 segments.put(segmentToJson(segment));
+                existingIndexes.put(segment.segmentId, segments.length() - 1);
+                changed++;
+                continue;
+            }
+
+            UsageSegment existing = segmentFromJson(segments.getJSONObject(existingIndex));
+            if (segment.updatedAtUnixSeconds > existing.updatedAtUnixSeconds) {
+                segments.put(existingIndex, segmentToJson(segment));
                 changed++;
             }
         }
@@ -1633,8 +1980,64 @@ public final class EyeTimeStore {
     }
 
     private static void compactStateForStorage(JSONObject state, boolean force) throws JSONException {
+        pruneLargeStoredStrings(state);
         compactSegmentsForStorage(state, "segments", force);
         compactSegmentsForStorage(state, FAMILY_CHILD_SEGMENTS, force);
+    }
+
+    private static boolean pruneLargeStoredStrings(Object value) throws JSONException {
+        if (value instanceof JSONObject) {
+            JSONObject object = (JSONObject) value;
+            JSONArray names = object.names();
+            if (names == null) {
+                return false;
+            }
+            boolean changed = false;
+            for (int i = 0; i < names.length(); i++) {
+                String name = names.optString(i, "");
+                if (name.isEmpty()) {
+                    continue;
+                }
+                Object child = object.opt(name);
+                if (isStoredIconKey(name)) {
+                    object.remove(name);
+                    changed = true;
+                } else if (child instanceof String && ((String) child).length() > MAX_STORED_STRING_LENGTH) {
+                    object.remove(name);
+                    changed = true;
+                } else if (child instanceof JSONObject || child instanceof JSONArray) {
+                    changed = pruneLargeStoredStrings(child) || changed;
+                }
+            }
+            return changed;
+        }
+        if (value instanceof JSONArray) {
+            JSONArray array = (JSONArray) value;
+            boolean changed = false;
+            for (int i = 0; i < array.length(); i++) {
+                Object child = array.opt(i);
+                if (child instanceof String && ((String) child).length() > MAX_STORED_STRING_LENGTH) {
+                    array.put(i, "");
+                    changed = true;
+                } else if (child instanceof JSONObject || child instanceof JSONArray) {
+                    changed = pruneLargeStoredStrings(child) || changed;
+                }
+            }
+            return changed;
+        }
+        return false;
+    }
+
+    private static boolean isStoredIconKey(String key) {
+        if (key == null) {
+            return false;
+        }
+        return "iconData".equals(key)
+                || "IconData".equals(key)
+                || "iconBase64".equals(key)
+                || "IconBase64".equals(key)
+                || "icon".equals(key)
+                || "Icon".equals(key);
     }
 
     private static void compactSegmentsForStorage(JSONObject state, String key, boolean force) throws JSONException {
@@ -1644,6 +2047,7 @@ public final class EyeTimeStore {
         }
 
         Map<String, SegmentBucketGroup> groups = new HashMap<>();
+        JSONArray preserved = new JSONArray();
         int usableCount = 0;
         for (int i = 0; i < raw.length(); i++) {
             JSONObject json = raw.optJSONObject(i);
@@ -1652,6 +2056,11 @@ public final class EyeTimeStore {
             }
             UsageSegment segment = segmentFromJson(json);
             if (!isCompactableSegment(segment)) {
+                preserved.put(json);
+                continue;
+            }
+            if (UsageSegmentId.isMutable(segment.segmentId)) {
+                preserved.put(segmentToJson(segment));
                 continue;
             }
             usableCount++;
@@ -1675,8 +2084,8 @@ public final class EyeTimeStore {
             return;
         }
 
-        JSONArray compacted = new JSONArray();
-        int compactedCount = 0;
+        JSONArray compacted = preserved;
+        int compactedCount = preserved.length();
         for (SegmentBucketGroup group : groups.values()) {
             Long rangeStart = null;
             long previous = -1L;
@@ -1781,11 +2190,7 @@ public final class EyeTimeStore {
                     existing.put("updatedAtUnixSeconds", Math.max(currentUpdatedAt, entry.updatedAtUnixSeconds));
                     changed++;
                 } else if (entry.updatedAtUnixSeconds >= currentUpdatedAt) {
-                    String existingIconData = existing.optString("iconData", "");
                     writeAppUsageEntryJson(existing, entry);
-                    if (safe(entry.iconData).trim().isEmpty() && !existingIconData.trim().isEmpty()) {
-                        existing.put("iconData", existingIconData);
-                    }
                     changed++;
                 }
                 continue;
@@ -1843,6 +2248,47 @@ public final class EyeTimeStore {
         return removed + added;
     }
 
+    private static List<AppUsageEntry> capAppUsageEntriesToTotal(List<AppUsageEntry> entries, long totalUsageSeconds) {
+        if (entries == null || entries.isEmpty() || totalUsageSeconds <= 0L) {
+            return entries == null ? new ArrayList<>() : entries;
+        }
+        long total = 0L;
+        for (AppUsageEntry entry : entries) {
+            if (entry != null) {
+                total += Math.max(0L, entry.durationSeconds);
+            }
+        }
+        if (total <= totalUsageSeconds || total <= 0L) {
+            return entries;
+        }
+
+        List<AppUsageEntry> capped = new ArrayList<>();
+        long cappedTotal = 0L;
+        for (AppUsageEntry entry : entries) {
+            if (entry == null || entry.durationSeconds <= 0L) {
+                continue;
+            }
+            long scaledSeconds = Math.max(1L, (entry.durationSeconds * totalUsageSeconds) / total);
+            cappedTotal += scaledSeconds;
+            capped.add(new AppUsageEntry(
+                    entry.entryId,
+                    entry.deviceId,
+                    entry.platform,
+                    entry.source,
+                    entry.appId,
+                    entry.appName,
+                    "",
+                    entry.localDate,
+                    scaledSeconds,
+                    entry.updatedAtUnixSeconds));
+        }
+        Log.i(DIAG_TAG, "EyeTimeStore capped app usage before save raw=" + total
+                + " visibleTotal=" + totalUsageSeconds
+                + " capped=" + cappedTotal
+                + " entries=" + capped.size());
+        return capped;
+    }
+
     static List<AppUsageEntry> readAppUsageEntries(JSONObject state, LocalDate start, LocalDate end, String key) throws JSONException {
         JSONArray raw = ensureAppUsageEntries(state, key);
         List<AppUsageEntry> values = new ArrayList<>();
@@ -1878,7 +2324,7 @@ public final class EyeTimeStore {
         json.put("source", entry.source);
         json.put("appId", entry.appId);
         json.put("appName", entry.appName);
-        json.put("iconData", entry.iconData);
+        json.put("iconData", "");
         json.put("localDate", entry.localDate);
         json.put("durationSeconds", entry.durationSeconds);
         json.put("updatedAtUnixSeconds", entry.updatedAtUnixSeconds);
@@ -1892,7 +2338,7 @@ public final class EyeTimeStore {
                 json.optString("source", ""),
                 json.optString("appId", ""),
                 json.optString("appName", ""),
-                json.optString("iconData", ""),
+                "",
                 json.optString("localDate", ""),
                 json.optLong("durationSeconds", 0L),
                 json.optLong("updatedAtUnixSeconds", 0L));

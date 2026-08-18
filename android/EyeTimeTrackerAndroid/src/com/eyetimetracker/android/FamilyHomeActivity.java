@@ -368,7 +368,8 @@ public final class FamilyHomeActivity extends Activity {
                 store.getFamilyEyeRules().summaryText(),
                 false,
                 false,
-                v -> openFamilyRules()), matchWrapTop(10));
+                v -> openFamilyRules(),
+                true), matchWrapTop(10));
         list.addView(settingRow(
                 getString(R.string.family_home_exit),
                 getString(R.string.family_home_exit_desc),
@@ -531,6 +532,20 @@ public final class FamilyHomeActivity extends Activity {
     }
 
     private View settingRow(String title, String description, String value, boolean disabled, boolean danger, View.OnClickListener clickListener) {
+        return settingRow(title, description, value, disabled, danger, clickListener, false);
+    }
+
+    private View settingRow(
+            String title,
+            String description,
+            String value,
+            boolean disabled,
+            boolean danger,
+            View.OnClickListener clickListener,
+            boolean alignValueToTop) {
+        if (alignValueToTop) {
+            return settingRowWithHeaderValue(title, description, value, disabled, danger, clickListener);
+        }
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -573,6 +588,56 @@ public final class FamilyHomeActivity extends Activity {
         LinearLayout.LayoutParams valueParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         valueParams.leftMargin = dp(12);
         row.addView(valueView, valueParams);
+        return row;
+    }
+
+    private View settingRowWithHeaderValue(
+            String title,
+            String description,
+            String value,
+            boolean disabled,
+            boolean danger,
+            View.OnClickListener clickListener) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.VERTICAL);
+        row.setPadding(dp(14), dp(13), dp(14), dp(13));
+        row.setMinimumHeight(dp(68));
+        row.setBackground(rounded(disabled ? COLOR_DISABLED : Color.WHITE, dp(12), COLOR_LINE, 1));
+        if (!disabled && clickListener != null) {
+            row.setClickable(true);
+            row.setFocusable(true);
+            row.setOnClickListener(clickListener);
+        }
+
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        row.addView(header, matchWrap());
+
+        TextView titleView = new TextView(this);
+        titleView.setText(title);
+        titleView.setTextSize(17);
+        titleView.setTextColor(danger ? Color.rgb(180, 35, 24) : (disabled ? COLOR_DISABLED_TEXT : COLOR_TEXT));
+        titleView.setTypeface(AppFonts.bold(this));
+        titleView.setIncludeFontPadding(false);
+        header.addView(titleView, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView valueView = new TextView(this);
+        valueView.setText(value);
+        valueView.setTextSize(danger ? 24 : 15);
+        valueView.setTextColor(disabled ? COLOR_DISABLED_TEXT : COLOR_MUTED);
+        valueView.setTypeface(AppFonts.bold(this));
+        valueView.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        valueView.setIncludeFontPadding(false);
+        valueView.setSingleLine(true);
+        header.addView(valueView, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        TextView descView = helpText(description);
+        descView.setTextSize(13);
+        if (disabled) {
+            descView.setTextColor(COLOR_DISABLED_TEXT);
+        }
+        row.addView(descView, matchWrapTop(6));
         return row;
     }
 

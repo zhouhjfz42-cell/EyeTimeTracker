@@ -28,7 +28,6 @@ import android.widget.EditText;
 import android.widget.GridLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
-import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 import java.net.InetSocketAddress;
@@ -165,9 +164,9 @@ public final class MainActivity extends Activity {
         title.setIncludeFontPadding(false);
         header.addView(title, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        TextView startButton = lightTopButton(getString(R.string.common_start));
-        startButton.setOnClickListener(v -> startTrackerService());
-        header.addView(startButton, new LinearLayout.LayoutParams(dp(76), dp(38)));
+        TextView usageStatusButton = lightTopButton(getString(R.string.usage_status_entry));
+        usageStatusButton.setOnClickListener(v -> startActivity(new Intent(this, UsageStatusActivity.class)));
+        header.addView(usageStatusButton, new LinearLayout.LayoutParams(dp(92), dp(38)));
 
         TextView subtitle = new TextView(this);
         subtitle.setText(R.string.main_subtitle_android);
@@ -197,7 +196,7 @@ public final class MainActivity extends Activity {
         addCard(cards, buildMetricCard(getString(R.string.main_card_yesterday), yesterdayValue = cardValueText(), null), 0, 0);
         addCard(cards, buildMetricCard(getString(R.string.main_card_week), weekValue = cardValueText(), null), 0, 1);
         addCard(cards, buildMetricCard(getString(R.string.main_card_month), monthValue = cardValueText(), null), 1, 0);
-        addCard(cards, buildMetricCard(getString(R.string.main_card_reminder), reminderValue = cardValueText(), v -> showReminderDialog()), 1, 1);
+        addCard(cards, buildMetricCard(getString(R.string.eye_care_reminders_entry_title), reminderValue = cardValueText(), v -> startActivity(new Intent(this, EyeCareRemindersActivity.class))), 1, 1);
 
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.VERTICAL);
@@ -215,7 +214,6 @@ public final class MainActivity extends Activity {
         actions.addView(familyButton, centeredButtonTopParams(12));
 
         root.addView(helpText(getString(R.string.main_help_sync)), matchWrapTop(18));
-        root.addView(helpText(getString(R.string.main_help_auto_start)), matchWrapTop(2));
         return scroll;
     }
 
@@ -406,7 +404,7 @@ public final class MainActivity extends Activity {
         yesterdayValue.setText(DurationFormatter.formatMainCard(this, snapshot.stats.yesterdaySeconds));
         weekValue.setText(DurationFormatter.formatMainCard(this, snapshot.stats.weekSeconds));
         monthValue.setText(DurationFormatter.formatMainCard(this, snapshot.stats.monthSeconds));
-        reminderValue.setText(ReminderThreshold.format(this, snapshot.reminderMinutes));
+        reminderValue.setText(R.string.eye_care_reminders_entry_value);
         SyncSettings syncSettings = snapshot.syncSettings;
         boolean peerOnline = SyncConnectionState.isPeerOnline(syncSettings, System.currentTimeMillis() / 1000L);
         statusValue.setText(formatConnectionStatus(
@@ -551,28 +549,6 @@ public final class MainActivity extends Activity {
         unit.setIncludeFontPadding(false);
         field.addView(unit, wrapWrap());
 
-        LinearLayout repeatRow = new LinearLayout(this);
-        repeatRow.setOrientation(LinearLayout.HORIZONTAL);
-        repeatRow.setGravity(Gravity.CENTER_VERTICAL);
-        panel.addView(repeatRow, matchWrapTop(12));
-
-        Switch repeatSwitch = new Switch(this);
-        repeatSwitch.setChecked(store.isRepeatReminderEnabled());
-        repeatRow.addView(repeatSwitch, wrapWrap());
-
-        TextView repeatLabel = new TextView(this);
-        repeatLabel.setText(ReminderThreshold.formatRepeatLabel(this, store.getReminderMinutes()));
-        repeatLabel.setTextSize(11);
-        repeatLabel.setTextColor(COLOR_MUTED);
-        AppFonts.apply(repeatLabel, false);
-        repeatLabel.setSingleLine(false);
-        repeatLabel.setMaxLines(2);
-        repeatLabel.setIncludeFontPadding(false);
-        repeatLabel.setLineSpacing(0f, 1.05f);
-        LinearLayout.LayoutParams repeatTextParams = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        repeatTextParams.leftMargin = dp(10);
-        repeatRow.addView(repeatLabel, repeatTextParams);
-
         input.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {
             }
@@ -580,7 +556,6 @@ public final class MainActivity extends Activity {
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
                 int minutes = parseMinutes(s.toString(), store.getReminderMinutes());
                 hint.setText(reminderUnitHint(minutes));
-                repeatLabel.setText(ReminderThreshold.formatRepeatLabel(MainActivity.this, minutes));
             }
 
             @Override public void afterTextChanged(Editable s) {
@@ -599,7 +574,7 @@ public final class MainActivity extends Activity {
         TextView save = actionButton(getString(R.string.common_save), true);
         save.setOnClickListener(v -> {
             int minutes = parseMinutes(input.getText().toString(), ReminderThreshold.DEFAULT_MINUTES);
-            store.saveReminderSettings(minutes, repeatSwitch.isChecked());
+            store.saveReminderSettings(minutes, true);
             refresh();
             dialog.dismiss();
             Toast.makeText(this, R.string.reminder_saved, Toast.LENGTH_SHORT).show();

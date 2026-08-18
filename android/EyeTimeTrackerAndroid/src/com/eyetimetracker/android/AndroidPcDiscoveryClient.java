@@ -62,7 +62,7 @@ public final class AndroidPcDiscoveryClient {
                 return result;
             }
         }
-        return DiscoveryResult.empty();
+        return discoverTcpScan();
     }
 
     public DiscoveryResult discover(String host, int port) {
@@ -107,9 +107,17 @@ public final class AndroidPcDiscoveryClient {
         String requestJson = buildRequestJson();
         int perConnectTimeout = Math.max(80, Math.min(220, timeoutMillis / 8));
         int perReadTimeout = Math.max(100, Math.min(300, timeoutMillis / 6));
-        for (InetAddress address : LanDiscoveryAddresses.candidateHosts()) {
+        java.util.List<InetAddress> candidates = LanDiscoveryAddresses.candidateHosts();
+        for (InetAddress address : candidates) {
             String host = address.getHostAddress();
-            for (int port = FIRST_TCP_DISCOVERY_PORT; port <= LAST_TCP_DISCOVERY_PORT; port++) {
+            DiscoveryResult result = discoverTcp(host, FIRST_TCP_DISCOVERY_PORT, requestJson, perConnectTimeout, perReadTimeout);
+            if (result.found) {
+                return result;
+            }
+        }
+        for (InetAddress address : candidates) {
+            String host = address.getHostAddress();
+            for (int port = FIRST_TCP_DISCOVERY_PORT + 1; port <= LAST_TCP_DISCOVERY_PORT; port++) {
                 DiscoveryResult result = discoverTcp(host, port, requestJson, perConnectTimeout, perReadTimeout);
                 if (result.found) {
                     return result;

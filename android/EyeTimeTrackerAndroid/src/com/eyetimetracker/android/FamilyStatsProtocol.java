@@ -284,7 +284,7 @@ public final class FamilyStatsProtocol {
                         .append("\"Source\":\"").append(escape(entry.source)).append("\",")
                         .append("\"AppId\":\"").append(escape(entry.appId)).append("\",")
                         .append("\"AppName\":\"").append(escape(entry.appName)).append("\",")
-                        .append("\"IconData\":\"").append(escape(entry.iconData)).append("\",")
+                        .append("\"IconData\":\"\",")
                         .append("\"LocalDate\":\"").append(escape(entry.localDate)).append("\",")
                         .append("\"DurationSeconds\":").append(entry.durationSeconds).append(",")
                         .append("\"UpdatedAtUnixSeconds\":").append(entry.updatedAtUnixSeconds)

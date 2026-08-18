@@ -26,17 +26,10 @@ public final class ReminderPolicy {
         if (step <= 0) {
             return false;
         }
-        if (repeatEnabled) {
-            return step > lastReminderStep;
-        }
-        return !reminderShown;
+        return step > lastReminderStep;
     }
 
     public static int displayCount(long totalSeconds, int thresholdMinutes, boolean repeatEnabled) {
-        int step = reachedStep(totalSeconds, thresholdMinutes);
-        if (repeatEnabled) {
-            return step;
-        }
-        return step > 0 ? 1 : 0;
+        return reachedStep(totalSeconds, thresholdMinutes);
     }
 }

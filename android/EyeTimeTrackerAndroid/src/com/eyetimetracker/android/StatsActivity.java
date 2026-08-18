@@ -3,9 +3,6 @@ package com.eyetimetracker.android;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.Context;
-import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -14,9 +11,7 @@ import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
-import android.graphics.drawable.Drawable;
 import android.os.Bundle;
-import android.util.Base64;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -25,7 +20,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.GridLayout;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -893,55 +887,10 @@ public final class StatsActivity extends Activity {
     }
 
     private View appIconView(AppUsageEntry entry, int index) {
-        Bitmap syncedIcon = decodeIconData(entry == null ? "" : entry.iconData);
-        if (syncedIcon != null) {
-            ImageView image = new ImageView(this);
-            image.setImageBitmap(syncedIcon);
-            image.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            image.setAdjustViewBounds(false);
-            image.setPadding(dp(2), dp(2), dp(2), dp(2));
-            return image;
-        }
-
-        Drawable icon = loadAppIcon(entry);
-        if (icon != null) {
-            ImageView image = new ImageView(this);
-            image.setImageDrawable(icon);
-            image.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            image.setAdjustViewBounds(false);
-            image.setPadding(dp(2), dp(2), dp(2), dp(2));
-            return image;
-        }
-
         TextView fallback = text(initial(entry.appName.isEmpty() ? entry.appId : entry.appName), 18, Color.WHITE, true);
         fallback.setGravity(Gravity.CENTER);
         fallback.setBackground(rounded(appIconColor(index), dp(14), Color.TRANSPARENT, 0));
         return fallback;
-    }
-
-    private Bitmap decodeIconData(String iconData) {
-        if (iconData == null || iconData.trim().isEmpty()) {
-            return null;
-        }
-        try {
-            byte[] bytes = Base64.decode(iconData, Base64.DEFAULT);
-            return BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
-
-    private Drawable loadAppIcon(AppUsageEntry entry) {
-        if (entry == null || isPcSource(entry) || entry.appId.trim().isEmpty()) {
-            return null;
-        }
-        try {
-            return getPackageManager().getApplicationIcon(entry.appId);
-        } catch (PackageManager.NameNotFoundException ignored) {
-            return null;
-        } catch (RuntimeException ignored) {
-            return null;
-        }
     }
 
     private static List<AppUsageEntry> rankAppUsage(List<AppUsageEntry> entries, int maxRows) {

@@ -2,6 +2,22 @@ package com.eyetimetracker.android;
 
 public final class CoreLogicTest {
     public static void main(String[] args) {
+        if (args.length == 1 && "interval".equals(args[0])) {
+            runIntervalMergerTests();
+            System.out.println("Interval merger tests passed.");
+            return;
+        }
+        if (args.length == 1 && "shared-reminder".equals(args[0])) {
+            shouldUseSharedEarlierContinuousReminderStart();
+            System.out.println("Shared continuous reminder test passed.");
+            return;
+        }
+        if (args.length == 1 && "continuous-guard".equals(args[0])) {
+            shouldKeepContinuousReminderProgressAcrossPeerBaselineChanges();
+            System.out.println("Continuous reminder guard test passed.");
+            return;
+        }
+
         shouldCountWhenScreenOnAndMotionRecent();
         shouldCountWhenScreenOnAndMediaActive();
         shouldCountWhenScreenOnEvenWithoutMotion();
@@ -18,10 +34,21 @@ public final class CoreLogicTest {
         shouldAlignReminderAfterSettingsChange();
         shouldDisplayReminderCountFromVisibleTotal();
         shouldShowReminderOnEveryActiveDevice();
+        shouldUseSharedEarlierContinuousReminderStart();
+        shouldKeepContinuousReminderProgressAcrossPeerBaselineChanges();
+        shouldHandleContinuousReminderExemptions();
         shouldCreateStableUsageSegmentIds();
+        shouldCreateMutableUsageSegmentIds();
         shouldMergeOverlappingSegmentsOnlyOnce();
         shouldUseFixedTenSecondBucketsForArbitraryStartSeconds();
         shouldSplitFixedBucketsAcrossHours();
+        shouldKeepExactIntervalSeconds();
+        shouldSplitExactIntervalsAcrossHours();
+        shouldDeDuplicatePartialIntervalOverlap();
+        shouldKeepIntervalSessionWhenGapIsThreeMinutes();
+        shouldSplitOverlappingIntervalSourcesEvenly();
+        shouldSplitPartialOverlappingIntervalSources();
+        shouldConserveOddIntervalOverlapAcrossHours();
         shouldComputeDeviceBreakdown();
         shouldDeDuplicateOverlappingSources();
         shouldCreateSyncSegmentsFromLegacySummaries();
@@ -38,8 +65,10 @@ public final class CoreLogicTest {
         shouldStoreSyncClientNetworkErrors();
         shouldReadPcSegmentsFromSyncResponse();
         shouldReadSyncResponseTimestamp();
+        shouldReadMutableSegmentCapability();
         shouldReadSyncResponseError();
         shouldMergeSyncSegmentsInOnePass();
+        shouldUpdateMutableSyncSegments();
         shouldRecognizePcUnpairedResponse();
         shouldClearPairingWhenPcDoesNotAnswer();
         shouldPrepareLocalFirstDisconnect();
@@ -54,6 +83,58 @@ public final class CoreLogicTest {
         shouldNotPostponeLocalChangeSyncForever();
         shouldSyncEveryTenSecondsWhenReminderIsWithinOneMinute();
         System.out.println("All Android core tests passed.");
+    }
+
+    private static void runIntervalMergerTests() {
+        shouldKeepExactIntervalSeconds();
+        shouldSplitExactIntervalsAcrossHours();
+        shouldDeDuplicatePartialIntervalOverlap();
+        shouldKeepIntervalSessionWhenGapIsThreeMinutes();
+        shouldSplitOverlappingIntervalSourcesEvenly();
+        shouldSplitPartialOverlappingIntervalSources();
+        shouldConserveOddIntervalOverlapAcrossHours();
+    }
+
+    private static void shouldUseSharedEarlierContinuousReminderStart() {
+        ReminderRuntimeState local = new ReminderRuntimeState("phone", "android", true, 1_000L);
+        ReminderRuntimeState peer = new ReminderRuntimeState("pc", "windows", true, 700L);
+        assertEquals(700L, ContinuousReminderBaseline.resolve(local, peer, true), "shared online start");
+        assertEquals(1_000L, ContinuousReminderBaseline.resolve(local, peer, false), "local offline start");
+        peer.isCounting = false;
+        assertEquals(1_000L, ContinuousReminderBaseline.resolve(local, peer, true), "peer idle start");
+    }
+
+    private static void shouldKeepContinuousReminderProgressAcrossPeerBaselineChanges() {
+        assertEquals(
+                2,
+                ContinuousReminderGuard.effectiveLastStep(1_000L, 1_000L, 2),
+                "same local session keeps last step");
+        assertEquals(
+                0,
+                ContinuousReminderGuard.effectiveLastStep(1_000L, 2_000L, 2),
+                "new local session starts a new reminder sequence");
+        assertEquals(
+                false,
+                ContinuousReminderGuard.shouldClaim(1_000L, 40L * 60L, 20, 1_000L, 2),
+                "peer baseline changes do not repeat an already claimed step");
+        assertEquals(
+                true,
+                ContinuousReminderGuard.shouldClaim(2_000L, 20L * 60L, 20, 1_000L, 2),
+                "new local session claims its first step");
+    }
+
+    private static void shouldHandleContinuousReminderExemptions() {
+        ReminderExemptionPeriod overnight = ReminderExemptionPeriod.create(22 * 60, 7 * 60 + 30);
+        assertEquals(true, overnight.containsMinuteOfDay(23 * 60), "overnight exemption night");
+        assertEquals(true, overnight.containsMinuteOfDay(7 * 60 + 29), "overnight exemption morning");
+        assertEquals(false, overnight.containsMinuteOfDay(12 * 60), "overnight exemption noon");
+        long atNight = java.time.ZonedDateTime.now()
+                .withHour(23)
+                .withMinute(0)
+                .withSecond(0)
+                .withNano(0)
+                .toEpochSecond();
+        assertEquals(true, ReminderExemptionPolicy.isExempt(atNight, java.util.Collections.singletonList(overnight)), "exemption policy night");
     }
 
     private static void shouldCountWhenScreenOnAndMotionRecent() {
@@ -109,10 +190,8 @@ public final class CoreLogicTest {
     }
 
     private static void shouldFormatReminderAlertText() {
-        assertEquals("用眼提醒", ReminderAlert.title(), "formats reminder title");
-        assertEquals("今天用眼时间已达到 5小时30分，建议休息一下眼睛。", ReminderAlert.message(330), "formats reminder message");
-        assertEquals("今天用眼时间已经第2次达到330分钟了，建议休息一下眼睛。", ReminderAlert.message(330, true, 2), "formats repeat reminder message");
-        assertEquals("今天用眼时间已达到 5小时30分，建议休息一下眼睛。", ReminderAlert.message(330, false, 2), "formats once reminder message");
+        assertEquals("5小时30分", ReminderThreshold.format(330), "formats reminder duration");
+        assertEquals("1分钟", ReminderThreshold.format(0), "clamps alert duration");
     }
 
     private static void shouldFormatConnectionStatus() {
@@ -140,7 +219,7 @@ public final class CoreLogicTest {
     private static void shouldNotifyOnceOrAtRepeatMultiples() {
         assertEquals(false, ReminderPolicy.shouldNotify(329L * 60L, 330, false, false, 0), "once policy waits for threshold");
         assertEquals(true, ReminderPolicy.shouldNotify(330L * 60L, 330, false, false, 0), "once policy notifies at threshold");
-        assertEquals(false, ReminderPolicy.shouldNotify(660L * 60L, 330, false, true, 1), "once policy only notifies once per day");
+        assertEquals(true, ReminderPolicy.shouldNotify(660L * 60L, 330, false, true, 1), "old once setting is ignored at next threshold");
         assertEquals(false, ReminderPolicy.shouldNotify(329L * 60L, 330, true, false, 0), "repeat policy waits for first threshold");
         assertEquals(true, ReminderPolicy.shouldNotify(330L * 60L, 330, true, false, 0), "repeat policy notifies at first threshold");
         assertEquals(false, ReminderPolicy.shouldNotify(500L * 60L, 330, true, true, 1), "repeat policy does not notify before next multiple");
@@ -157,7 +236,7 @@ public final class CoreLogicTest {
 
     private static void shouldDisplayReminderCountFromVisibleTotal() {
         assertEquals(0, ReminderPolicy.displayCount(44L * 60L, 45, false), "display reminder count below threshold");
-        assertEquals(1, ReminderPolicy.displayCount(90L * 60L, 45, false), "display reminder count once policy");
+        assertEquals(2, ReminderPolicy.displayCount(90L * 60L, 45, false), "old once setting is ignored for display count");
         assertEquals(2, ReminderPolicy.displayCount(90L * 60L, 45, true), "display reminder count repeat policy");
     }
 
@@ -197,6 +276,16 @@ public final class CoreLogicTest {
         assertEquals(first, second, "usage segment id is stable");
     }
 
+    private static void shouldCreateMutableUsageSegmentIds() {
+        long t0 = java.time.OffsetDateTime.of(2026, 7, 2, 8, 0, 0, 0, java.time.ZoneOffset.UTC).toEpochSecond();
+
+        String first = UsageSegmentId.createMutable("phone-1", "android-screen", t0);
+        String second = UsageSegmentId.createMutable("phone-1", "android-screen", t0);
+
+        assertEquals(first, second, "mutable segment id is stable");
+        assertEquals(true, UsageSegmentId.isMutable(first), "mutable segment id is marked");
+    }
+
     private static void shouldMergeOverlappingSegmentsOnlyOnce() {
         long t0 = java.time.OffsetDateTime.of(2026, 7, 2, 12, 0, 0, 0, java.time.ZoneOffset.UTC).toEpochSecond();
         java.util.List<UsageSegment> segments = new java.util.ArrayList<>();
@@ -232,6 +321,105 @@ public final class CoreLogicTest {
         assertEquals(20L, summary.totalSeconds, "cross-hour fixed buckets total");
         assertEquals(10L, summary.hourlySeconds[8], "cross-hour previous hour");
         assertEquals(10L, summary.hourlySeconds[9], "cross-hour next hour");
+    }
+
+    private static void shouldConserveOddIntervalOverlapAcrossHours() {
+        long t0 = java.time.ZonedDateTime.of(2026, 7, 2, 8, 59, 59, 0, java.time.ZoneId.systemDefault())
+                .toEpochSecond();
+        java.util.List<UsageSegment> segments = new java.util.ArrayList<>();
+        segments.add(segment("pc", "windows", "pc-input", t0, 3L));
+        segments.add(segment("phone", "android", "android-screen", t0, 3L));
+
+        DailySummary summary = UsageIntervalMerger.buildDailySummary("2026-07-02", segments);
+        DeviceUsageBreakdown breakdown = UsageIntervalMerger.buildDeviceBreakdown("2026-07-02", segments);
+
+        assertEquals(3L, summary.totalSeconds, "odd overlap total seconds");
+        assertEquals(1L, breakdown.pcSeconds, "odd overlap pc seconds");
+        assertEquals(2L, breakdown.phoneSeconds, "odd overlap phone seconds");
+        assertEquals(summary.totalSeconds, breakdown.pcSeconds + breakdown.phoneSeconds, "odd overlap source total");
+        assertEquals(0L, breakdown.pcHourlySeconds[8], "odd overlap previous hour pc");
+        assertEquals(1L, breakdown.phoneHourlySeconds[8], "odd overlap previous hour phone");
+        assertEquals(1L, breakdown.pcHourlySeconds[9], "odd overlap next hour pc");
+        assertEquals(1L, breakdown.phoneHourlySeconds[9], "odd overlap next hour phone");
+    }
+
+    private static void shouldKeepExactIntervalSeconds() {
+        long t0 = java.time.ZonedDateTime.of(2026, 7, 2, 8, 9, 18, 0, java.time.ZoneId.systemDefault())
+                .toEpochSecond();
+        java.util.List<UsageSegment> segments = new java.util.ArrayList<>();
+        segments.add(segment("pc", "windows", "pc-input", t0, 1L));
+        segments.add(segment("phone", "android", "android-screen", t0 + 1L, 1L));
+
+        DailySummary summary = UsageIntervalMerger.buildDailySummary("2026-07-02", segments);
+
+        assertEquals(2L, summary.totalSeconds, "exact seconds total");
+        assertEquals(2L, summary.hourlySeconds[8], "exact seconds hourly");
+    }
+
+    private static void shouldSplitExactIntervalsAcrossHours() {
+        long t0 = java.time.ZonedDateTime.of(2026, 7, 2, 8, 59, 58, 0, java.time.ZoneId.systemDefault())
+                .toEpochSecond();
+        java.util.List<UsageSegment> segments = java.util.Collections.singletonList(
+                segment("pc", "windows", "pc-input", t0, 5L));
+
+        DailySummary summary = UsageIntervalMerger.buildDailySummary("2026-07-02", segments);
+
+        assertEquals(5L, summary.totalSeconds, "exact cross-hour total");
+        assertEquals(2L, summary.hourlySeconds[8], "exact cross-hour previous hour");
+        assertEquals(3L, summary.hourlySeconds[9], "exact cross-hour next hour");
+    }
+
+    private static void shouldDeDuplicatePartialIntervalOverlap() {
+        long t0 = java.time.ZonedDateTime.of(2026, 7, 2, 12, 0, 0, 0, java.time.ZoneId.systemDefault())
+                .toEpochSecond();
+        java.util.List<UsageSegment> segments = new java.util.ArrayList<>();
+        segments.add(segment("pc", "windows", "pc-input", t0, 60L));
+        segments.add(segment("phone", "android", "android-screen", t0 + 30L, 60L));
+
+        DailySummary summary = UsageIntervalMerger.buildDailySummary("2026-07-02", segments);
+
+        assertEquals(90L, summary.totalSeconds, "partial overlap counts once");
+    }
+
+    private static void shouldKeepIntervalSessionWhenGapIsThreeMinutes() {
+        long t0 = java.time.ZonedDateTime.of(2026, 7, 2, 9, 0, 0, 0, java.time.ZoneId.systemDefault())
+                .toEpochSecond();
+        java.util.List<UsageSegment> segments = new java.util.ArrayList<>();
+        segments.add(segment("pc", "windows", "pc-input", t0, 60L));
+        segments.add(segment("pc", "windows", "pc-input", t0 + 240L, 60L));
+
+        DailySummary summary = UsageIntervalMerger.buildDailySummary("2026-07-02", segments);
+
+        assertEquals(1, summary.sessionSeconds.length, "three-minute gap session count");
+        assertEquals(120L, summary.sessionSeconds[0], "three-minute gap session duration");
+    }
+
+    private static void shouldSplitOverlappingIntervalSourcesEvenly() {
+        long t0 = java.time.ZonedDateTime.of(2026, 7, 2, 12, 0, 0, 0, java.time.ZoneId.systemDefault())
+                .toEpochSecond();
+        java.util.List<UsageSegment> segments = new java.util.ArrayList<>();
+        segments.add(segment("pc", "windows", "pc-input", t0, 3600L));
+        segments.add(segment("phone", "android", "android-screen", t0, 3600L));
+
+        DeviceUsageBreakdown breakdown = UsageIntervalMerger.buildDeviceBreakdown("2026-07-02", segments);
+
+        assertEquals(1800L, breakdown.pcSeconds, "full overlap pc seconds");
+        assertEquals(1800L, breakdown.phoneSeconds, "full overlap phone seconds");
+        assertEquals(50, breakdown.pcPercent(), "full overlap pc percent");
+        assertEquals(50, breakdown.phonePercent(), "full overlap phone percent");
+    }
+
+    private static void shouldSplitPartialOverlappingIntervalSources() {
+        long t0 = java.time.ZonedDateTime.of(2026, 7, 2, 12, 0, 0, 0, java.time.ZoneId.systemDefault())
+                .toEpochSecond();
+        java.util.List<UsageSegment> segments = new java.util.ArrayList<>();
+        segments.add(segment("pc", "windows", "pc-input", t0, 60L));
+        segments.add(segment("phone", "android", "android-screen", t0 + 30L, 60L));
+
+        DeviceUsageBreakdown breakdown = UsageIntervalMerger.buildDeviceBreakdown("2026-07-02", segments);
+
+        assertEquals(45L, breakdown.pcSeconds, "partial overlap pc seconds");
+        assertEquals(45L, breakdown.phoneSeconds, "partial overlap phone seconds");
     }
 
     private static void shouldComputeDeviceBreakdown() {
@@ -515,6 +703,15 @@ public final class CoreLogicTest {
         assertEquals(1783000042L, AndroidSyncResponseReader.readTimestampUnixSeconds(responseJson), "reads pc sync timestamp");
     }
 
+    private static void shouldReadMutableSegmentCapability() {
+        assertEquals(true,
+                AndroidSyncResponseReader.supportsMutableSegments("{\"Type\":\"syncResponse\",\"Accepted\":true,\"SupportsMutableSegments\":true}"),
+                "reads mutable segment capability");
+        assertEquals(false,
+                AndroidSyncResponseReader.supportsMutableSegments("{\"Type\":\"syncResponse\",\"Accepted\":true}"),
+                "defaults capability to false for old pc");
+    }
+
     private static void shouldReadSyncResponseError() {
         String responseJson = "{\"Type\":\"syncResponse\",\"Accepted\":false,\"Error\":\"PC is not paired.\"}";
 
@@ -741,6 +938,36 @@ public final class CoreLogicTest {
         policy.markSyncAttempt(2_000L);
         assertEquals(false, policy.shouldSyncForUpcomingReminder(11_999L, 3_550L, 60, true, true, 0), "waits ten seconds in reminder window");
         assertEquals(true, policy.shouldSyncForUpcomingReminder(12_000L, 3_560L, 60, true, true, 0), "syncs every ten seconds in reminder window");
+    }
+
+    private static void shouldUpdateMutableSyncSegments() {
+        try {
+            org.json.JSONObject state = new org.json.JSONObject();
+            state.put("segments", new org.json.JSONArray());
+            long t0 = java.time.OffsetDateTime.of(2026, 7, 2, 12, 0, 0, 0, java.time.ZoneOffset.UTC).toEpochSecond();
+            String segmentId = UsageSegmentId.createMutable("phone", "android-screen", t0);
+            UsageSegment initial = new UsageSegment(segmentId, "phone", "android", "android-screen", t0, t0 + 10L, "2026-07-02", t0, t0 + 10L);
+            UsageSegment updated = new UsageSegment(segmentId, "phone", "android", "android-screen", t0, t0 + 20L, "2026-07-02", t0, t0 + 20L);
+
+            EyeTimeStore.mergeSegments(state, java.util.Collections.singletonList(initial));
+            int changed = EyeTimeStore.mergeSegments(state, java.util.Collections.singletonList(updated));
+            UsageSegment saved = new UsageSegment(
+                    state.getJSONArray("segments").getJSONObject(0).getString("segmentId"),
+                    state.getJSONArray("segments").getJSONObject(0).getString("deviceId"),
+                    state.getJSONArray("segments").getJSONObject(0).getString("platform"),
+                    state.getJSONArray("segments").getJSONObject(0).getString("source"),
+                    state.getJSONArray("segments").getJSONObject(0).getLong("startUnixSeconds"),
+                    state.getJSONArray("segments").getJSONObject(0).getLong("endUnixSeconds"),
+                    state.getJSONArray("segments").getJSONObject(0).getString("localDate"),
+                    state.getJSONArray("segments").getJSONObject(0).getLong("createdAtUnixSeconds"),
+                    state.getJSONArray("segments").getJSONObject(0).getLong("updatedAtUnixSeconds"));
+
+            assertEquals(1, changed, "mutable segment update reports change");
+            assertEquals(1, state.getJSONArray("segments").length(), "mutable segment update keeps one item");
+            assertEquals(20L, saved.durationSeconds(), "mutable segment update keeps latest end");
+        } catch (Exception ex) {
+            throw new AssertionError("mutable sync segment update test failed", ex);
+        }
     }
 
     private static void assertEquals(Object expected, Object actual, String name) {
