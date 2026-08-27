@@ -12,6 +12,8 @@ public sealed class NotificationService
     private readonly NotifyIcon _notifyIcon;
     private readonly Control _dispatcher;
 
+    public bool SuppressReminders { get; set; }
+
     public NotificationService(NotifyIcon notifyIcon, Control dispatcher)
     {
         _notifyIcon = notifyIcon ?? throw new ArgumentNullException(nameof(notifyIcon));
@@ -20,6 +22,11 @@ public sealed class NotificationService
 
     public void ShowDailyReminder(TrackerSettings settings, int reminderStep)
     {
+        if (SuppressReminders)
+        {
+            return;
+        }
+
         if (_dispatcher.IsDisposed || !_dispatcher.IsHandleCreated)
         {
             return;
@@ -43,6 +50,12 @@ public sealed class NotificationService
 
     public void ShowContinuousReminder(string requestId)
     {
+        if (SuppressReminders)
+        {
+            ReminderDiagnosticLog.RecordEvent("连续用眼提醒/已抑制", DateTimeOffset.Now, requestId, "用户已停止弹窗");
+            return;
+        }
+
         if (_dispatcher.IsDisposed || !_dispatcher.IsHandleCreated)
         {
             ReminderDiagnosticLog.RecordEvent(

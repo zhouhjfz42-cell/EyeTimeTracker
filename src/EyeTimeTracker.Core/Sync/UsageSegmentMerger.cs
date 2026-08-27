@@ -64,8 +64,8 @@ public static class UsageSegmentMerger
         {
             if (previousBucket is not null)
             {
-                var gapSeconds = (bucket - previousBucket.Value) * BucketSeconds;
-                if (gapSeconds > SessionBreakSeconds)
+                var gapSeconds = (bucket - previousBucket.Value - 1) * BucketSeconds;
+                if (gapSeconds >= SessionBreakSeconds)
                 {
                     if (currentSeconds > 0)
                     {

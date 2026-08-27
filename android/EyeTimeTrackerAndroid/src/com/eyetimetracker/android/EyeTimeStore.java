@@ -160,11 +160,12 @@ public final class EyeTimeStore {
             record.put("currentSessionSeconds", record.optLong("currentSessionSeconds", 0L) + secondsToAdd);
             record.put("updatedAt", System.currentTimeMillis());
             addSegment(state, createSegment(date, secondsToAdd, endUnixSeconds, source));
-            removeDailyStatsCache(state, date.toString());
-            saveState(state);
-        } catch (JSONException ignored) {
-        }
+        removeDailyStatsCache(state, date.toString());
+        saveState(state);
+    } catch (JSONException ex) {
+        Log.e(DIAG_TAG, "EyeTimeStore addSeconds failed for date=" + date, ex);
     }
+}
 
     public synchronized void addSegment(UsageSegment segment) {
         try {
@@ -174,7 +175,8 @@ public final class EyeTimeStore {
                 removeDailyStatsCache(state, segment.localDate);
             }
             saveState(state);
-        } catch (JSONException ignored) {
+        } catch (JSONException ex) {
+            Log.e(DIAG_TAG, "EyeTimeStore addSegment failed", ex);
         }
     }
 

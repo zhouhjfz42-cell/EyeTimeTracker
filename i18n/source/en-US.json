@@ -241,6 +241,8 @@
   "tray.status": "Tracking",
   "tray.mainPage": "Main",
   "tray.statsPage": "Stats",
+  "tray.stopReminders": "Pause Alerts",
+  "tray.resumeReminders": "Resume Alerts",
   "tray.quit": "Quit",
   "tray.pairSuccessTitle": "Phone paired",
   "tray.pairSuccessBody": "Phone connected. Sync has started.",

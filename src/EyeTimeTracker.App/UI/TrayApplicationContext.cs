@@ -10,6 +10,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     private readonly Icon _appIcon;
     private readonly NotifyIcon _notifyIcon;
     private readonly Control _uiDispatcher;
+    private readonly NotificationService _notificationService;
     private readonly TrackingController _controller;
     private readonly PcPairingCodeProvider _pairingCodes;
     private readonly PcSyncCoordinator _syncCoordinator;
@@ -19,6 +20,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     private readonly TrayMenuForm _trayMenu;
     private MainForm? _mainForm;
     private bool _exiting;
+    private bool _remindersSuppressed;
 
     public TrayApplicationContext()
     {
@@ -41,7 +43,8 @@ public sealed class TrayApplicationContext : ApplicationContext
             }
         };
 
-        _controller = new TrackingController(new NotificationService(_notifyIcon, _uiDispatcher));
+        _notificationService = new NotificationService(_notifyIcon, _uiDispatcher);
+        _controller = new TrackingController(_notificationService);
         _controller.Updated += (_, _) => UpdateTrayMenuState();
         _pairingCodes = new PcPairingCodeProvider();
         _syncCoordinator = _controller.CreateSyncCoordinator();
@@ -58,6 +61,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             _appIcon,
             OpenMainWindow,
             ShowStatsWindow,
+            ToggleReminders,
             ExitApplication);
         UpdateTrayMenuState();
         OpenMainWindow();
@@ -143,6 +147,13 @@ public sealed class TrayApplicationContext : ApplicationContext
         _trayMenu.UpdateState(
             _controller.Current.IsCounting ? AppText.Get("main.status.tracking") : AppText.Get("main.status.paused"),
             _controller.IsPaired && _controller.IsPeerOnline);
+    }
+
+    private void ToggleReminders()
+    {
+        _remindersSuppressed = !_remindersSuppressed;
+        _notificationService.SuppressReminders = _remindersSuppressed;
+        _trayMenu.UpdateReminderToggle(_remindersSuppressed);
     }
 
     private void ShowPairingDialog()

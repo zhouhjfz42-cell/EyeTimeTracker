@@ -390,6 +390,7 @@ static void TestPcReminderShowsWhenLocalIsCounting()
 
 static void TestContinuousReminderUsesSharedEarlierSessionStart()
 {
+    var now = 2_000L;
     var local = new ReminderRuntimeState
     {
         IsCounting = true,
@@ -403,17 +404,17 @@ static void TestContinuousReminderUsesSharedEarlierSessionStart()
 
     AssertEqual(
         700L,
-        ContinuousReminderBaseline.Resolve(local, peer, peerOnline: true),
+        ContinuousReminderBaseline.Resolve(local, peer, peerOnline: true, nowUnixSeconds: now),
         nameof(TestContinuousReminderUsesSharedEarlierSessionStart) + " shared online");
     AssertEqual(
         1_000L,
-        ContinuousReminderBaseline.Resolve(local, peer, peerOnline: false),
+        ContinuousReminderBaseline.Resolve(local, peer, peerOnline: false, nowUnixSeconds: now),
         nameof(TestContinuousReminderUsesSharedEarlierSessionStart) + " local offline");
 
     peer.IsCounting = false;
     AssertEqual(
         1_000L,
-        ContinuousReminderBaseline.Resolve(local, peer, peerOnline: true),
+        ContinuousReminderBaseline.Resolve(local, peer, peerOnline: true, nowUnixSeconds: now),
         nameof(TestContinuousReminderUsesSharedEarlierSessionStart) + " peer idle");
 }
 
@@ -1585,6 +1586,39 @@ static void TestSegmentsSplitFixedBucketsAcrossHours()
     AssertEqual(10L, summary.HourlySeconds[9], nameof(TestSegmentsSplitFixedBucketsAcrossHours) + " next hour");
 }
 
+static void TestSegmentsSessionBreakGapCalculation()
+{
+    // 两个 segment 间隔超过 180 秒，应该分成两个会话
+    var t0 = new DateTimeOffset(2026, 7, 2, 12, 0, 0, TimeSpan.Zero);
+    var segments = new[]
+    {
+        Segment("pc", "windows", "pc-input", t0, 10),
+        Segment("pc", "windows", "pc-input", t0.AddSeconds(200), 10)
+    };
+
+    var summary = UsageSegmentMerger.BuildDailyRecord(new DateOnly(2026, 7, 2), segments);
+
+    AssertEqual(2, summary.SessionSeconds.Count, nameof(TestSegmentsSessionBreakGapCalculation) + " session count");
+    AssertEqual(10L, summary.SessionSeconds[0], nameof(TestSegmentsSessionBreakGapCalculation) + " first session");
+    AssertEqual(10L, summary.SessionSeconds[1], nameof(TestSegmentsSessionBreakGapCalculation) + " second session");
+}
+
+static void TestSegmentsContinuousBucketsProduceSingleSession()
+{
+    // 两个连续 segment（间隔 < 180 秒），应该合并为一个会话
+    var t0 = new DateTimeOffset(2026, 7, 2, 12, 0, 0, TimeSpan.Zero);
+    var segments = new[]
+    {
+        Segment("pc", "windows", "pc-input", t0, 10),
+        Segment("pc", "windows", "pc-input", t0.AddSeconds(30), 10)
+    };
+
+    var summary = UsageSegmentMerger.BuildDailyRecord(new DateOnly(2026, 7, 2), segments);
+
+    AssertEqual(1, summary.SessionSeconds.Count, nameof(TestSegmentsContinuousBucketsProduceSingleSession) + " session count");
+    AssertEqual(20L, summary.SessionSeconds[0], nameof(TestSegmentsContinuousBucketsProduceSingleSession) + " session seconds");
+}
+
 static void TestIntervalMergerKeepsExactSeconds()
 {
     var local = new DateTime(2026, 7, 2, 8, 9, 18);
@@ -1898,6 +1932,8 @@ TestPcDiscoveryServerRespondsWithSyncPort();
 TestSegmentsDeDuplicateOverlappingDevices();
 TestSegmentsUseFixedTenSecondBucketsForArbitraryStartSeconds();
 TestSegmentsSplitFixedBucketsAcrossHours();
+TestSegmentsSessionBreakGapCalculation();
+TestSegmentsContinuousBucketsProduceSingleSession();
 TestIntervalMergerKeepsExactSeconds();
 TestIntervalMergerSplitsExactSecondsAcrossHours();
 TestIntervalMergerDeDuplicatesPartialOverlap();

@@ -286,10 +286,23 @@ public sealed class TrackingController : IDisposable
 
                 var beforeDate = _accumulator.Today.Date;
                 var beforeTotalSeconds = _accumulator.Today.TotalSeconds;
+                var beforeSessionSeconds = _accumulator.Today.SessionSeconds.ToList();
+                var beforeCurrentSessionSeconds = _accumulator.Today.CurrentSessionSeconds;
                 _accumulator.Tick(snapshot, _state.Settings);
-                var countedSeconds = _accumulator.Today.Date == beforeDate
-                    ? Math.Max(0, _accumulator.Today.TotalSeconds - beforeTotalSeconds)
-                    : 0;
+
+                if (_accumulator.Today.Date != beforeDate)
+                {
+                    // 跨午夜：accumulator 内部已 FinishCurrentSession 并切换到新一天
+                    // 把前一天的最终 session 状态保存到 state.Records
+                    var previousRecord = _state.GetOrCreateRecord(beforeDate);
+                    previousRecord.SessionSeconds = beforeCurrentSessionSeconds > 0
+                        ? beforeSessionSeconds.Append(beforeCurrentSessionSeconds).ToList()
+                        : beforeSessionSeconds;
+                    previousRecord.CurrentSessionSeconds = 0;
+                    InvalidateStatsCacheLocked(beforeDate);
+                }
+
+                var countedSeconds = Math.Max(0, _accumulator.Today.TotalSeconds - beforeTotalSeconds);
                 if (countedSeconds > 0)
                 {
                     AddUsageSegmentLocked(snapshot, _state.Settings, countedSeconds);
@@ -367,9 +380,17 @@ public sealed class TrackingController : IDisposable
                 }
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
             update = null;
+            try
+            {
+                ReminderDiagnosticLog.RecordEvent("TimerTickError", DateTimeOffset.Now, null, ex.ToString());
+            }
+            catch
+            {
+                // 诊断日志不能干扰计时器
+            }
         }
         finally
         {
@@ -841,7 +862,8 @@ public sealed class TrackingController : IDisposable
         var sessionStarted = ContinuousReminderBaseline.Resolve(
             localState,
             _state.Sync.PeerReminderState,
-            peerOnline);
+            peerOnline,
+            now.ToUnixTimeSeconds());
         if (sessionStarted <= 0)
         {
             _lastContinuousReminderStep = 0;

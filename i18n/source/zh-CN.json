@@ -241,6 +241,8 @@
   "tray.status": "统计",
   "tray.mainPage": "主界面",
   "tray.statsPage": "统计页",
+  "tray.stopReminders": "停止弹窗",
+  "tray.resumeReminders": "恢复弹窗",
   "tray.quit": "退出",
   "tray.pairSuccessTitle": "手机配对成功",
   "tray.pairSuccessBody": "手机已连接并开始同步。",

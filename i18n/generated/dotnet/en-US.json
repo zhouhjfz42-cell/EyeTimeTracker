@@ -312,6 +312,8 @@
     "tray.pairWaitingBody":  "Waiting for your phone to connect. The code is valid for 5 minutes.",
     "tray.quit":  "Quit",
     "tray.statsPage":  "Stats",
+    "tray.stopReminders":  "Pause Alerts",
+    "tray.resumeReminders":  "Resume Alerts",
     "tray.status":  "Tracking",
     "usageStatus.activityDesc":  "Only used to tell whether you are walking. It does not read location or routes.",
     "usageStatus.activityTitle":  "Physical activity permission",

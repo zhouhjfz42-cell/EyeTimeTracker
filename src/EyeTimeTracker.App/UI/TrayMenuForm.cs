@@ -10,14 +10,17 @@ public sealed class TrayMenuForm : Form
     private static readonly Color AccentGreen = Color.FromArgb(22, 166, 125);
     private static readonly Color AccentBlue = Color.FromArgb(78, 126, 243);
     private static readonly Color Danger = Color.FromArgb(215, 90, 90);
+    private static readonly Color Amber = Color.FromArgb(210, 145, 40);
     private static readonly Color Border = Color.FromArgb(216, 238, 230);
     private static readonly Color Disabled = Color.FromArgb(156, 163, 175);
     private static readonly Color TextPrimary = Color.FromArgb(17, 24, 39);
+    private readonly MenuButton _reminderToggleButton;
 
     public TrayMenuForm(
         Icon appIcon,
         Action openMain,
         Action openStats,
+        Action toggleReminders,
         Action exitApplication)
     {
         AutoScaleMode = AutoScaleMode.None;
@@ -26,32 +29,53 @@ public sealed class TrayMenuForm : Form
         StartPosition = FormStartPosition.Manual;
         TopMost = true;
         BackColor = Background;
-        ClientSize = new Size(190, 178);
+        ClientSize = new Size(230, 226);
         Font = AppFonts.Create(9F, FontStyle.Regular, GraphicsUnit.Point);
         Padding = new Padding(16);
 
         Controls.Add(new MenuButton(AppText.Get("tray.mainPage"), "\u2302", AccentGreen)
         {
-            Bounds = new Rectangle(16, 14, 158, 42),
+            Bounds = new Rectangle(16, 14, 198, 42),
             ClickAction = openMain
         });
         Controls.Add(new MenuButton(AppText.Get("tray.statsPage"), "\u25a5", AccentBlue)
         {
-            Bounds = new Rectangle(16, 62, 158, 42),
+            Bounds = new Rectangle(16, 62, 198, 42),
             ClickAction = openStats
         });
 
-        Controls.Add(new Divider { Bounds = new Rectangle(16, 116, 158, 1) });
+        _reminderToggleButton = new MenuButton(AppText.Get("tray.stopReminders"), "\u23f8", Amber)
+        {
+            Bounds = new Rectangle(16, 110, 198, 42),
+            ClickAction = toggleReminders
+        };
+        Controls.Add(_reminderToggleButton);
+
+        Controls.Add(new Divider { Bounds = new Rectangle(16, 164, 198, 1) });
 
         Controls.Add(new MenuButton(AppText.Get("tray.quit"), "\u00d7", Danger)
         {
-            Bounds = new Rectangle(16, 124, 158, 42),
+            Bounds = new Rectangle(16, 172, 198, 42),
             ClickAction = exitApplication
         });
     }
 
     public void UpdateState(string statusText, bool phoneConnected)
     {
+    }
+
+    public void UpdateReminderToggle(bool suppressed)
+    {
+        if (suppressed)
+        {
+            _reminderToggleButton.TextValue = AppText.Get("tray.resumeReminders");
+            _reminderToggleButton.IconValue = "\u25b6";
+        }
+        else
+        {
+            _reminderToggleButton.TextValue = AppText.Get("tray.stopReminders");
+            _reminderToggleButton.IconValue = "\u23f8";
+        }
     }
 
     public void ShowNearCursor()

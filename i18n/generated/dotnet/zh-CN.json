@@ -312,6 +312,8 @@
     "tray.pairWaitingBody":  "电脑已开始等待手机连接，5分钟内有效。",
     "tray.quit":  "退出",
     "tray.statsPage":  "统计页",
+    "tray.stopReminders":  "停止弹窗",
+    "tray.resumeReminders":  "恢复弹窗",
     "tray.status":  "统计",
     "usageStatus.activityDesc":  "仅用于判断是否正在走路，不读取位置或路线。",
     "usageStatus.activityTitle":  "身体活动权限",

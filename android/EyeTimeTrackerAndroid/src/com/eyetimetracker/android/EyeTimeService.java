@@ -126,6 +126,25 @@ public final class EyeTimeService extends Service implements SensorEventListener
             return START_NOT_STICKY;
         }
         startForeground(FOREGROUND_ID, buildStatusNotification(getString(R.string.sync_service_running)));
+        // 从持久化状态恢复 counting 状态，避免服务被 kill 后重启时丢失计时
+        if (store != null) {
+            ReminderRuntimeState savedState = store.getLocalReminderState();
+            long savedSessionStart = savedState.currentSessionStartedUnixSeconds;
+            long nowSec = System.currentTimeMillis() / 1000L;
+            // 只恢复 5 分钟内的会话起点，更久的说明服务已长时间停止，丢弃过期状态
+            if (savedState.isCounting
+                    && savedSessionStart > 0
+                    && nowSec - savedSessionStart <= 300L) {
+                counting = true;
+                currentSessionStartedUnixSeconds = savedSessionStart;
+            } else {
+                counting = false;
+                currentSessionStartedUnixSeconds = 0L;
+                store.saveLocalReminderState(false, 0L);
+            }
+        }
+        // 重置 lastTickAt 为当前时间，避免重启后第一个 tick 产生大间隔被丢弃
+        lastTickAt = System.currentTimeMillis();
         maybeWarmPastDailyStatsCache(LocalDate.now());
         ensureFamilyStatsUploadRequestServer();
         registerSensor();
