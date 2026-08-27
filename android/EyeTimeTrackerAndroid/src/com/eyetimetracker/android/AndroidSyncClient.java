@@ -15,7 +15,8 @@ public final class AndroidSyncClient {
     private final int readTimeoutMillis;
 
     public AndroidSyncClient() {
-        this(3000, 5000);
+        // PC 端每次同步要载入/合并/保存整个状态文件，响应可能超过 10 秒，读超时要留足
+        this(3000, 15000);
     }
 
     public AndroidSyncClient(int connectTimeoutMillis, int readTimeoutMillis) {

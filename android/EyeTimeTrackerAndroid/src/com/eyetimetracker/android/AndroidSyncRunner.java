@@ -175,7 +175,7 @@ public final class AndroidSyncRunner {
 
     private String tryReconnectWithDiscovery(SyncSettings settings, String requestJson) {
         long startedAt = System.currentTimeMillis();
-        if (settings == null || requestJson == null || requestJson.isEmpty()) {
+        if (settings == null) {
             Log.i(DIAG_TAG, "AndroidSyncRunner discovery skipped reason=empty ms=" + elapsed(startedAt));
             return "";
         }
@@ -190,8 +190,14 @@ public final class AndroidSyncRunner {
             return "";
         }
 
+        // 首次尝试可能已耗时较久，请求里的签名时间戳会过期，重发前重新构建请求
+        String freshRequestJson = buildSyncRequestJson(settings);
+        if (freshRequestJson.isEmpty()) {
+            freshRequestJson = requestJson == null ? "" : requestJson;
+        }
+
         long sendStartedAt = System.currentTimeMillis();
-        String responseJson = client.sendJson(settings, requestJson);
+        String responseJson = client.sendJson(settings, freshRequestJson);
         Log.i(DIAG_TAG, "AndroidSyncRunner recovered send responseEmpty=" + responseJson.isEmpty()
                 + " lastError=" + settings.lastError
                 + " ms=" + elapsed(sendStartedAt));
