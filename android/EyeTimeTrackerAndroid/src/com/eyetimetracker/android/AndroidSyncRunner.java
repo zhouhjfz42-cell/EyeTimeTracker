@@ -251,6 +251,8 @@ public final class AndroidSyncRunner {
         json.put("Platform", state.platform);
         json.put("IsCounting", state.isCounting);
         json.put("CurrentSessionStartedUnixSeconds", state.currentSessionStartedUnixSeconds);
+        json.put("ContinuousClaimSessionStartedUnixSeconds", state.continuousClaimSessionStartedUnixSeconds);
+        json.put("ContinuousClaimLastStep", state.continuousClaimLastStep);
         return json;
     }
 }

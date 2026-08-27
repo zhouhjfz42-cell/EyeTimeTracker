@@ -9,6 +9,8 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 
 public final class AndroidSyncClient {
+    // 单行响应的字符上限，防止对端异常或数据膨胀时一次性读入超大字符串导致 OOM
+    private static final int MAX_RESPONSE_CHARS = 8 * 1024 * 1024;
     private final int connectTimeoutMillis;
     private final int readTimeoutMillis;
 
@@ -40,10 +42,13 @@ public final class AndroidSyncClient {
                 writer.newLine();
                 writer.flush();
 
-                String response = reader.readLine();
+                String response = readLineBounded(reader);
                 settings.lastError = "";
                 return response == null ? "" : response;
             }
+        } catch (OutOfMemoryError oom) {
+            settings.lastError = "Sync response is too large.";
+            return "";
         } catch (Exception ex) {
             settings.lastError = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
             return "";
@@ -69,14 +74,39 @@ public final class AndroidSyncClient {
                 writer.newLine();
                 writer.flush();
 
-                String response = reader.readLine();
+                String response = readLineBounded(reader);
                 settings.lastError = "";
                 return response == null ? "" : response;
             }
+        } catch (OutOfMemoryError oom) {
+            settings.lastError = "Sync response is too large.";
+            return "";
         } catch (Exception ex) {
             settings.lastError = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
             return "";
         }
+    }
+
+    private static String readLineBounded(BufferedReader reader) throws java.io.IOException {
+        StringBuilder line = new StringBuilder(8192);
+        int ch;
+        boolean sawAny = false;
+        while ((ch = reader.read()) != -1) {
+            sawAny = true;
+            if (ch == '\n') {
+                break;
+            }
+            if (line.length() >= MAX_RESPONSE_CHARS) {
+                throw new java.io.IOException("Sync response exceeded " + MAX_RESPONSE_CHARS + " chars.");
+            }
+            if (ch != '\r') {
+                line.append((char) ch);
+            }
+        }
+        if (!sawAny) {
+            return null;
+        }
+        return line.toString();
     }
 
     private static boolean isBlank(String value) {

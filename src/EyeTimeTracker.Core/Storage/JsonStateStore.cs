@@ -1,5 +1,6 @@
 using System.Text.Json;
 using EyeTimeTracker.Core.Models;
+using EyeTimeTracker.Core.Sync;
 
 namespace EyeTimeTracker.Core.Storage;
 
@@ -7,14 +8,25 @@ public sealed class JsonStateStore
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
-        WriteIndented = true
+        WriteIndented = false,
+        Converters = { new UsageSegmentJsonConverter() }
     };
 
+    // 最近 2 天的 segment 保持原样（增量同步按 ID 比对），更早的稳定段压缩成时间区间段
+    private const long RecentRawSegmentSeconds = 2 * 24 * 60 * 60;
+
     private readonly string _path;
+    private readonly Func<long> _unixClock;
 
     public JsonStateStore(string path)
+        : this(path, null)
+    {
+    }
+
+    public JsonStateStore(string path, Func<long>? unixClock)
     {
         _path = path;
+        _unixClock = unixClock ?? (() => DateTimeOffset.UtcNow.ToUnixTimeSeconds());
     }
 
     public AppState Load()
@@ -50,6 +62,9 @@ public sealed class JsonStateStore
 
         try
         {
+            state.Segments = SegmentStorageCompactor.CompactForStorage(
+                state.Segments,
+                _unixClock() - RecentRawSegmentSeconds);
             var json = JsonSerializer.Serialize(state, SerializerOptions);
             File.WriteAllText(tempPath, json);
 

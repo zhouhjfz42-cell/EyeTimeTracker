@@ -383,12 +383,20 @@ public final class MainActivity extends Activity {
         refreshInFlight = true;
         LocalDate today = LocalDate.now();
         new Thread(() -> {
-            HomeStatsSnapshot stats = store.displayHomeStats(today);
-            int reminderMinutes = store.getReminderMinutes();
-            SyncSettings syncSettings = store.getSyncSettings();
-            FamilyHomeState familyState = store.getFamilyHomeState();
-            MainHomeSnapshot snapshot = new MainHomeSnapshot(today, stats, reminderMinutes, syncSettings, familyState);
-            runOnUiThread(() -> applyHomeSnapshot(snapshot));
+            try {
+                HomeStatsSnapshot stats = store.displayHomeStats(today);
+                int reminderMinutes = store.getReminderMinutes();
+                SyncSettings syncSettings = store.getSyncSettings();
+                FamilyHomeState familyState = store.getFamilyHomeState();
+                MainHomeSnapshot snapshot = new MainHomeSnapshot(today, stats, reminderMinutes, syncSettings, familyState);
+                runOnUiThread(() -> applyHomeSnapshot(snapshot));
+            } catch (Throwable ex) {
+                android.util.Log.e("EyeTimeDiag", "MainActivity refresh crashed", ex);
+                runOnUiThread(() -> {
+                    refreshInFlight = false;
+                    refreshQueued = false;
+                });
+            }
         }, "EyeTimeMainRefresh").start();
     }
 
@@ -888,9 +896,9 @@ public final class MainActivity extends Activity {
         content.setBackground(rounded(Color.WHITE, dp(28), COLOR_LINE, 1));
 
         TextView title = new TextView(this);
-        title.setText(ReminderAlert.title(this));
+        title.setText(ReminderAlert.cumulativeTitle(this, reminderMinutes, reminderStep));
         title.setTextSize(26);
-        title.setTextColor(COLOR_TEXT);
+        title.setTextColor(ReminderNotificationProfile.ACCENT_CUMULATIVE);
         title.setTypeface(AppFonts.bold(this));
         title.setIncludeFontPadding(false);
         content.addView(title, matchWrap());

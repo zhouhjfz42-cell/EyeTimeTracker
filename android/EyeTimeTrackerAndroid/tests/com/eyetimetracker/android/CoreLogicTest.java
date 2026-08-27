@@ -107,20 +107,24 @@ public final class CoreLogicTest {
     private static void shouldKeepContinuousReminderProgressAcrossPeerBaselineChanges() {
         assertEquals(
                 2,
-                ContinuousReminderGuard.effectiveLastStep(1_000L, 1_000L, 2),
-                "same local session keeps last step");
+                ContinuousReminderGuard.matchingLastStep(1_000L, 1_000L, 2),
+                "same session keeps last step");
         assertEquals(
                 0,
-                ContinuousReminderGuard.effectiveLastStep(1_000L, 2_000L, 2),
-                "new local session starts a new reminder sequence");
+                ContinuousReminderGuard.matchingLastStep(1_000L, 2_000L, 2),
+                "new session starts a new reminder sequence");
         assertEquals(
                 false,
-                ContinuousReminderGuard.shouldClaim(1_000L, 40L * 60L, 20, 1_000L, 2),
-                "peer baseline changes do not repeat an already claimed step");
+                ContinuousReminderGuard.shouldClaim(1_000L, 2, 2),
+                "already claimed step is not repeated");
         assertEquals(
                 true,
-                ContinuousReminderGuard.shouldClaim(2_000L, 20L * 60L, 20, 1_000L, 2),
-                "new local session claims its first step");
+                ContinuousReminderGuard.shouldClaim(1_000L, 3, 2),
+                "next step is claimed once reached");
+        assertEquals(
+                false,
+                ContinuousReminderGuard.shouldClaim(1_000L, 2, 3),
+                "peer claimed step suppresses local catch-up");
     }
 
     private static void shouldHandleContinuousReminderExemptions() {
@@ -210,7 +214,7 @@ public final class CoreLogicTest {
         assertEquals("eye_time_tracker_reminders_v3", ReminderNotificationProfile.CHANNEL_ID, "uses fresh reminder channel");
         assertEquals(4, ReminderNotificationProfile.CHANNEL_IMPORTANCE, "uses high importance reminder channel");
         assertEquals(2, ReminderNotificationProfile.NOTIFICATION_PRIORITY, "uses max priority reminder notification");
-        assertEquals(true, ReminderNotificationProfile.USE_FULL_SCREEN_INTENT, "uses full screen intent for heads-up reminder");
+        assertEquals(false, ReminderNotificationProfile.USE_FULL_SCREEN_INTENT, "banner only, no full screen intent");
         assertEquals(true, ReminderNotificationProfile.ENABLE_SOUND, "uses sound for heads-up reminder");
         assertEquals(true, ReminderNotificationProfile.isLegacyChannelId("eye_time_tracker_reminders_v2"), "knows old reminder channel");
         assertEquals(false, ReminderNotificationProfile.isLegacyChannelId(ReminderNotificationProfile.CHANNEL_ID), "current channel is not legacy");

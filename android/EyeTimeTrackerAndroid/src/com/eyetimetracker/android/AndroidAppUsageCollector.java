@@ -153,8 +153,13 @@ public final class AndroidAppUsageCollector {
             return secondsByPackage;
         }
 
-        String activePackage = "";
-        long activeStartedAt = 0L;
+        // 按 (包名, 类名) 跟踪处于 resumed 状态的 activity；公开 API 拿不到 instanceId，
+        // 同类名多实例会合并计算，误差可接受。包内 resumed activity 计数 0->1 开始计时，1->0 结束。
+        // 不能用单个"活跃包"模型：同包导航时旧 activity 的 STOPPED 晚于新 activity 的 RESUMED 到达，
+        // 单活跃模型会把它误判为"应用退到后台"，丢掉之后整段使用时间。
+        Map<String, Long> openActivityKeys = new HashMap<>();
+        Map<String, Integer> resumedCountByPackage = new HashMap<>();
+        Map<String, Long> sessionStartByPackage = new HashMap<>();
         UsageEvents.Event event = new UsageEvents.Event();
         while (events.hasNextEvent()) {
             events.getNextEvent(event);
@@ -164,20 +169,28 @@ public final class AndroidAppUsageCollector {
             }
             long timestamp = Math.max(startMillis, Math.min(endMillis, event.getTimeStamp()));
             int type = event.getEventType();
+            String className = event.getClassName();
+            String activityKey = packageName + "" + (className == null ? "" : className);
             if (isForegroundEvent(type)) {
-                if (!activePackage.isEmpty()) {
-                    addSeconds(secondsByPackage, activePackage, activeStartedAt, timestamp);
+                if (openActivityKeys.put(activityKey, timestamp) == null) {
+                    int resumedCount = resumedCountByPackage.getOrDefault(packageName, 0);
+                    if (resumedCount == 0) {
+                        sessionStartByPackage.put(packageName, timestamp);
+                    }
+                    resumedCountByPackage.put(packageName, resumedCount + 1);
                 }
-                activePackage = packageName;
-                activeStartedAt = timestamp;
-            } else if (isBackgroundEvent(type) && packageName.equals(activePackage)) {
-                addSeconds(secondsByPackage, activePackage, activeStartedAt, timestamp);
-                activePackage = "";
-                activeStartedAt = 0L;
+            } else if (isBackgroundEvent(type) && openActivityKeys.remove(activityKey) != null) {
+                int resumedCount = resumedCountByPackage.getOrDefault(packageName, 1) - 1;
+                resumedCountByPackage.put(packageName, resumedCount);
+                if (resumedCount == 0) {
+                    Long sessionStart = sessionStartByPackage.remove(packageName);
+                    addSeconds(secondsByPackage, packageName,
+                            sessionStart == null ? timestamp : sessionStart, timestamp);
+                }
             }
         }
-        if (!activePackage.isEmpty()) {
-            addSeconds(secondsByPackage, activePackage, activeStartedAt, endMillis);
+        for (Map.Entry<String, Long> session : sessionStartByPackage.entrySet()) {
+            addSeconds(secondsByPackage, session.getKey(), session.getValue(), endMillis);
         }
         return secondsByPackage;
     }

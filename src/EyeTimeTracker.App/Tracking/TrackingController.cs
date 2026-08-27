@@ -775,12 +775,15 @@ public sealed class TrackingController : IDisposable
 
     private ReminderRuntimeState CreateLocalReminderStateLocked()
     {
+        var previous = _state.Sync.LocalReminderState;
         return new ReminderRuntimeState
         {
             DeviceId = _state.DeviceId,
             Platform = _state.Platform,
             IsCounting = _accumulator.IsCounting,
-            CurrentSessionStartedUnixSeconds = _accumulator.CurrentSessionStartedAt?.ToUnixTimeSeconds() ?? 0
+            CurrentSessionStartedUnixSeconds = _accumulator.CurrentSessionStartedAt?.ToUnixTimeSeconds() ?? 0,
+            ContinuousClaimSessionStartedUnixSeconds = previous?.ContinuousClaimSessionStartedUnixSeconds ?? 0,
+            ContinuousClaimLastStep = previous?.ContinuousClaimLastStep ?? 0
         };
     }
 
@@ -796,7 +799,9 @@ public sealed class TrackingController : IDisposable
             DeviceId = state.DeviceId,
             Platform = state.Platform,
             IsCounting = state.IsCounting,
-            CurrentSessionStartedUnixSeconds = state.CurrentSessionStartedUnixSeconds
+            CurrentSessionStartedUnixSeconds = state.CurrentSessionStartedUnixSeconds,
+            ContinuousClaimSessionStartedUnixSeconds = state.ContinuousClaimSessionStartedUnixSeconds,
+            ContinuousClaimLastStep = state.ContinuousClaimLastStep
         };
     }
 
@@ -888,6 +893,21 @@ public sealed class TrackingController : IDisposable
             _continuousReminderSessionStart = sessionStarted;
         }
 
+        // 合并双端已提醒次数：同一段共享会话里，任何一端弹过的次数另一端不再重复弹
+        var localClaim = _state.Sync.LocalReminderState;
+        if (localClaim is not null
+            && localClaim.ContinuousClaimSessionStartedUnixSeconds == sessionStarted)
+        {
+            _lastContinuousReminderStep = Math.Max(_lastContinuousReminderStep, localClaim.ContinuousClaimLastStep);
+        }
+
+        var peerState = _state.Sync.PeerReminderState;
+        if (peerState is not null
+            && peerState.ContinuousClaimSessionStartedUnixSeconds == sessionStarted)
+        {
+            _lastContinuousReminderStep = Math.Max(_lastContinuousReminderStep, peerState.ContinuousClaimLastStep);
+        }
+
         var thresholdSeconds = Math.Max(60, _state.Settings.ContinuousReminderThresholdSeconds);
         var sessionSeconds = Math.Max(0, now.ToUnixTimeSeconds() - sessionStarted);
         var step = (int)Math.Max(0, sessionSeconds / thresholdSeconds);
@@ -898,6 +918,10 @@ public sealed class TrackingController : IDisposable
         }
 
         _lastContinuousReminderStep = step;
+        var claimState = _state.Sync.LocalReminderState ??= new ReminderRuntimeState();
+        claimState.ContinuousClaimSessionStartedUnixSeconds = sessionStarted;
+        claimState.ContinuousClaimLastStep = step;
+        _hasPendingImmediateSave = true;
         var requestId = Guid.NewGuid().ToString("N")[..12];
         ReminderDiagnosticLog.Record(
             "连续用眼提醒",
@@ -921,7 +945,7 @@ public sealed class TrackingController : IDisposable
                 "连续用眼提醒/请求显示",
                 DateTimeOffset.Now,
                 request.RequestId);
-            _notificationService.ShowContinuousReminder(request.RequestId);
+            _notificationService.ShowContinuousReminder(request.RequestId, request.ThresholdSeconds);
         }
         catch (Exception exception)
         {

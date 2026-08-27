@@ -7,11 +7,17 @@ public sealed class PcReminderDialog : Form
 {
     private static readonly Color TextPrimary = Color.FromArgb(17, 24, 39);
     private static readonly Color TextSecondary = Color.FromArgb(102, 112, 133);
-    private static readonly Color AccentGreen = Color.FromArgb(22, 166, 125);
+    public static readonly Color AccentContinuous = Color.FromArgb(22, 166, 125);
+    public static readonly Color AccentCumulative = Color.FromArgb(224, 122, 40);
     private static readonly Color BorderColor = Color.FromArgb(225, 232, 229);
 
-    public PcReminderDialog(string title, string body, Icon? icon)
+    private readonly Color _accent;
+    private readonly string? _emphasis;
+
+    public PcReminderDialog(string title, string body, Icon? icon, Color? accent = null, string? emphasis = null)
     {
+        _accent = accent ?? AccentContinuous;
+        _emphasis = emphasis;
         AutoScaleMode = AutoScaleMode.None;
         Text = title;
         if (icon is not null)
@@ -25,7 +31,7 @@ public sealed class PcReminderDialog : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         TopMost = true;
-        ClientSize = new Size(470, 290);
+        ClientSize = new Size(560, 360);
         BackColor = Color.White;
         Font = AppFonts.Create(9F, FontStyle.Regular, GraphicsUnit.Point);
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
@@ -33,16 +39,18 @@ public sealed class PcReminderDialog : Form
         Controls.Add(new StaticText
         {
             Text = title,
-            Bounds = new Rectangle(28, 24, 300, 58),
-            Font = AppFonts.Create(19F, FontStyle.Bold, GraphicsUnit.Point),
-            ForeColor = TextPrimary,
+            Bounds = new Rectangle(32, 30, 420, 64),
+            Font = AppFonts.Create(20F, FontStyle.Bold, GraphicsUnit.Point),
+            ForeColor = _accent,
             BackColor = Color.Transparent,
-            TextAlign = ContentAlignment.MiddleLeft
+            TextAlign = ContentAlignment.MiddleLeft,
+            WordWrap = true,
+            UseEllipsis = false
         });
 
         var closeButton = new CloseIconButton
         {
-            Bounds = new Rectangle(404, 28, 38, 38)
+            Bounds = new Rectangle(490, 34, 38, 38)
         };
         closeButton.Click += (_, _) =>
         {
@@ -51,25 +59,15 @@ public sealed class PcReminderDialog : Form
         };
         Controls.Add(closeButton);
 
-        Controls.Add(new StaticText
-        {
-            Text = body,
-            Bounds = new Rectangle(28, 94, 414, 96),
-            Font = AppFonts.Create(11F, FontStyle.Regular, GraphicsUnit.Point),
-            ForeColor = TextSecondary,
-            BackColor = Color.Transparent,
-            TextAlign = ContentAlignment.TopLeft,
-            WordWrap = true,
-            UseEllipsis = false
-        });
+        Controls.Add(CreateBodyText(body, _emphasis));
 
         var okButton = new RoundedButton
         {
             Text = AppText.Get("common.gotIt"),
-            Bounds = new Rectangle(135, 218, 200, 48),
-            ButtonColor = AccentGreen,
-            HoverColor = Color.FromArgb(19, 145, 111),
-            PressedColor = Color.FromArgb(17, 124, 96),
+            Bounds = new Rectangle(180, 292, 200, 48),
+            ButtonColor = _accent,
+            HoverColor = ControlPaint.Dark(_accent, 0.1F),
+            PressedColor = ControlPaint.Dark(_accent, 0.2F),
             TextColor = Color.White
         };
         okButton.Click += (_, _) =>
@@ -87,6 +85,37 @@ public sealed class PcReminderDialog : Form
         Region = new Region(path);
     }
 
+    private RichTextBox CreateBodyText(string body, string? emphasis)
+    {
+        var bodyText = new RichTextBox
+        {
+            Bounds = new Rectangle(32, 112, 496, 148),
+            Font = AppFonts.Create(12F, FontStyle.Regular, GraphicsUnit.Point),
+            ForeColor = TextSecondary,
+            BackColor = Color.White,
+            BorderStyle = BorderStyle.None,
+            ReadOnly = true,
+            ScrollBars = RichTextBoxScrollBars.None,
+            DetectUrls = false,
+            ShortcutsEnabled = false,
+            TabStop = false,
+            Text = body
+        };
+        if (!string.IsNullOrEmpty(emphasis))
+        {
+            var index = body.IndexOf(emphasis, StringComparison.Ordinal);
+            if (index >= 0)
+            {
+                bodyText.Select(index, emphasis.Length);
+                bodyText.SelectionColor = _accent;
+                bodyText.SelectionFont = AppFonts.Create(12F, FontStyle.Bold, GraphicsUnit.Point);
+                bodyText.Select(0, 0);
+            }
+        }
+
+        return bodyText;
+    }
+
     protected override void OnPaint(PaintEventArgs e)
     {
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
@@ -95,6 +124,11 @@ public sealed class PcReminderDialog : Form
         using var fill = new SolidBrush(Color.White);
         using var border = new Pen(BorderColor);
         e.Graphics.FillPath(fill, path);
+        // 顶部类型色带：绿=连续用眼，橙红=累计用眼，不看文字也能分辨
+        e.Graphics.SetClip(path);
+        using var accentBrush = new SolidBrush(_accent);
+        e.Graphics.FillRectangle(accentBrush, new Rectangle(0, 0, Width, 10));
+        e.Graphics.ResetClip();
         e.Graphics.DrawPath(border, path);
         base.OnPaint(e);
     }
@@ -133,7 +167,7 @@ public sealed class PcReminderDialog : Form
         private bool _hovered;
         private bool _pressed;
 
-        public Color ButtonColor { get; set; } = AccentGreen;
+        public Color ButtonColor { get; set; } = AccentContinuous;
         public Color HoverColor { get; set; } = Color.FromArgb(19, 145, 111);
         public Color PressedColor { get; set; } = Color.FromArgb(17, 124, 96);
         public Color TextColor { get; set; } = Color.White;

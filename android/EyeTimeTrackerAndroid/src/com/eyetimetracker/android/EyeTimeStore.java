@@ -73,6 +73,8 @@ public final class EyeTimeStore {
     private static final String PEER_REMINDER_PLATFORM = "peer_reminder_platform";
     private static final String PEER_REMINDER_COUNTING = "peer_reminder_counting";
     private static final String PEER_REMINDER_SESSION_STARTED = "peer_reminder_session_started";
+    private static final String PEER_REMINDER_CLAIM_SESSION_STARTED = "peer_reminder_claim_session_started";
+    private static final String PEER_REMINDER_CLAIM_LAST_STEP = "peer_reminder_claim_last_step";
     private static final String FAMILY_CHILD_REMINDER_DATE = "family_child_reminder_date";
     private static final String FAMILY_CHILD_REMINDER_SHOWN = "family_child_reminder_shown";
     private static final String FAMILY_CHILD_LAST_REMINDER_STEP = "family_child_last_reminder_step";
@@ -110,6 +112,10 @@ public final class EyeTimeStore {
     private static final int PARENT_PASSCODE_HASH_BITS = 256;
     private static final String PARENT_PASSCODE_ALGORITHM = "PBKDF2WithHmacSHA256";
     private static final int MAX_STORED_STRING_LENGTH = 8192;
+    // 原始 segment / App 使用记录只保留最近 60 天，更早的日期依赖每日统计缓存和汇总记录
+    private static final int SEGMENT_RETENTION_DAYS = 60;
+    // 状态字符串超过该大小时先做字符串级抢救再解析，避免超大状态直接 OOM
+    private static final int STATE_SALVAGE_THRESHOLD_CHARS = 16 * 1024 * 1024;
     public static final int DEFAULT_CONTINUOUS_REMINDER_MINUTES = 20;
 
     private final SharedPreferences prefs;
@@ -1009,14 +1015,13 @@ public final class EyeTimeStore {
         if (step <= 0 || sessionStartedUnixSeconds <= 0L) {
             return false;
         }
-        long storedLocalSession = prefs.getLong(CONTINUOUS_REMINDER_LOCAL_SESSION_STARTED, 0L);
+        long storedResolvedSession = prefs.getLong(CONTINUOUS_REMINDER_SESSION_STARTED, 0L);
         int storedLastStep = prefs.getInt(CONTINUOUS_REMINDER_LAST_STEP, 0);
-        return ContinuousReminderGuard.shouldClaim(
-                localSessionStartedUnixSeconds,
-                sessionSeconds,
-                getContinuousReminderMinutes(),
-                storedLocalSession,
+        int lastStep = ContinuousReminderGuard.matchingLastStep(
+                storedResolvedSession,
+                sessionStartedUnixSeconds,
                 storedLastStep);
+        return ContinuousReminderGuard.shouldClaim(sessionStartedUnixSeconds, step, lastStep);
     }
 
     public synchronized boolean tryClaimContinuousReminder(
@@ -1035,19 +1040,22 @@ public final class EyeTimeStore {
         long storedLocalSession = prefs.getLong(CONTINUOUS_REMINDER_LOCAL_SESSION_STARTED, 0L);
         long storedResolvedSession = prefs.getLong(CONTINUOUS_REMINDER_SESSION_STARTED, 0L);
         int storedLastStep = prefs.getInt(CONTINUOUS_REMINDER_LAST_STEP, 0);
-        int lastStep = ContinuousReminderGuard.effectiveLastStep(
-                storedLocalSession,
-                localSessionStartedUnixSeconds,
-                storedLastStep);
-        boolean claim = ContinuousReminderGuard.shouldClaim(
-                localSessionStartedUnixSeconds,
-                sessionSeconds,
-                thresholdMinutes,
-                storedLocalSession,
-                storedLastStep);
+        // 三路取大：本端起点匹配（基线变化不丢进度）、共享起点匹配（解锁续上不补弹）、对端认领（双端对齐）
+        int ownByLocal = ContinuousReminderGuard.matchingLastStep(
+                storedLocalSession, localSessionStartedUnixSeconds, storedLastStep);
+        int ownByResolved = ContinuousReminderGuard.matchingLastStep(
+                storedResolvedSession, sessionStartedUnixSeconds, storedLastStep);
+        ReminderRuntimeState peerState = getPeerReminderState();
+        int peerStep = ContinuousReminderGuard.matchingLastStep(
+                peerState.continuousClaimSessionStartedUnixSeconds,
+                sessionStartedUnixSeconds,
+                peerState.continuousClaimLastStep);
+        int effectiveLastStep = Math.max(ownByLocal, Math.max(ownByResolved, peerStep));
+        boolean claim = ContinuousReminderGuard.shouldClaim(sessionStartedUnixSeconds, step, effectiveLastStep);
 
         if (step > 0
                 && (claim
+                || effectiveLastStep != storedLastStep
                 || storedLocalSession != localSessionStartedUnixSeconds
                 || storedResolvedSession != sessionStartedUnixSeconds)) {
             Log.i(
@@ -1060,19 +1068,22 @@ public final class EyeTimeStore {
                             + " sessionSeconds=" + sessionSeconds
                             + " thresholdMinutes=" + thresholdMinutes
                             + " step=" + step
-                            + " lastStep=" + lastStep);
+                            + " lastStep=" + effectiveLastStep
+                            + " peerStep=" + peerStep);
         }
 
-        if (!claim) {
-            return false;
+        int newLastStep = Math.max(effectiveLastStep, Math.max(0, step));
+        if (step > 0
+                && (newLastStep != storedLastStep
+                || storedLocalSession != localSessionStartedUnixSeconds
+                || storedResolvedSession != sessionStartedUnixSeconds)) {
+            prefs.edit()
+                    .putLong(CONTINUOUS_REMINDER_LOCAL_SESSION_STARTED, Math.max(0L, localSessionStartedUnixSeconds))
+                    .putLong(CONTINUOUS_REMINDER_SESSION_STARTED, Math.max(0L, sessionStartedUnixSeconds))
+                    .putInt(CONTINUOUS_REMINDER_LAST_STEP, newLastStep)
+                    .apply();
         }
-
-        prefs.edit()
-                .putLong(CONTINUOUS_REMINDER_LOCAL_SESSION_STARTED, Math.max(0L, localSessionStartedUnixSeconds))
-                .putLong(CONTINUOUS_REMINDER_SESSION_STARTED, Math.max(0L, sessionStartedUnixSeconds))
-                .putInt(CONTINUOUS_REMINDER_LAST_STEP, Math.max(lastStep, step))
-                .apply();
-        return true;
+        return claim;
     }
 
     public synchronized void markContinuousReminderShown(long sessionStartedUnixSeconds, long sessionSeconds) {
@@ -1087,11 +1098,11 @@ public final class EyeTimeStore {
             long sessionStartedUnixSeconds,
             long sessionSeconds) {
         int step = ReminderPolicy.reachedStep(sessionSeconds, getContinuousReminderMinutes());
-        long storedLocalSession = prefs.getLong(CONTINUOUS_REMINDER_LOCAL_SESSION_STARTED, 0L);
+        long storedResolvedSession = prefs.getLong(CONTINUOUS_REMINDER_SESSION_STARTED, 0L);
         int storedLastStep = prefs.getInt(CONTINUOUS_REMINDER_LAST_STEP, 0);
-        int lastStep = ContinuousReminderGuard.effectiveLastStep(
-                storedLocalSession,
-                localSessionStartedUnixSeconds,
+        int lastStep = ContinuousReminderGuard.matchingLastStep(
+                storedResolvedSession,
+                sessionStartedUnixSeconds,
                 storedLastStep);
         prefs.edit()
                 .putLong(CONTINUOUS_REMINDER_LOCAL_SESSION_STARTED, Math.max(0L, localSessionStartedUnixSeconds))
@@ -1456,7 +1467,9 @@ public final class EyeTimeStore {
                 ensureDeviceId(),
                 PLATFORM,
                 prefs.getBoolean(LOCAL_REMINDER_COUNTING, false),
-                prefs.getLong(LOCAL_REMINDER_SESSION_STARTED, 0L));
+                prefs.getLong(LOCAL_REMINDER_SESSION_STARTED, 0L),
+                prefs.getLong(CONTINUOUS_REMINDER_SESSION_STARTED, 0L),
+                prefs.getInt(CONTINUOUS_REMINDER_LAST_STEP, 0));
     }
 
     public synchronized void saveLocalReminderState(boolean isCounting, long currentSessionStartedUnixSeconds) {
@@ -1471,7 +1484,9 @@ public final class EyeTimeStore {
                 prefs.getString(PEER_REMINDER_DEVICE_ID, ""),
                 prefs.getString(PEER_REMINDER_PLATFORM, ""),
                 prefs.getBoolean(PEER_REMINDER_COUNTING, false),
-                prefs.getLong(PEER_REMINDER_SESSION_STARTED, 0L));
+                prefs.getLong(PEER_REMINDER_SESSION_STARTED, 0L),
+                prefs.getLong(PEER_REMINDER_CLAIM_SESSION_STARTED, 0L),
+                prefs.getInt(PEER_REMINDER_CLAIM_LAST_STEP, 0));
     }
 
     public synchronized void savePeerReminderState(ReminderRuntimeState state) {
@@ -1484,6 +1499,8 @@ public final class EyeTimeStore {
                 .putString(PEER_REMINDER_PLATFORM, safe(state.platform))
                 .putBoolean(PEER_REMINDER_COUNTING, state.isCounting)
                 .putLong(PEER_REMINDER_SESSION_STARTED, Math.max(0L, state.currentSessionStartedUnixSeconds))
+                .putLong(PEER_REMINDER_CLAIM_SESSION_STARTED, Math.max(0L, state.continuousClaimSessionStartedUnixSeconds))
+                .putInt(PEER_REMINDER_CLAIM_LAST_STEP, Math.max(0, state.continuousClaimLastStep))
                 .apply();
     }
 
@@ -1695,6 +1712,14 @@ public final class EyeTimeStore {
             state.put(FAMILY_CHILD_APP_USAGE_ENTRIES, new JSONArray());
             ensureFamilyModeState(state);
             return state;
+        }
+        if (raw.length() > STATE_SALVAGE_THRESHOLD_CHARS) {
+            String salvaged = dropOversizedArrays(raw);
+            if (!salvaged.equals(raw)) {
+                Log.w(DIAG_TAG, "EyeTimeStore loadState salvaged oversized state chars="
+                        + raw.length() + "->" + salvaged.length());
+                raw = salvaged;
+            }
         }
         JSONObject state = new JSONObject(raw);
         if (!state.has("records")) {
@@ -1983,8 +2008,104 @@ public final class EyeTimeStore {
 
     private static void compactStateForStorage(JSONObject state, boolean force) throws JSONException {
         pruneLargeStoredStrings(state);
+        LocalDate retentionCutoff = LocalDate.now().minusDays(SEGMENT_RETENTION_DAYS);
+        pruneEntriesOlderThan(state, "segments", retentionCutoff);
+        pruneEntriesOlderThan(state, FAMILY_CHILD_SEGMENTS, retentionCutoff);
+        pruneEntriesOlderThan(state, APP_USAGE_ENTRIES, retentionCutoff);
+        pruneEntriesOlderThan(state, FAMILY_CHILD_APP_USAGE_ENTRIES, retentionCutoff);
         compactSegmentsForStorage(state, "segments", force);
         compactSegmentsForStorage(state, FAMILY_CHILD_SEGMENTS, force);
+    }
+
+    private static void pruneEntriesOlderThan(JSONObject state, String key, LocalDate cutoff) throws JSONException {
+        JSONArray raw = state.optJSONArray(key);
+        if (raw == null || raw.length() == 0) {
+            return;
+        }
+        JSONArray kept = new JSONArray();
+        int dropped = 0;
+        for (int i = 0; i < raw.length(); i++) {
+            JSONObject entry = raw.optJSONObject(i);
+            if (entry == null) {
+                Object value = raw.opt(i);
+                if (value != null) {
+                    kept.put(value);
+                }
+                continue;
+            }
+            LocalDate date = parseDateOrNull(entry.optString("localDate", ""));
+            if (date != null && date.isBefore(cutoff)) {
+                dropped++;
+                continue;
+            }
+            kept.put(entry);
+        }
+        if (dropped > 0) {
+            state.put(key, kept);
+            Log.i(DIAG_TAG, "EyeTimeStore pruneEntriesOlderThan key=" + key
+                    + " dropped=" + dropped
+                    + " kept=" + kept.length()
+                    + " cutoff=" + cutoff);
+        }
+    }
+
+    private static String dropOversizedArrays(String raw) {
+        String result = raw;
+        result = dropJsonArrayValue(result, "segments");
+        result = dropJsonArrayValue(result, FAMILY_CHILD_SEGMENTS);
+        result = dropJsonArrayValue(result, APP_USAGE_ENTRIES);
+        result = dropJsonArrayValue(result, FAMILY_CHILD_APP_USAGE_ENTRIES);
+        return result;
+    }
+
+    private static String dropJsonArrayValue(String json, String key) {
+        String quotedKey = "\"" + key + "\"";
+        int keyIndex = json.indexOf(quotedKey);
+        if (keyIndex < 0) {
+            return json;
+        }
+        int i = keyIndex + quotedKey.length();
+        while (i < json.length() && Character.isWhitespace(json.charAt(i))) {
+            i++;
+        }
+        if (i >= json.length() || json.charAt(i) != ':') {
+            return json;
+        }
+        i++;
+        while (i < json.length() && Character.isWhitespace(json.charAt(i))) {
+            i++;
+        }
+        if (i >= json.length() || json.charAt(i) != '[') {
+            return json;
+        }
+        int arrayStart = i;
+        int depth = 0;
+        boolean inString = false;
+        boolean escaped = false;
+        for (; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (inString) {
+                if (escaped) {
+                    escaped = false;
+                } else if (c == '\\') {
+                    escaped = true;
+                } else if (c == '"') {
+                    inString = false;
+                }
+                continue;
+            }
+            if (c == '"') {
+                inString = true;
+            } else if (c == '[') {
+                depth++;
+            } else if (c == ']') {
+                depth--;
+                if (depth == 0) {
+                    return json.substring(0, arrayStart) + "[]" + json.substring(i + 1);
+                }
+            }
+        }
+        return json;
     }
 
     private static boolean pruneLargeStoredStrings(Object value) throws JSONException {

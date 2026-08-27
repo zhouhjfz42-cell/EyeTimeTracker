@@ -511,9 +511,21 @@ static void TestAppTextLoadsReminderCopy()
 {
     AssertEqual("用眼提醒", AppText.Get("reminder.alertTitle"), nameof(TestAppTextLoadsReminderCopy) + " title");
     AssertEqual(
-        "今天的屏幕使用时间已达到5小时30分，建议休息一下眼睛。",
+        "今天用眼时间已达到5小时30分，请尽快休息眼睛。",
         ReminderText.Body(19800, repeatReminder: false, reminderStep: 0),
         nameof(TestAppTextLoadsReminderCopy) + " body");
+    AssertEqual(
+        "今日累计用眼11小时",
+        ReminderText.CumulativeTitle(19800, 2),
+        nameof(TestAppTextLoadsReminderCopy) + " cumulative title");
+    AssertEqual(
+        "已连续用眼20分钟",
+        ReminderText.ContinuousTitle(1200),
+        nameof(TestAppTextLoadsReminderCopy) + " continuous title");
+    AssertEqual(
+        AppText.Get("eyeCareReminders.continuousAlertMessageLong"),
+        ReminderText.ContinuousBody(45 * 60),
+        nameof(TestAppTextLoadsReminderCopy) + " continuous long body");
 }
 
 static void TestAppTextLoadsGeneratedDotNetCopy()
@@ -899,6 +911,51 @@ static void TestPcSyncCoordinatorAppliesAndroidSegmentsAndReturnsPcSegments()
     AssertEqual(1_783_000_000L, saved.Sync.LastSyncUnixSeconds, nameof(TestPcSyncCoordinatorAppliesAndroidSegmentsAndReturnsPcSegments) + " last sync");
 }
 
+static void TestPcSyncCoordinatorRespondsWithIncrementalSegments()
+{
+    var t0 = new DateTimeOffset(2026, 7, 2, 12, 0, 0, TimeSpan.Zero);
+    var oldSegment = Segment("pc-test", "windows", "pc-input", t0, 20);
+    var newSegment = Segment("pc-test", "windows", "pc-input", t0.AddHours(1), 20);
+    var store = SeedState(new AppState
+    {
+        DeviceId = "pc-test",
+        Platform = "windows",
+        Settings = TrackerSettings.Default,
+        Segments = [oldSegment, newSegment],
+        Sync = new SyncSettings
+        {
+            IsPaired = true,
+            PeerDeviceId = "phone-test",
+            PeerPlatform = "android",
+            SharedSecret = "shared-secret"
+        }
+    });
+    var coordinator = new PcSyncCoordinator(store, () => 1_783_000_000);
+
+    var incrementalResponse = coordinator.HandleSync(SignedSyncRequest(new SyncRequest
+    {
+        DeviceId = "phone-test",
+        Platform = "android",
+        Settings = TrackerSettings.Default,
+        // 旧 segment 的 UpdatedAt 早于 since - 120s 重叠窗口，新 segment 在窗口内
+        SinceUnixSeconds = t0.ToUnixTimeSeconds() + 200
+    }));
+
+    AssertEqual(true, incrementalResponse.Accepted, nameof(TestPcSyncCoordinatorRespondsWithIncrementalSegments) + " accepted");
+    AssertEqual(1, incrementalResponse.Segments.Count, nameof(TestPcSyncCoordinatorRespondsWithIncrementalSegments) + " incremental count");
+    AssertEqual(newSegment.SegmentId, incrementalResponse.Segments[0].SegmentId, nameof(TestPcSyncCoordinatorRespondsWithIncrementalSegments) + " incremental segment");
+
+    var fullResponse = coordinator.HandleSync(SignedSyncRequest(new SyncRequest
+    {
+        DeviceId = "phone-test",
+        Platform = "android",
+        Settings = TrackerSettings.Default,
+        SinceUnixSeconds = 0
+    }));
+
+    AssertEqual(2, fullResponse.Segments.Count, nameof(TestPcSyncCoordinatorRespondsWithIncrementalSegments) + " full count");
+}
+
 static void TestPcSyncCoordinatorUpdatesMutableSegments()
 {
     var t0 = new DateTimeOffset(2026, 7, 2, 12, 0, 0, TimeSpan.Zero);
@@ -990,7 +1047,7 @@ static void TestPcSyncCoordinatorRejectsUnsignedPairedSync()
     AssertEqual(true, response.Error.Contains("signature", StringComparison.OrdinalIgnoreCase), nameof(TestPcSyncCoordinatorRejectsUnsignedPairedSync) + " error");
 }
 
-static void TestPcSyncCoordinatorBackfillsPcSegmentsWhenAndroidCursorIsStale()
+static void TestPcSyncCoordinatorOmitsSegmentsOlderThanCursor()
 {
     var t0 = new DateTimeOffset(2026, 7, 2, 12, 0, 0, TimeSpan.Zero);
     var pcSegment = Segment("pc-test", "windows", "pc-input", t0, 20);
@@ -1015,12 +1072,12 @@ static void TestPcSyncCoordinatorBackfillsPcSegmentsWhenAndroidCursorIsStale()
         DeviceId = "phone-test",
         Platform = "android",
         Settings = TrackerSettings.Default,
+        // 游标比 segment 更新时间新，说明对端已经拿过这条数据，增量响应不再重复下发
         SinceUnixSeconds = pcSegment.UpdatedAtUnixSeconds + 3600
     }));
 
-    AssertEqual(true, response.Accepted, nameof(TestPcSyncCoordinatorBackfillsPcSegmentsWhenAndroidCursorIsStale) + " accepted");
-    AssertEqual(1, response.Segments.Count, nameof(TestPcSyncCoordinatorBackfillsPcSegmentsWhenAndroidCursorIsStale) + " response count");
-    AssertEqual(pcSegment.SegmentId, response.Segments[0].SegmentId, nameof(TestPcSyncCoordinatorBackfillsPcSegmentsWhenAndroidCursorIsStale) + " backfilled segment");
+    AssertEqual(true, response.Accepted, nameof(TestPcSyncCoordinatorOmitsSegmentsOlderThanCursor) + " accepted");
+    AssertEqual(0, response.Segments.Count, nameof(TestPcSyncCoordinatorOmitsSegmentsOlderThanCursor) + " response count");
 }
 
 static void TestPcSyncCoordinatorBackfillsLegacyDailyRecordsAsSegments()
@@ -1570,6 +1627,52 @@ static void TestSegmentsUseFixedTenSecondBucketsForArbitraryStartSeconds()
     AssertEqual(10L, summary.HourlySeconds[8], nameof(TestSegmentsUseFixedTenSecondBucketsForArbitraryStartSeconds) + " hourly");
 }
 
+static void TestSegmentStorageCompactorMergesBucketsLosslessly()
+{
+    var t0 = new DateTimeOffset(2026, 7, 2, 12, 0, 0, TimeSpan.Zero);
+    var cutoff = t0.ToUnixTimeSeconds() + 3600;
+    var old1 = Segment("pc", "windows", "pc-input", t0, 10);
+    var old2 = Segment("pc", "windows", "pc-input", t0.AddSeconds(10), 10);
+    var gapped = Segment("pc", "windows", "pc-input", t0.AddSeconds(300), 10);
+    var recent = Segment("pc", "windows", "pc-input", t0.AddSeconds(5400), 10);
+    var mutable = Segment("pc", "windows", "pc-input", t0.AddSeconds(600), 20);
+    mutable.SegmentId = UsageSegmentId.CreateMutable("pc", "pc-input", t0.AddSeconds(600));
+    var original = new[] { old1, old2, gapped, recent, mutable };
+
+    var compacted = SegmentStorageCompactor.CompactForStorage(original, cutoff);
+
+    // old1+old2 合并成 20 秒区间，gapped 独立成段，recent（晚于阈值）和 mutable 原样保留
+    AssertEqual(4, compacted.Count, nameof(TestSegmentStorageCompactorMergesBucketsLosslessly) + " count");
+    AssertEqual(true, compacted.Any(s => s.StartUnixSeconds == t0.ToUnixTimeSeconds() && s.DurationSeconds == 20), nameof(TestSegmentStorageCompactorMergesBucketsLosslessly) + " merged range");
+    AssertEqual(true, compacted.Any(s => s.SegmentId == recent.SegmentId), nameof(TestSegmentStorageCompactorMergesBucketsLosslessly) + " recent preserved");
+    AssertEqual(true, compacted.Any(s => s.SegmentId == mutable.SegmentId), nameof(TestSegmentStorageCompactorMergesBucketsLosslessly) + " mutable preserved");
+
+    // 压缩前后按天统计结果一致（10 秒格覆盖不变）
+    var date = new DateOnly(2026, 7, 2);
+    var before = UsageSegmentMerger.BuildDailyRecord(date, original);
+    var after = UsageSegmentMerger.BuildDailyRecord(date, compacted);
+    AssertEqual(before.TotalSeconds, after.TotalSeconds, nameof(TestSegmentStorageCompactorMergesBucketsLosslessly) + " stats unchanged");
+
+    // 幂等：再次压缩结果数量不变
+    var again = SegmentStorageCompactor.CompactForStorage(compacted, cutoff);
+    AssertEqual(compacted.Count, again.Count, nameof(TestSegmentStorageCompactorMergesBucketsLosslessly) + " idempotent");
+}
+
+static void TestJsonStateStoreCompactsOldSegmentsOnSave()
+{
+    var path = Path.Combine(Path.GetTempPath(), "eye-time-tracker-tests", $"{Guid.NewGuid()}.json");
+    var store = new JsonStateStore(path);
+    var t0 = new DateTimeOffset(2026, 7, 2, 12, 0, 0, TimeSpan.Zero);
+    var segments = Enumerable.Range(0, 100)
+        .Select(i => Segment("pc", "windows", "pc-input", t0.AddSeconds(i * 10), 10))
+        .ToList();
+    store.Save(new AppState { DeviceId = "pc", Segments = segments });
+
+    var loaded = store.Load();
+    AssertEqual(1, loaded.Segments.Count, nameof(TestJsonStateStoreCompactsOldSegmentsOnSave) + " compacted to one range");
+    AssertEqual(1000L, loaded.Segments[0].DurationSeconds, nameof(TestJsonStateStoreCompactsOldSegmentsOnSave) + " range duration");
+}
+
 static void TestSegmentsSplitFixedBucketsAcrossHours()
 {
     var local = new DateTime(2026, 7, 2, 8, 59, 58);
@@ -1906,10 +2009,11 @@ TestMutableUsageSegmentsCompactContiguousTicks();
 TestMutableUsageSegmentsKeepGaps();
 TestAppStateNormalizesSegmentsAndDeviceId();
 TestPcSyncCoordinatorAppliesAndroidSegmentsAndReturnsPcSegments();
+TestPcSyncCoordinatorRespondsWithIncrementalSegments();
 TestPcSyncCoordinatorUpdatesMutableSegments();
 TestPcSyncCoordinatorRejectsUnpairedSync();
 TestPcSyncCoordinatorRejectsUnsignedPairedSync();
-TestPcSyncCoordinatorBackfillsPcSegmentsWhenAndroidCursorIsStale();
+TestPcSyncCoordinatorOmitsSegmentsOlderThanCursor();
 TestPcSyncCoordinatorBackfillsLegacyDailyRecordsAsSegments();
 TestPcSyncCoordinatorBackfillsLegacyDailyRecordsWhenDateHasModernSegment();
 TestLegacyBackfillSubtractsModernSegmentsInSameHour();
@@ -1934,6 +2038,8 @@ TestSegmentsUseFixedTenSecondBucketsForArbitraryStartSeconds();
 TestSegmentsSplitFixedBucketsAcrossHours();
 TestSegmentsSessionBreakGapCalculation();
 TestSegmentsContinuousBucketsProduceSingleSession();
+TestSegmentStorageCompactorMergesBucketsLosslessly();
+TestJsonStateStoreCompactsOldSegmentsOnSave();
 TestIntervalMergerKeepsExactSeconds();
 TestIntervalMergerSplitsExactSecondsAcrossHours();
 TestIntervalMergerDeDuplicatesPartialOverlap();

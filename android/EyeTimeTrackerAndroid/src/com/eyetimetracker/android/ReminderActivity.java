@@ -16,6 +16,7 @@ public final class ReminderActivity extends Activity {
     public static final String EXTRA_REMINDER_STEP = "reminder_step";
     public static final String EXTRA_TITLE = "title";
     public static final String EXTRA_MESSAGE = "message";
+    public static final String EXTRA_ACCENT_COLOR = "accent_color";
 
     private static final int COLOR_BG = Color.rgb(248, 252, 250);
     private static final int COLOR_TEXT = Color.rgb(17, 24, 39);
@@ -31,16 +32,21 @@ public final class ReminderActivity extends Activity {
         int reminderStep = Math.max(0, getIntent().getIntExtra(EXTRA_REMINDER_STEP, 0));
         String customTitle = getIntent().getStringExtra(EXTRA_TITLE);
         String customMessage = getIntent().getStringExtra(EXTRA_MESSAGE);
-        String title = customTitle == null || customTitle.trim().isEmpty()
-                ? ReminderAlert.title(this)
-                : customTitle;
+        boolean hasCustomContent = customTitle != null && !customTitle.trim().isEmpty();
+        String title = hasCustomContent
+                ? customTitle
+                : ReminderAlert.cumulativeTitle(this, reminderMinutes, reminderStep);
         String message = customMessage == null || customMessage.trim().isEmpty()
                 ? ReminderAlert.message(this, reminderMinutes, repeatReminder, reminderStep)
                 : customMessage;
-        setContentView(buildUi(title, message));
+        // 连续用眼=绿色，累计用眼=橙红；未指定时按累计（本页默认入口是累计提醒广播）
+        int accent = getIntent().getIntExtra(
+                EXTRA_ACCENT_COLOR,
+                hasCustomContent ? COLOR_GREEN : ReminderNotificationProfile.ACCENT_CUMULATIVE);
+        setContentView(buildUi(title, message, accent));
     }
 
-    private LinearLayout buildUi(String titleText, String messageText) {
+    private LinearLayout buildUi(String titleText, String messageText, int accentColor) {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER);
@@ -55,13 +61,19 @@ public final class ReminderActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
 
+        android.view.View band = new android.view.View(this);
+        band.setBackground(rounded(accentColor, dp(999), Color.TRANSPARENT, 0));
+        card.addView(band, new LinearLayout.LayoutParams(dp(56), dp(8)));
+
         TextView title = new TextView(this);
         title.setText(titleText);
         title.setTextSize(28);
-        title.setTextColor(COLOR_TEXT);
+        title.setTextColor(accentColor);
         title.setTypeface(AppFonts.bold(this));
         title.setIncludeFontPadding(false);
-        card.addView(title, matchWrap());
+        LinearLayout.LayoutParams titleParams = matchWrap();
+        titleParams.topMargin = dp(14);
+        card.addView(title, titleParams);
 
         TextView message = new TextView(this);
         message.setText(messageText);
@@ -79,7 +91,7 @@ public final class ReminderActivity extends Activity {
         okButton.setGravity(Gravity.CENTER);
         okButton.setTextColor(Color.WHITE);
         okButton.setMinHeight(dp(56));
-        okButton.setBackground(rounded(COLOR_GREEN, dp(999), Color.TRANSPARENT, 0));
+        okButton.setBackground(rounded(accentColor, dp(999), Color.TRANSPARENT, 0));
         okButton.setOnClickListener(v -> finish());
         LinearLayout.LayoutParams buttonParams = matchWrap();
         buttonParams.topMargin = dp(28);

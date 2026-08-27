@@ -47,8 +47,11 @@
     <string name="duration_hours_minutes_padded" formatted="false">{hours} hr {minutes:00} min</string>
     <string name="duration_minutes" formatted="false">{minutes} min</string>
     <string name="duration_zero_minutes" formatted="false">0 min</string>
-    <string name="eye_care_reminders_continuous_alert_message" formatted="false">You have been looking at the screen continuously. Look far away and relax your eyes.</string>
-    <string name="eye_care_reminders_continuous_alert_title" formatted="false">Look far away</string>
+    <string name="eye_care_reminders_continuous_alert_emphasis_long" formatted="false">walk for two minutes</string>
+    <string name="eye_care_reminders_continuous_alert_emphasis_short" formatted="false">count 20 seconds silently</string>
+    <string name="eye_care_reminders_continuous_alert_message" formatted="false">You have been looking at the screen for a while. Look into the distance and count 20 seconds silently to relax your ciliary muscles.</string>
+    <string name="eye_care_reminders_continuous_alert_message_long" formatted="false">You have been on the screen for quite a while. Stand up and walk for two minutes, then look into the distance to relax your eyes.</string>
+    <string name="eye_care_reminders_continuous_alert_title" formatted="false">Continuous screen time: {minutes} min</string>
     <string name="eye_care_reminders_continuous_desc" formatted="false">Reminds you to look far away after continuous screen use.</string>
     <string name="eye_care_reminders_continuous_title" formatted="false">Continuous Use Reminder</string>
     <string name="eye_care_reminders_cumulative_desc" formatted="false">Reminds you when today\'s total screen time reaches the set limit.</string>
@@ -241,11 +244,12 @@
     <string name="pair_pc_title" formatted="false">Pair Phone</string>
     <string name="pair_pc_validation_code_required" formatted="false">Enter the 6-digit code shown on your phone.</string>
     <string name="reminder_alert_title" formatted="false">Eye Break Reminder</string>
-    <string name="reminder_android_body_once" formatted="false">You have reached {duration} of screen time today. Give your eyes a short break.</string>
-    <string name="reminder_android_body_repeat" formatted="false">This is the {step} time today you have reached {minutes} minutes. Give your eyes a short break.</string>
-    <string name="reminder_body_once" formatted="false">You have reached {duration} of screen time today. Give your eyes a short break.</string>
-    <string name="reminder_body_repeat" formatted="false">This is the {step} time today you have reached {minutes} minutes. Give your eyes a short break.</string>
+    <string name="reminder_android_body_once" formatted="false">You have reached {duration} of screen time today. Please rest your eyes soon.</string>
+    <string name="reminder_android_body_repeat" formatted="false">You have reached {minutes} minutes of screen time for the {step} time today. Please rest your eyes soon.</string>
+    <string name="reminder_body_once" formatted="false">You have reached {duration} of screen time today. Please rest your eyes soon.</string>
+    <string name="reminder_body_repeat" formatted="false">You have reached {minutes} minutes of screen time for the {step} time today. Please rest your eyes soon.</string>
     <string name="reminder_channel_description" formatted="false">Reminds you to rest when screen time reaches your limit</string>
+    <string name="reminder_cumulative_title" formatted="false">Today\'s screen time: {duration}</string>
     <string name="reminder_pc_connected_readonly" formatted="false">Phone connected. Change reminder settings on your phone.</string>
     <string name="reminder_repeat_label" formatted="false">Repeat reminders (show a reminder each time the limit is reached;\nthis may happen multiple times a day)</string>
     <string name="reminder_repeat_short" formatted="false">Repeat reminders</string>
@@ -312,8 +316,10 @@
     <string name="tray_pair_success_title" formatted="false">Phone paired</string>
     <string name="tray_pair_waiting_body" formatted="false">Waiting for your phone to connect. The code is valid for 5 minutes.</string>
     <string name="tray_quit" formatted="false">Quit</string>
+    <string name="tray_resume_reminders" formatted="false">Resume Alerts</string>
     <string name="tray_stats_page" formatted="false">Stats</string>
     <string name="tray_status" formatted="false">Tracking</string>
+    <string name="tray_stop_reminders" formatted="false">Pause Alerts</string>
     <string name="usage_status_activity_desc" formatted="false">Only used to tell whether you are walking. It does not read location or routes.</string>
     <string name="usage_status_activity_title" formatted="false">Physical activity permission</string>
     <string name="usage_status_background_desc" formatted="false">Allow background operation in battery settings for more reliable tracking and reminders.</string>

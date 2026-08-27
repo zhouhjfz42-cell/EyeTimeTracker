@@ -109,7 +109,9 @@ public final class AndroidSyncResponseReader {
                     state.optString("DeviceId", state.optString("deviceId", "")),
                     state.optString("Platform", state.optString("platform", "")),
                     state.optBoolean("IsCounting", state.optBoolean("isCounting", false)),
-                    state.optLong("CurrentSessionStartedUnixSeconds", state.optLong("currentSessionStartedUnixSeconds", 0L)));
+                    state.optLong("CurrentSessionStartedUnixSeconds", state.optLong("currentSessionStartedUnixSeconds", 0L)),
+                    state.optLong("ContinuousClaimSessionStartedUnixSeconds", state.optLong("continuousClaimSessionStartedUnixSeconds", 0L)),
+                    state.optInt("ContinuousClaimLastStep", state.optInt("continuousClaimLastStep", 0)));
         } catch (JSONException ignored) {
             return new ReminderRuntimeState();
         }

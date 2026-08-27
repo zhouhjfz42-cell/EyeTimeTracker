@@ -22,7 +22,12 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.text.SpannableString;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.StyleSpan;
+import android.graphics.Typeface;
 import android.util.Log;
+import android.widget.RemoteViews;
 import java.time.LocalDate;
 
 public final class EyeTimeService extends Service implements SensorEventListener {
@@ -307,7 +312,11 @@ public final class EyeTimeService extends Service implements SensorEventListener
             return;
         }
         new Thread(() -> {
-            refreshAppUsageBlocking(today, force);
+            try {
+                refreshAppUsageBlocking(today, force);
+            } catch (Throwable ex) {
+                Log.e(DIAG_TAG, "EyeTimeService app usage refresh crashed", ex);
+            }
         }, "EyeTimeAppUsageRefresh").start();
     }
 
@@ -361,6 +370,8 @@ public final class EyeTimeService extends Service implements SensorEventListener
                     return;
                 }
                 store.warmPastDailyStatsCache(today);
+            } catch (Throwable ex) {
+                Log.e(DIAG_TAG, "EyeTimeService daily stats cache warm crashed", ex);
             } finally {
                 statsCacheWarmInFlight = false;
             }
@@ -384,6 +395,8 @@ public final class EyeTimeService extends Service implements SensorEventListener
             try {
                 syncRunner.syncOnce();
                 store.warmPastDailyStatsCache(LocalDate.now());
+            } catch (Throwable ex) {
+                Log.e(DIAG_TAG, "EyeTimeService sync crashed", ex);
             } finally {
                 syncInFlight = false;
             }
@@ -499,6 +512,8 @@ public final class EyeTimeService extends Service implements SensorEventListener
                         + " directHost=" + directParentHost
                         + " directPort=" + directParentPort
                         + " error=" + result.error);
+            } catch (Throwable ex) {
+                Log.e(DIAG_TAG, "EyeTimeService family stats upload crashed", ex);
             } finally {
                 handler.post(() -> {
                     familyStatsUploadInFlight = false;
@@ -666,8 +681,10 @@ public final class EyeTimeService extends Service implements SensorEventListener
                             + " step=" + step);
             showSimpleReminder(
                     CONTINUOUS_REMINDER_ID,
-                    getString(R.string.eye_care_reminders_continuous_alert_title),
-                    getString(R.string.eye_care_reminders_continuous_alert_message));
+                    ReminderNotificationProfile.ACCENT_CONTINUOUS,
+                    ReminderAlert.continuousTitle(this, thresholdMinutes),
+                    ReminderAlert.continuousMessage(this, thresholdMinutes),
+                    ReminderAlert.continuousEmphasis(this, thresholdMinutes));
         }
     }
 
@@ -814,70 +831,84 @@ public final class EyeTimeService extends Service implements SensorEventListener
             return;
         }
 
+        int safeMinutes = ReminderThreshold.clampMinutes(reminderMinutes);
+        String totalDuration = ReminderThreshold.format(this, safeMinutes * Math.max(1, reminderStep));
+        String title = ReminderAlert.cumulativeTitle(this, totalDuration);
+        String message = ReminderAlert.message(this, safeMinutes, repeatReminder, reminderStep);
         Intent alertIntent = new Intent(this, ReminderActivity.class)
-                .putExtra(ReminderActivity.EXTRA_REMINDER_MINUTES, reminderMinutes)
-                .putExtra(ReminderActivity.EXTRA_REMINDER_REPEAT, repeatReminder)
-                .putExtra(ReminderActivity.EXTRA_REMINDER_STEP, reminderStep)
+                .putExtra(ReminderActivity.EXTRA_TITLE, title)
+                .putExtra(ReminderActivity.EXTRA_MESSAGE, message)
+                .putExtra(ReminderActivity.EXTRA_ACCENT_COLOR, ReminderNotificationProfile.ACCENT_CUMULATIVE)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent alertPendingIntent = PendingIntent.getActivity(
                 this,
                 REMINDER_ID,
                 alertIntent,
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                ? new Notification.Builder(this, REMINDER_CHANNEL_ID)
-                : new Notification.Builder(this);
-        String message = ReminderAlert.message(this, reminderMinutes, repeatReminder, reminderStep);
-        Notification notification = builder
-                .setContentTitle(ReminderAlert.title(this))
-                .setContentText(message)
-                .setSmallIcon(R.drawable.ic_launcher)
-                .setContentIntent(alertPendingIntent)
-                .setAutoCancel(true)
-                .setPriority(ReminderNotificationProfile.NOTIFICATION_PRIORITY)
-                .setCategory(Notification.CATEGORY_REMINDER)
-                .setVisibility(Notification.VISIBILITY_PUBLIC)
-                .setDefaults(Notification.DEFAULT_ALL)
-                .setStyle(new Notification.BigTextStyle().bigText(message))
-                .setFullScreenIntent(alertPendingIntent, ReminderNotificationProfile.USE_FULL_SCREEN_INTENT)
-                .build();
+        Notification notification = buildReminderBanner(
+                ReminderNotificationProfile.ACCENT_CUMULATIVE,
+                title,
+                emphasize(message, totalDuration, ReminderNotificationProfile.ACCENT_CUMULATIVE),
+                alertPendingIntent);
         NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager != null) {
             manager.notify(REMINDER_ID, notification);
         }
     }
 
-    private void showSimpleReminder(int notificationId, String title, String message) {
+    private void showSimpleReminder(int notificationId, int accentColor, String title, String message, String emphasis) {
         Intent alertIntent = new Intent(this, ReminderActivity.class)
                 .putExtra(ReminderActivity.EXTRA_TITLE, title)
                 .putExtra(ReminderActivity.EXTRA_MESSAGE, message)
+                .putExtra(ReminderActivity.EXTRA_ACCENT_COLOR, accentColor)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent alertPendingIntent = PendingIntent.getActivity(
                 this,
                 notificationId,
                 alertIntent,
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                ? new Notification.Builder(this, REMINDER_CHANNEL_ID)
-                : new Notification.Builder(this);
-        Notification notification = builder
-                .setContentTitle(title)
-                .setContentText(message)
-                .setSmallIcon(R.drawable.ic_launcher)
-                .setContentIntent(alertPendingIntent)
-                .setAutoCancel(true)
-                .setPriority(ReminderNotificationProfile.NOTIFICATION_PRIORITY)
-                .setCategory(Notification.CATEGORY_REMINDER)
-                .setVisibility(Notification.VISIBILITY_PUBLIC)
-                .setDefaults(Notification.DEFAULT_ALL)
-                .setStyle(new Notification.BigTextStyle().bigText(message))
-                .setFullScreenIntent(alertPendingIntent, ReminderNotificationProfile.USE_FULL_SCREEN_INTENT)
-                .build();
+        Notification notification = buildReminderBanner(
+                accentColor,
+                title,
+                emphasize(message, emphasis, accentColor),
+                alertPendingIntent);
         NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager != null) {
             manager.notify(notificationId, notification);
         }
-        startActivity(alertIntent);
+    }
+
+    private Notification buildReminderBanner(int accentColor, String title, CharSequence body, PendingIntent contentIntent) {
+        RemoteViews views = new RemoteViews(getPackageName(), R.layout.reminder_notification);
+        views.setInt(R.id.reminder_banner_band, "setBackgroundColor", accentColor);
+        views.setTextColor(R.id.reminder_banner_title, accentColor);
+        views.setTextViewText(R.id.reminder_banner_title, title);
+        views.setTextViewText(R.id.reminder_banner_body, body);
+        Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                ? new Notification.Builder(this, REMINDER_CHANNEL_ID)
+                : new Notification.Builder(this);
+        builder.setSmallIcon(R.drawable.ic_launcher)
+                .setContentIntent(contentIntent)
+                .setAutoCancel(true)
+                .setPriority(ReminderNotificationProfile.NOTIFICATION_PRIORITY)
+                .setCategory(Notification.CATEGORY_REMINDER)
+                .setVisibility(Notification.VISIBILITY_PUBLIC)
+                .setCustomContentView(views)
+                .setStyle(new Notification.DecoratedCustomViewStyle());
+        return builder.build();
+    }
+
+    private static CharSequence emphasize(String body, String keyword, int accentColor) {
+        if (body == null) {
+            return "";
+        }
+        SpannableString spannable = new SpannableString(body);
+        int index = keyword == null || keyword.isEmpty() ? -1 : body.indexOf(keyword);
+        if (index >= 0) {
+            spannable.setSpan(new StyleSpan(Typeface.BOLD), index, index + keyword.length(), 0);
+            spannable.setSpan(new ForegroundColorSpan(accentColor), index, index + keyword.length(), 0);
+        }
+        return spannable;
     }
 
     private Uri defaultReminderSound() {

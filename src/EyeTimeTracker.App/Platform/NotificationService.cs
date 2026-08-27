@@ -48,7 +48,7 @@ public sealed class NotificationService
         ShowDailyReminderCore(settings, reminderStep);
     }
 
-    public void ShowContinuousReminder(string requestId)
+    public void ShowContinuousReminder(string requestId, int thresholdSeconds)
     {
         if (SuppressReminders)
         {
@@ -70,7 +70,7 @@ public sealed class NotificationService
         {
             try
             {
-                _dispatcher.BeginInvoke(() => ShowContinuousReminderCore(requestId));
+                _dispatcher.BeginInvoke(() => ShowContinuousReminderCore(requestId, thresholdSeconds));
                 ReminderDiagnosticLog.RecordEvent(
                     "连续用眼提醒/已提交UI线程",
                     DateTimeOffset.Now,
@@ -88,19 +88,24 @@ public sealed class NotificationService
             return;
         }
 
-        ShowContinuousReminderCore(requestId);
+        ShowContinuousReminderCore(requestId, thresholdSeconds);
     }
 
     private void ShowDailyReminderCore(TrackerSettings settings, int reminderStep)
     {
-        var title = ReminderText.Title;
-        var body = ReminderText.Body(settings.ReminderThresholdSeconds, true, reminderStep);
-        using var dialog = new PcReminderDialog(title, body, _notifyIcon.Icon);
+        var title = ReminderText.CumulativeTitle(settings.ReminderThresholdSeconds, reminderStep);
+        var body = ReminderText.CumulativeBody(settings.ReminderThresholdSeconds, reminderStep);
+        using var dialog = new PcReminderDialog(
+            title,
+            body,
+            _notifyIcon.Icon,
+            PcReminderDialog.AccentCumulative,
+            ReminderText.CumulativeEmphasis(settings.ReminderThresholdSeconds, reminderStep));
         PlayReminderSound();
         dialog.ShowDialog();
     }
 
-    private void ShowContinuousReminderCore(string requestId)
+    private void ShowContinuousReminderCore(string requestId, int thresholdSeconds)
     {
         try
         {
@@ -110,9 +115,11 @@ public sealed class NotificationService
                 requestId);
 
             using var dialog = new PcReminderDialog(
-                AppText.Get("eyeCareReminders.continuousAlertTitle"),
-                AppText.Get("eyeCareReminders.continuousAlertMessage"),
-                _notifyIcon.Icon);
+                ReminderText.ContinuousTitle(thresholdSeconds),
+                ReminderText.ContinuousBody(thresholdSeconds),
+                _notifyIcon.Icon,
+                PcReminderDialog.AccentContinuous,
+                ReminderText.ContinuousEmphasis(thresholdSeconds));
 
             ReminderDiagnosticLog.RecordEvent(
                 "连续用眼提醒/弹窗已创建",

@@ -7,6 +7,9 @@ namespace EyeTimeTracker.App.Sync;
 
 public sealed class PcSyncCoordinator
 {
+    // 增量下发的重叠窗口，避免时钟误差导致边界数据丢失；重复数据由接收端按 ID 去重
+    private const long SyncIncrementalOverlapSeconds = 120;
+
     private readonly Func<AppState> _loadState;
     private readonly Action<AppState> _saveState;
     private readonly Func<long> _unixClock;
@@ -47,8 +50,8 @@ public sealed class PcSyncCoordinator
             Accepted = true,
             DeviceId = state.DeviceId,
             Platform = state.Platform,
-            Segments = GetLocalSegments(state),
-            AppUsageEntries = GetLocalAppUsageEntries(state),
+            Segments = GetLocalSegments(state, request.SinceUnixSeconds),
+            AppUsageEntries = GetLocalAppUsageEntries(state, request.SinceUnixSeconds),
             ReminderState = CloneReminderState(state.Sync.LocalReminderState),
             SupportsMutableSegments = true,
             TimestampUnixSeconds = state.Sync.LastSyncUnixSeconds
@@ -235,7 +238,7 @@ public sealed class PcSyncCoordinator
             && segment.EndUnixSeconds > segment.StartUnixSeconds;
     }
 
-    private static List<UsageSegment> GetLocalSegments(AppState state)
+    private static List<UsageSegment> GetLocalSegments(AppState state, long sinceUnixSeconds)
     {
         return LegacyUsageSegments.NormalizeEffectiveSegments(
                 state.Segments,
@@ -243,8 +246,21 @@ public sealed class PcSyncCoordinator
                 state.DeviceId,
                 state.Platform)
             .Where(segment => string.Equals(segment.DeviceId, state.DeviceId, StringComparison.Ordinal))
+            .Where(segment => ShouldIncludeInResponse(segment.UpdatedAtUnixSeconds, segment.CreatedAtUnixSeconds, sinceUnixSeconds))
             .Select(CloneSegment)
             .ToList();
+    }
+
+    private static bool ShouldIncludeInResponse(long updatedAtUnixSeconds, long createdAtUnixSeconds, long sinceUnixSeconds)
+    {
+        if (sinceUnixSeconds <= 0)
+        {
+            // 首次同步全量下发，保证对端拿到完整历史
+            return true;
+        }
+
+        var cutoff = sinceUnixSeconds - SyncIncrementalOverlapSeconds;
+        return Math.Max(updatedAtUnixSeconds, createdAtUnixSeconds) >= cutoff;
     }
 
     private static void MergeAppUsageEntries(AppState state, IEnumerable<AppUsageEntry> incomingEntries)
@@ -285,11 +301,12 @@ public sealed class PcSyncCoordinator
         }
     }
 
-    private static List<AppUsageEntry> GetLocalAppUsageEntries(AppState state)
+    private static List<AppUsageEntry> GetLocalAppUsageEntries(AppState state, long sinceUnixSeconds)
     {
         return (state.AppUsageEntries ?? new List<AppUsageEntry>())
             .Where(entry => string.Equals(entry.DeviceId, state.DeviceId, StringComparison.Ordinal)
                 && IsUsableAppUsageEntry(entry))
+            .Where(entry => ShouldIncludeInResponse(entry.UpdatedAtUnixSeconds, 0L, sinceUnixSeconds))
             .Select(CloneAppUsageEntry)
             .ToList();
     }
@@ -368,7 +385,9 @@ public sealed class PcSyncCoordinator
             DeviceId = state.DeviceId,
             Platform = state.Platform,
             IsCounting = state.IsCounting,
-            CurrentSessionStartedUnixSeconds = state.CurrentSessionStartedUnixSeconds
+            CurrentSessionStartedUnixSeconds = state.CurrentSessionStartedUnixSeconds,
+            ContinuousClaimSessionStartedUnixSeconds = state.ContinuousClaimSessionStartedUnixSeconds,
+            ContinuousClaimLastStep = state.ContinuousClaimLastStep
         };
     }
 

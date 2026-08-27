@@ -113,4 +113,7 @@ public sealed class ReminderRuntimeState
     public string Platform { get; set; } = string.Empty;
     public bool IsCounting { get; set; }
     public long CurrentSessionStartedUnixSeconds { get; set; }
+    // 连续用眼提醒认领状态：会话起点（共享基线）和已提醒到第几次，双端同步后取较大值对齐
+    public long ContinuousClaimSessionStartedUnixSeconds { get; set; }
+    public int ContinuousClaimLastStep { get; set; }
 }

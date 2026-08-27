@@ -47,8 +47,11 @@
     <string name="duration_hours_minutes_padded" formatted="false">{hours}小时{minutes:00}分</string>
     <string name="duration_minutes" formatted="false">{minutes}分钟</string>
     <string name="duration_zero_minutes" formatted="false">0分钟</string>
-    <string name="eye_care_reminders_continuous_alert_message" formatted="false">你已经连续看屏幕一段时间了。请看向远处，放松一下眼睛。</string>
-    <string name="eye_care_reminders_continuous_alert_title" formatted="false">该望向远处了</string>
+    <string name="eye_care_reminders_continuous_alert_emphasis_long" formatted="false">站起来走两分钟</string>
+    <string name="eye_care_reminders_continuous_alert_emphasis_short" formatted="false">默念 20 秒</string>
+    <string name="eye_care_reminders_continuous_alert_message" formatted="false">你已经连续看屏幕一段时间了，看向远处心里默念 20 秒，放松一下眼睛的睫状肌。</string>
+    <string name="eye_care_reminders_continuous_alert_message_long" formatted="false">连续看屏幕挺久了，站起来走两分钟，眼睛看向远处放松一下。</string>
+    <string name="eye_care_reminders_continuous_alert_title" formatted="false">已连续用眼{minutes}分钟</string>
     <string name="eye_care_reminders_continuous_desc" formatted="false">连续看屏幕后提醒望向远处。</string>
     <string name="eye_care_reminders_continuous_title" formatted="false">连续用眼提醒</string>
     <string name="eye_care_reminders_cumulative_desc" formatted="false">当天累计用眼达到设定时间后提醒休息。</string>
@@ -241,11 +244,12 @@
     <string name="pair_pc_title" formatted="false">手机配对</string>
     <string name="pair_pc_validation_code_required" formatted="false">请输入手机上显示的 6 位数字配对码。</string>
     <string name="reminder_alert_title" formatted="false">用眼提醒</string>
-    <string name="reminder_android_body_once" formatted="false">今天用眼时间已达到 {duration}，建议休息一下眼睛。</string>
-    <string name="reminder_android_body_repeat" formatted="false">今天用眼时间已经第{step}次达到{minutes}分钟了，建议休息一下眼睛。</string>
-    <string name="reminder_body_once" formatted="false">今天的屏幕使用时间已达到{duration}，建议休息一下眼睛。</string>
-    <string name="reminder_body_repeat" formatted="false">今天的屏幕使用时间已经第{step}次达到{minutes}分钟了，建议休息一下眼睛。</string>
+    <string name="reminder_android_body_once" formatted="false">今天用眼时间已达到{duration}，请尽快休息眼睛。</string>
+    <string name="reminder_android_body_repeat" formatted="false">今天用眼时间已第{step}次达到{minutes}分钟，请尽快休息眼睛。</string>
+    <string name="reminder_body_once" formatted="false">今天用眼时间已达到{duration}，请尽快休息眼睛。</string>
+    <string name="reminder_body_repeat" formatted="false">今天用眼时间已第{step}次达到{minutes}分钟，请尽快休息眼睛。</string>
     <string name="reminder_channel_description" formatted="false">到达设定用眼时长时提醒休息</string>
+    <string name="reminder_cumulative_title" formatted="false">今日累计用眼{duration}</string>
     <string name="reminder_pc_connected_readonly" formatted="false">已连接手机，请在手机端修改提醒</string>
     <string name="reminder_repeat_label" formatted="false">反复提醒（每达到时间就提醒一次，一天\n内可能出现多次提醒）</string>
     <string name="reminder_repeat_short" formatted="false">反复提醒</string>
@@ -312,8 +316,10 @@
     <string name="tray_pair_success_title" formatted="false">手机配对成功</string>
     <string name="tray_pair_waiting_body" formatted="false">电脑已开始等待手机连接，5分钟内有效。</string>
     <string name="tray_quit" formatted="false">退出</string>
+    <string name="tray_resume_reminders" formatted="false">恢复弹窗</string>
     <string name="tray_stats_page" formatted="false">统计页</string>
     <string name="tray_status" formatted="false">统计</string>
+    <string name="tray_stop_reminders" formatted="false">停止弹窗</string>
     <string name="usage_status_activity_desc" formatted="false">仅用于判断是否正在走路，不读取位置或路线。</string>
     <string name="usage_status_activity_title" formatted="false">身体活动权限</string>
     <string name="usage_status_background_desc" formatted="false">建议在电池设置中允许后台运行，让统计和提醒更稳定。</string>
