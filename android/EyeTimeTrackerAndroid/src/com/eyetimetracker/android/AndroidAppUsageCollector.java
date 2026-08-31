@@ -16,6 +16,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
 
 public final class AndroidAppUsageCollector {
     private static final String DIAG_TAG = "EyeTimeDiag";
@@ -26,33 +28,50 @@ public final class AndroidAppUsageCollector {
         this.context = context == null ? null : context.getApplicationContext();
     }
 
-    public List<AppUsageEntry> collectDailyUsage(EyeTimeStore store, LocalDate date, long nowMillis) {
+    public static final class CollectResult {
+        public final List<AppUsageEntry> entries;
+        // 窗口结束时仍在前台的包（start 记为窗口末尾），下一窗口以此为种子继续
+        public final Map<String, Long> openSessions;
+
+        CollectResult(List<AppUsageEntry> entries, Map<String, Long> openSessions) {
+            this.entries = entries;
+            this.openSessions = openSessions;
+        }
+    }
+
+    public CollectResult collectDailyUsage(EyeTimeStore store, LocalDate date, long nowMillis) {
         List<AppUsageEntry> entries = new ArrayList<>();
+        Map<String, Long> openSessions = new HashMap<>();
+        CollectResult empty = new CollectResult(entries, openSessions);
         if (context == null || store == null || date == null) {
-            return entries;
+            return empty;
         }
         UsageStatsManager manager = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
         if (manager == null) {
-            return entries;
+            return empty;
         }
 
-        long startMillis = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
+        long dayStartMillis = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
         long endMillis = Math.min(
                 date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
-                Math.max(startMillis, nowMillis));
-        if (endMillis <= startMillis) {
-            return entries;
+                Math.max(dayStartMillis, nowMillis));
+        if (endMillis <= dayStartMillis) {
+            return empty;
         }
+
+        // MIUI 只向应用返回最近约 2 小时的事件，全天重算会丢掉更早的时长。
+        // 改为增量累加：每次只计算 [上次游标, 现在] 的窗口，时长累加到当日条目上。
+        long cursorMillis = store.getAppUsageCursorMillis(date);
+        long startMillis = Math.max(dayStartMillis, cursorMillis);
+        Map<String, Long> seededSessions = cursorMillis > dayStartMillis
+                ? store.getAppUsageOpenSessions(date)
+                : new HashMap<>();
 
         PackageManager packageManager = context.getPackageManager();
         Map<String, String> installedApps = readInstalledLaunchableApps(packageManager);
-        Map<String, Long> eventSecondsByPackage = readForegroundSeconds(manager, startMillis, endMillis);
-        Map<String, Long> statsSecondsByPackage = eventSecondsByPackage.isEmpty()
-                ? readAggregatedUsageSeconds(manager, startMillis, endMillis)
-                : new HashMap<>();
-        Map<String, Long> secondsByPackage = eventSecondsByPackage.isEmpty()
-                ? statsSecondsByPackage
-                : eventSecondsByPackage;
+        ForegroundWindow window = readForegroundSeconds(manager, startMillis, endMillis, seededSessions);
+        openSessions.putAll(window.openSessions);
+        Map<String, Long> secondsByPackage = window.secondsByPackage;
         String deviceId = store.getDeviceId();
         long updatedAt = nowMillis / 1000L;
         int skippedShort = 0;
@@ -63,9 +82,8 @@ public final class AndroidAppUsageCollector {
         for (Map.Entry<String, Long> value : secondsByPackage.entrySet()) {
             String packageName = value.getKey();
             long seconds = value.getValue() == null ? 0L : value.getValue();
-            if (seconds < MIN_APP_USAGE_SECONDS) {
+            if (seconds <= 0L) {
                 skippedShort++;
-                addSample(samples, "short", packageName, seconds);
                 continue;
             }
             if (shouldSkipPackage(packageManager, packageName)) {
@@ -96,21 +114,17 @@ public final class AndroidAppUsageCollector {
                     seconds,
                     updatedAt));
         }
-        List<AppUsageEntry> dedupedEntries = capToPhoneUsageSeconds(dedupeSameNamedApps(entries), store, date);
-        int duplicateNames = entries.size() - dedupedEntries.size();
         Log.i(DIAG_TAG, "AndroidAppUsageCollector date=" + date
+                + " windowSec=" + ((endMillis - startMillis) / 1000L)
                 + " launchable=" + installedApps.size()
-                + " eventPackages=" + eventSecondsByPackage.size()
-                + " statsPackages=" + statsSecondsByPackage.size()
-                + " mergedPackages=" + secondsByPackage.size()
-                + " entries=" + dedupedEntries.size()
-                + " duplicateNames=" + duplicateNames
-                + " skippedShort=" + skippedShort
+                + " eventPackages=" + secondsByPackage.size()
+                + " entries=" + entries.size()
                 + " skippedSystem=" + skippedSystem
                 + " skippedNotLaunchable=" + skippedNotLaunchable
                 + " skippedNoLabel=" + skippedNoLabel
+                + " openSessions=" + openSessions.size()
                 + " samples=" + samples);
-        return dedupedEntries;
+        return new CollectResult(entries, openSessions);
     }
 
     private Map<String, String> readInstalledLaunchableApps(PackageManager packageManager) {
@@ -141,16 +155,45 @@ public final class AndroidAppUsageCollector {
         return apps;
     }
 
-    private Map<String, Long> readForegroundSeconds(UsageStatsManager manager, long startMillis, long endMillis) {
+    private static final class EventRecord {
+        final int eventType;
+        final long timestampMillis;
+        final String packageName;
+        final String className;
+
+        EventRecord(int eventType, long timestampMillis, String packageName, String className) {
+            this.eventType = eventType;
+            this.timestampMillis = timestampMillis;
+            this.packageName = packageName;
+            this.className = className;
+        }
+    }
+
+    private static final class ForegroundWindow {
+        final Map<String, Long> secondsByPackage;
+        final Map<String, Long> openSessions;
+
+        ForegroundWindow(Map<String, Long> secondsByPackage, Map<String, Long> openSessions) {
+            this.secondsByPackage = secondsByPackage;
+            this.openSessions = openSessions;
+        }
+    }
+
+    private ForegroundWindow readForegroundSeconds(
+            UsageStatsManager manager,
+            long startMillis,
+            long endMillis,
+            Map<String, Long> seededSessions) {
         Map<String, Long> secondsByPackage = new HashMap<>();
+        Map<String, Long> openSessions = new HashMap<>();
         UsageEvents events;
         try {
             events = manager.queryEvents(startMillis, endMillis);
         } catch (Exception ex) {
-            return secondsByPackage;
+            return new ForegroundWindow(secondsByPackage, openSessions);
         }
         if (events == null) {
-            return secondsByPackage;
+            return new ForegroundWindow(secondsByPackage, openSessions);
         }
 
         // 按 (包名, 类名) 跟踪处于 resumed 状态的 activity；公开 API 拿不到 instanceId，
@@ -160,20 +203,53 @@ public final class AndroidAppUsageCollector {
         //    到达，单活跃模型会误判"应用退到后台"，丢掉之后整段使用时间；
         // 2) 必须有"新包前台则其它包截止"：MIUI 会丢 PAUSED/STOPPED 事件，纯计数器模型
         //    会把丢失关闭事件的 App 时长一直挂到当前时刻，造成虚高。
-        Map<String, Long> openActivityKeys = new HashMap<>();
-        Map<String, Integer> resumedCountByPackage = new HashMap<>();
-        Map<String, Long> sessionStartByPackage = new HashMap<>();
+        // MIUI 返回的事件不保证时间顺序（按任务分组），必须先按时间戳排序再处理。
+        List<EventRecord> sortedEvents = new ArrayList<>();
         UsageEvents.Event event = new UsageEvents.Event();
         while (events.hasNextEvent()) {
             events.getNextEvent(event);
-            String packageName = event.getPackageName();
+            sortedEvents.add(new EventRecord(
+                    event.getEventType(),
+                    event.getTimeStamp(),
+                    event.getPackageName(),
+                    event.getClassName()));
+        }
+        sortedEvents.sort((left, right) -> Long.compare(left.timestampMillis, right.timestampMillis));
+
+        Map<String, Long> openActivityKeys = new HashMap<>();
+        Map<String, Integer> resumedCountByPackage = new HashMap<>();
+        Map<String, Long> sessionStartByPackage = new HashMap<>();
+        Set<String> seededOpenPackages = new HashSet<>();
+        if (seededSessions != null) {
+            for (Map.Entry<String, Long> seed : seededSessions.entrySet()) {
+                // 上一窗口遗留的前台会话：从窗口起点继续计时，遇到该包任意后台事件时结束
+                sessionStartByPackage.put(seed.getKey(), startMillis);
+                resumedCountByPackage.put(seed.getKey(), 1);
+                seededOpenPackages.add(seed.getKey());
+            }
+        }
+
+        for (EventRecord item : sortedEvents) {
+            String packageName = item.packageName;
             if (packageName == null || packageName.trim().isEmpty()) {
                 continue;
             }
-            long timestamp = Math.max(startMillis, Math.min(endMillis, event.getTimeStamp()));
-            int type = event.getEventType();
-            String className = event.getClassName();
-            String activityKey = packageName + "" + (className == null ? "" : className);
+            long timestamp = Math.max(startMillis, Math.min(endMillis, item.timestampMillis));
+            int type = item.eventType;
+            if (isBackgroundEvent(type) && seededOpenPackages.contains(packageName)) {
+                Long seedStart = sessionStartByPackage.remove(packageName);
+                addSeconds(secondsByPackage, packageName,
+                        seedStart == null ? startMillis : seedStart, timestamp);
+                resumedCountByPackage.put(packageName, 0);
+                seededOpenPackages.remove(packageName);
+                continue;
+            }
+            if (isForegroundEvent(type) && seededOpenPackages.contains(packageName)) {
+                // 遗留会话仍在继续，忽略该包的前台事件直到它出现后台事件
+                continue;
+            }
+            String className = item.className;
+            String activityKey = packageName + "" + (className == null ? "" : className);
             if (isForegroundEvent(type)) {
                 if (openActivityKeys.put(activityKey, timestamp) == null) {
                     int resumedCount = resumedCountByPackage.getOrDefault(packageName, 0);
@@ -182,9 +258,6 @@ public final class AndroidAppUsageCollector {
                     }
                     resumedCountByPackage.put(packageName, resumedCount + 1);
                 }
-                // 手机同一时刻只有一个真正前台的 App：其它包的会话在此刻截止。
-                // MIUI 上会丢失部分 PAUSED/STOPPED 事件，没有这一步兜底，
-                // 丢失关闭事件的 App 会把时长一直挂到当前时刻（虚高）。
                 closeOtherPackageSessions(
                         secondsByPackage,
                         openActivityKeys,
@@ -204,8 +277,10 @@ public final class AndroidAppUsageCollector {
         }
         for (Map.Entry<String, Long> session : sessionStartByPackage.entrySet()) {
             addSeconds(secondsByPackage, session.getKey(), session.getValue(), endMillis);
+            // 会话起点记为窗口末尾，下一窗口从该点继续，避免重复累计
+            openSessions.put(session.getKey(), endMillis);
         }
-        return secondsByPackage;
+        return new ForegroundWindow(secondsByPackage, openSessions);
     }
 
     private static void closeOtherPackageSessions(
@@ -259,138 +334,11 @@ public final class AndroidAppUsageCollector {
         }
     }
 
-    private Map<String, Long> readAggregatedUsageSeconds(UsageStatsManager manager, long startMillis, long endMillis) {
-        Map<String, Long> secondsByPackage = new HashMap<>();
-        Map<String, UsageStats> statsByPackage;
-        try {
-            statsByPackage = manager.queryAndAggregateUsageStats(startMillis, endMillis);
-        } catch (Exception ex) {
-            return secondsByPackage;
-        }
-        if (statsByPackage == null || statsByPackage.isEmpty()) {
-            return secondsByPackage;
-        }
-        for (Map.Entry<String, UsageStats> value : statsByPackage.entrySet()) {
-            String packageName = value.getKey();
-            UsageStats stats = value.getValue();
-            if (packageName == null || packageName.trim().isEmpty() || stats == null) {
-                continue;
-            }
-            long millis = Math.max(0L, stats.getTotalTimeInForeground());
-            if (android.os.Build.VERSION.SDK_INT >= 29) {
-                millis = Math.max(millis, stats.getTotalTimeVisible());
-            }
-            long seconds = millis / 1000L;
-            if (seconds > 0L) {
-                secondsByPackage.put(packageName, seconds);
-            }
-        }
-        return secondsByPackage;
-    }
-
     private static void addSample(List<String> samples, String reason, String packageName, long seconds) {
         if (samples == null || samples.size() >= 6) {
             return;
         }
         samples.add(reason + ":" + packageName + "=" + seconds + "s");
-    }
-
-    private static List<AppUsageEntry> dedupeSameNamedApps(List<AppUsageEntry> entries) {
-        if (entries == null || entries.isEmpty()) {
-            return new ArrayList<>();
-        }
-        Map<String, AppUsageEntry> bestByName = new HashMap<>();
-        List<String> order = new ArrayList<>();
-        for (AppUsageEntry entry : entries) {
-            if (entry == null || entry.durationSeconds <= 0L) {
-                continue;
-            }
-            String key = appDisplayKey(entry);
-            AppUsageEntry existing = bestByName.get(key);
-            if (existing == null) {
-                bestByName.put(key, entry);
-                order.add(key);
-            } else if (entry.durationSeconds > existing.durationSeconds
-                    || (entry.durationSeconds == existing.durationSeconds
-                    && entry.updatedAtUnixSeconds > existing.updatedAtUnixSeconds)) {
-                bestByName.put(key, entry);
-            }
-        }
-        List<AppUsageEntry> values = new ArrayList<>();
-        for (String key : order) {
-            AppUsageEntry entry = bestByName.get(key);
-            if (entry != null) {
-                values.add(entry);
-            }
-        }
-        return values;
-    }
-
-    private static List<AppUsageEntry> capToPhoneUsageSeconds(List<AppUsageEntry> entries, EyeTimeStore store, LocalDate date) {
-        if (entries == null || entries.isEmpty() || store == null || date == null) {
-            return entries == null ? new ArrayList<>() : entries;
-        }
-        long totalUsageSeconds;
-        try {
-            totalUsageSeconds = date.equals(LocalDate.now())
-                    ? store.displayHomeStats(date).todaySeconds
-                    : store.getDay(date).totalSeconds;
-        } catch (Exception ex) {
-            return entries;
-        }
-        if (totalUsageSeconds < MIN_APP_USAGE_SECONDS) {
-            return entries;
-        }
-        long total = 0L;
-        for (AppUsageEntry entry : entries) {
-            if (entry != null) {
-                total += Math.max(0L, entry.durationSeconds);
-            }
-        }
-        if (total <= totalUsageSeconds || total <= 0L) {
-            return entries;
-        }
-
-        List<AppUsageEntry> capped = new ArrayList<>();
-        long cappedTotal = 0L;
-        for (AppUsageEntry entry : entries) {
-            if (entry == null || entry.durationSeconds <= 0L) {
-                continue;
-            }
-            long scaledSeconds = Math.max(1L, (entry.durationSeconds * totalUsageSeconds) / total);
-            if (scaledSeconds < MIN_APP_USAGE_SECONDS) {
-                continue;
-            }
-            cappedTotal += scaledSeconds;
-            capped.add(new AppUsageEntry(
-                    entry.entryId,
-                    entry.deviceId,
-                    entry.platform,
-                    entry.source,
-                    entry.appId,
-                    entry.appName,
-                    "",
-                    entry.localDate,
-                    scaledSeconds,
-                    entry.updatedAtUnixSeconds));
-        }
-        Log.i(DIAG_TAG, "AndroidAppUsageCollector capped app total raw=" + total
-                + " visibleTotal=" + totalUsageSeconds
-                + " capped=" + cappedTotal
-                + " entries=" + capped.size());
-        return capped;
-    }
-
-    private static String appDisplayKey(AppUsageEntry entry) {
-        String appName = entry.appName == null || entry.appName.trim().isEmpty()
-                ? entry.appId
-                : entry.appName;
-        return safeKey(entry.source) + ":" + safeKey(appName);
-    }
-
-    private static String safeKey(String value) {
-        String safe = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
-        return safe.isEmpty() ? "_" : safe;
     }
 
     private static boolean isForegroundEvent(int type) {

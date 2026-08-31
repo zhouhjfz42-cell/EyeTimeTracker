@@ -39,6 +39,9 @@ public final class EyeTimeStore {
     private static final String FAMILY_CHILD_DEVICE_JOINED_AT_UNIX_SECONDS = "familyChildDeviceJoinedAtUnixSeconds";
     private static final String FAMILY_CHILD_SEGMENTS = "familyChildSegments";
     private static final String APP_USAGE_ENTRIES = "appUsageEntries";
+    private static final String APP_USAGE_CURSOR_DATE = "app_usage_cursor_date";
+    private static final String APP_USAGE_CURSOR_MILLIS = "app_usage_cursor_millis";
+    private static final String APP_USAGE_OPEN_SESSIONS = "app_usage_open_sessions";
     private static final String FAMILY_CHILD_APP_USAGE_ENTRIES = "familyChildAppUsageEntries";
     private static final String PENDING_FAMILY_BINDING_INVITE = "pendingFamilyBindingInvite";
     private static final String CHILD_PROFILES = "childProfiles";
@@ -249,6 +252,119 @@ public final class EyeTimeStore {
         } catch (JSONException ignored) {
             return 0;
         }
+    }
+
+    // 增量采集游标：MIUI 只返回最近约 2 小时的事件，采集按 [游标, 现在] 窗口推进并累加
+    public synchronized long getAppUsageCursorMillis(LocalDate date) {
+        if (date == null) {
+            return 0L;
+        }
+        return date.toString().equals(prefs.getString(APP_USAGE_CURSOR_DATE, ""))
+                ? prefs.getLong(APP_USAGE_CURSOR_MILLIS, 0L)
+                : 0L;
+    }
+
+    public synchronized Map<String, Long> getAppUsageOpenSessions(LocalDate date) {
+        Map<String, Long> sessions = new HashMap<>();
+        if (date == null || !date.toString().equals(prefs.getString(APP_USAGE_CURSOR_DATE, ""))) {
+            return sessions;
+        }
+        try {
+            JSONObject json = new JSONObject(prefs.getString(APP_USAGE_OPEN_SESSIONS, "{}"));
+            JSONArray names = json.names();
+            if (names != null) {
+                for (int i = 0; i < names.length(); i++) {
+                    String pkg = names.optString(i, "");
+                    if (!pkg.isEmpty()) {
+                        sessions.put(pkg, json.optLong(pkg, 0L));
+                    }
+                }
+            }
+        } catch (JSONException ignored) {
+        }
+        return sessions;
+    }
+
+    public synchronized int accumulatePhoneAppUsage(
+            LocalDate date,
+            List<AppUsageEntry> deltaEntries,
+            Map<String, Long> openSessions,
+            long cursorMillis) {
+        if (date == null) {
+            return 0;
+        }
+        try {
+            JSONObject state = loadState();
+            int changed;
+            if (getAppUsageCursorMillis(date) <= 0L) {
+                // 当天首次计算：窗口覆盖全天，直接整表替换（同时清掉历史遗留条目）
+                changed = replacePhoneAppUsageEntries(state, date, deltaEntries);
+            } else {
+                changed = addAppUsageDeltas(state, date, deltaEntries);
+            }
+            prefs.edit()
+                    .putString(APP_USAGE_CURSOR_DATE, date.toString())
+                    .putLong(APP_USAGE_CURSOR_MILLIS, Math.max(0L, cursorMillis))
+                    .putString(APP_USAGE_OPEN_SESSIONS, openSessionsToJson(openSessions))
+                    .apply();
+            saveState(state);
+            return changed;
+        } catch (JSONException ex) {
+            Log.e(DIAG_TAG, "EyeTimeStore accumulatePhoneAppUsage failed", ex);
+            return 0;
+        }
+    }
+
+    private static int addAppUsageDeltas(JSONObject state, LocalDate date, List<AppUsageEntry> deltaEntries) throws JSONException {
+        if (deltaEntries == null || deltaEntries.isEmpty()) {
+            return 0;
+        }
+        JSONArray raw = ensureAppUsageEntries(state, APP_USAGE_ENTRIES);
+        String targetDate = date.toString();
+        String localDeviceId = state.optString("deviceId", "");
+        int changed = 0;
+        for (AppUsageEntry delta : deltaEntries) {
+            if (delta == null
+                    || delta.appId.trim().isEmpty()
+                    || delta.durationSeconds <= 0L
+                    || !targetDate.equals(delta.localDate)) {
+                continue;
+            }
+            boolean merged = false;
+            for (int i = 0; i < raw.length(); i++) {
+                JSONObject existing = raw.optJSONObject(i);
+                if (existing == null || !delta.entryId.equals(existing.optString("entryId", ""))) {
+                    continue;
+                }
+                existing.put("durationSeconds", existing.optLong("durationSeconds", 0L) + delta.durationSeconds);
+                existing.put("updatedAtUnixSeconds", Math.max(
+                        existing.optLong("updatedAtUnixSeconds", 0L),
+                        delta.updatedAtUnixSeconds));
+                merged = true;
+                changed++;
+                break;
+            }
+            if (!merged) {
+                JSONObject json = appUsageEntryToJson(delta);
+                json.put("deviceId", localDeviceId.isEmpty() ? delta.deviceId : localDeviceId);
+                raw.put(json);
+                changed++;
+            }
+        }
+        return changed;
+    }
+
+    private static String openSessionsToJson(Map<String, Long> openSessions) {
+        JSONObject json = new JSONObject();
+        if (openSessions != null) {
+            for (Map.Entry<String, Long> session : openSessions.entrySet()) {
+                try {
+                    json.put(session.getKey(), session.getValue());
+                } catch (JSONException ignored) {
+                }
+            }
+        }
+        return json.toString();
     }
 
     public synchronized int addFamilyChildAppUsageEntries(List<AppUsageEntry> entries) {
@@ -2331,7 +2447,8 @@ public final class EyeTimeStore {
         JSONArray raw = ensureAppUsageEntries(state, APP_USAGE_ENTRIES);
         JSONArray updated = new JSONArray();
         String targetDate = date.toString();
-        String localDeviceId = state.optString(DEVICE_ID, "");
+        // 状态 JSON 里设备 ID 的键是 "deviceId"（loadState 写入），不是 prefs 的 "device_id"
+        String localDeviceId = state.optString("deviceId", state.optString(DEVICE_ID, ""));
         int removed = 0;
         for (int i = 0; i < raw.length(); i++) {
             JSONObject existing = raw.optJSONObject(i);
@@ -2423,7 +2540,8 @@ public final class EyeTimeStore {
                 continue;
             }
             AppUsageEntry entry = appUsageEntryFromJson(json);
-            if (entry.localDate.trim().isEmpty() || entry.durationSeconds <= 0L) {
+            // 极短使用不进榜（采集端增量累加原始秒数，30 秒过滤统一在读取层做）
+            if (entry.localDate.trim().isEmpty() || entry.durationSeconds < 30L) {
                 continue;
             }
             LocalDate date = LocalDate.parse(entry.localDate);

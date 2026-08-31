@@ -336,17 +336,21 @@ public final class EyeTimeService extends Service implements SensorEventListener
             lastAppUsageRefreshAt = now;
         }
         try {
-            java.util.List<AppUsageEntry> entries = appUsageCollector.collectDailyUsage(store, today, System.currentTimeMillis());
-            if (entries.isEmpty()) {
+            AndroidAppUsageCollector.CollectResult result = appUsageCollector.collectDailyUsage(store, today, System.currentTimeMillis());
+            if (result.entries.isEmpty()) {
                 Log.i(DIAG_TAG, "AndroidAppUsageCollector refreshed entries=0 changed=0");
                 return 0;
             }
-            int changed = store.replacePhoneAppUsageEntries(today, entries);
+            int changed = store.accumulatePhoneAppUsage(
+                    today,
+                    result.entries,
+                    result.openSessions,
+                    System.currentTimeMillis());
             if (changed > 0) {
                 syncPolicy.markLocalChange(System.currentTimeMillis());
                 markPendingFamilyStatsUpload(System.currentTimeMillis());
             }
-            Log.i(DIAG_TAG, "AndroidAppUsageCollector refreshed entries=" + entries.size() + " changed=" + changed);
+            Log.i(DIAG_TAG, "AndroidAppUsageCollector refreshed entries=" + result.entries.size() + " changed=" + changed);
             return changed;
         } finally {
             synchronized (appUsageRefreshLock) {
