@@ -37,7 +37,7 @@ public sealed class PcSyncCoordinator
         }
 
         MergeSegments(state, request.Segments);
-        MergeAppUsageEntries(state, request.AppUsageEntries);
+        MergeAppUsageEntries(state, request.AppUsageEntries, request.DeviceId);
         state.Sync.PeerSupportsMutableSegments = request.SupportsMutableSegments;
         state.Sync.PeerReminderState = CloneReminderState(request.ReminderState);
         state.Settings = MergeSyncedSettings(state.Settings, request.Settings);
@@ -263,9 +263,19 @@ public sealed class PcSyncCoordinator
         return Math.Max(updatedAtUnixSeconds, createdAtUnixSeconds) >= cutoff;
     }
 
-    private static void MergeAppUsageEntries(AppState state, IEnumerable<AppUsageEntry> incomingEntries)
+    private static void MergeAppUsageEntries(AppState state, IEnumerable<AppUsageEntry> incomingEntries, string peerDeviceId)
     {
         state.AppUsageEntries ??= new List<AppUsageEntry>();
+        // 对端每次同步都携带今天的完整榜单；今天的条目用全量替换，
+        // 否则统计口径修正后变小的条目会永远留在 PC 端（合并语义无法删除）
+        if (!string.IsNullOrWhiteSpace(peerDeviceId))
+        {
+            var today = DateOnly.FromDateTime(DateTime.Now);
+            state.AppUsageEntries.RemoveAll(entry =>
+                entry.LocalDate == today
+                && string.Equals(entry.DeviceId, peerDeviceId, StringComparison.Ordinal));
+        }
+
         var existingById = state.AppUsageEntries
             .Where(entry => !string.IsNullOrWhiteSpace(entry.EntryId))
             .ToDictionary(entry => entry.EntryId, StringComparer.Ordinal);

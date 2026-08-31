@@ -155,8 +155,11 @@ public final class AndroidAppUsageCollector {
 
         // 按 (包名, 类名) 跟踪处于 resumed 状态的 activity；公开 API 拿不到 instanceId，
         // 同类名多实例会合并计算，误差可接受。包内 resumed activity 计数 0->1 开始计时，1->0 结束。
-        // 不能用单个"活跃包"模型：同包导航时旧 activity 的 STOPPED 晚于新 activity 的 RESUMED 到达，
-        // 单活跃模型会把它误判为"应用退到后台"，丢掉之后整段使用时间。
+        // 两个兜底缺一不可：
+        // 1) 不能用单个"活跃包"模型：同包导航时旧 activity 的 STOPPED 晚于新 activity 的 RESUMED
+        //    到达，单活跃模型会误判"应用退到后台"，丢掉之后整段使用时间；
+        // 2) 必须有"新包前台则其它包截止"：MIUI 会丢 PAUSED/STOPPED 事件，纯计数器模型
+        //    会把丢失关闭事件的 App 时长一直挂到当前时刻，造成虚高。
         Map<String, Long> openActivityKeys = new HashMap<>();
         Map<String, Integer> resumedCountByPackage = new HashMap<>();
         Map<String, Long> sessionStartByPackage = new HashMap<>();
@@ -179,6 +182,16 @@ public final class AndroidAppUsageCollector {
                     }
                     resumedCountByPackage.put(packageName, resumedCount + 1);
                 }
+                // 手机同一时刻只有一个真正前台的 App：其它包的会话在此刻截止。
+                // MIUI 上会丢失部分 PAUSED/STOPPED 事件，没有这一步兜底，
+                // 丢失关闭事件的 App 会把时长一直挂到当前时刻（虚高）。
+                closeOtherPackageSessions(
+                        secondsByPackage,
+                        openActivityKeys,
+                        resumedCountByPackage,
+                        sessionStartByPackage,
+                        packageName,
+                        timestamp);
             } else if (isBackgroundEvent(type) && openActivityKeys.remove(activityKey) != null) {
                 int resumedCount = resumedCountByPackage.getOrDefault(packageName, 1) - 1;
                 resumedCountByPackage.put(packageName, resumedCount);
@@ -193,6 +206,36 @@ public final class AndroidAppUsageCollector {
             addSeconds(secondsByPackage, session.getKey(), session.getValue(), endMillis);
         }
         return secondsByPackage;
+    }
+
+    private static void closeOtherPackageSessions(
+            Map<String, Long> secondsByPackage,
+            Map<String, Long> openActivityKeys,
+            Map<String, Integer> resumedCountByPackage,
+            Map<String, Long> sessionStartByPackage,
+            String foregroundPackage,
+            long timestamp) {
+        List<String> closingPackages = new ArrayList<>();
+        for (Map.Entry<String, Long> session : sessionStartByPackage.entrySet()) {
+            if (!session.getKey().equals(foregroundPackage)) {
+                closingPackages.add(session.getKey());
+            }
+        }
+        for (String packageName : closingPackages) {
+            Long sessionStart = sessionStartByPackage.remove(packageName);
+            addSeconds(secondsByPackage, packageName,
+                    sessionStart == null ? timestamp : sessionStart, timestamp);
+            resumedCountByPackage.put(packageName, 0);
+            List<String> keysToRemove = new ArrayList<>();
+            for (String key : openActivityKeys.keySet()) {
+                if (key.startsWith(packageName + "")) {
+                    keysToRemove.add(key);
+                }
+            }
+            for (String key : keysToRemove) {
+                openActivityKeys.remove(key);
+            }
+        }
     }
 
     private String resolveAppLabel(PackageManager packageManager, Map<String, String> launchableApps, String packageName) {

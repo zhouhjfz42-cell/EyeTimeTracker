@@ -995,6 +995,80 @@ static void TestPcSyncCoordinatorUpdatesMutableSegments()
     AssertEqual(20L, saved.Segments[0].DurationSeconds, nameof(TestPcSyncCoordinatorUpdatesMutableSegments) + " duration");
 }
 
+static void TestPcSyncCoordinatorReplacesPeerTodayAppUsageEntries()
+{
+    var today = DateOnly.FromDateTime(DateTime.Now);
+    var yesterday = today.AddDays(-1);
+    var store = SeedState(new AppState
+    {
+        DeviceId = "pc-test",
+        Platform = "windows",
+        Settings = TrackerSettings.Default,
+        AppUsageEntries =
+        [
+            new AppUsageEntry
+            {
+                EntryId = "app:phone-test:android:phone:com.stale:today",
+                DeviceId = "phone-test",
+                Platform = "android",
+                Source = "phone",
+                AppId = "com.stale",
+                AppName = "StaleApp",
+                LocalDate = today,
+                DurationSeconds = 3787,
+                UpdatedAtUnixSeconds = 100
+            },
+            new AppUsageEntry
+            {
+                EntryId = "app:phone-test:android:phone:com.stale:yesterday",
+                DeviceId = "phone-test",
+                Platform = "android",
+                Source = "phone",
+                AppId = "com.stale",
+                AppName = "StaleApp",
+                LocalDate = yesterday,
+                DurationSeconds = 500,
+                UpdatedAtUnixSeconds = 100
+            }
+        ],
+        Sync = new SyncSettings
+        {
+            IsPaired = true,
+            PeerDeviceId = "phone-test",
+            PeerPlatform = "android",
+            SharedSecret = "shared-secret"
+        }
+    });
+    var coordinator = new PcSyncCoordinator(store, () => 1_783_000_000);
+
+    coordinator.HandleSync(SignedSyncRequest(new SyncRequest
+    {
+        DeviceId = "phone-test",
+        Platform = "android",
+        Settings = TrackerSettings.Default,
+        AppUsageEntries =
+        [
+            new AppUsageEntry
+            {
+                EntryId = "app:phone-test:android:phone:com.real:today",
+                DeviceId = "phone-test",
+                Platform = "android",
+                Source = "phone",
+                AppId = "com.real",
+                AppName = "RealApp",
+                LocalDate = today,
+                DurationSeconds = 60,
+                UpdatedAtUnixSeconds = 200
+            }
+        ]
+    }));
+    var saved = store.Load();
+
+    AssertEqual(false, saved.AppUsageEntries.Any(e => e.AppId == "com.stale" && e.LocalDate == today), nameof(TestPcSyncCoordinatorReplacesPeerTodayAppUsageEntries) + " today stale removed");
+    AssertEqual(true, saved.AppUsageEntries.Any(e => e.AppId == "com.stale" && e.LocalDate == yesterday), nameof(TestPcSyncCoordinatorReplacesPeerTodayAppUsageEntries) + " yesterday kept");
+    AssertEqual(true, saved.AppUsageEntries.Any(e => e.AppId == "com.real" && e.LocalDate == today && e.DurationSeconds == 60), nameof(TestPcSyncCoordinatorReplacesPeerTodayAppUsageEntries) + " today fresh merged");
+}
+
 static void TestPcSyncCoordinatorRejectsUnpairedSync()
 {
     var store = SeedState(new AppState
@@ -2014,6 +2088,7 @@ TestPcSyncCoordinatorUpdatesMutableSegments();
 TestPcSyncCoordinatorRejectsUnpairedSync();
 TestPcSyncCoordinatorRejectsUnsignedPairedSync();
 TestPcSyncCoordinatorOmitsSegmentsOlderThanCursor();
+TestPcSyncCoordinatorReplacesPeerTodayAppUsageEntries();
 TestPcSyncCoordinatorBackfillsLegacyDailyRecordsAsSegments();
 TestPcSyncCoordinatorBackfillsLegacyDailyRecordsWhenDateHasModernSegment();
 TestLegacyBackfillSubtractsModernSegmentsInSameHour();
