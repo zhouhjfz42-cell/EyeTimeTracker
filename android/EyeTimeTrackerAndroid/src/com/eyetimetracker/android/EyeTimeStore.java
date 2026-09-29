@@ -59,6 +59,7 @@ public final class EyeTimeStore {
     private static final String CONTINUOUS_REMINDER_SESSION_STARTED = "continuous_reminder_session_started";
     private static final String CONTINUOUS_REMINDER_LOCAL_SESSION_STARTED = "continuous_reminder_local_session_started";
     private static final String CONTINUOUS_REMINDER_LAST_STEP = "continuous_reminder_last_step";
+    private static final String CONTINUOUS_CLAIM_RULE_VERSION = "continuous_claim_rule_version";
     private static final String REMINDER_DIAGNOSTICS = "reminder_diagnostics";
     private static final String WALKING_REMINDER_ENABLED = "walking_reminder_enabled";
     private static final String SYNC_IS_PAIRED = "sync_is_paired";
@@ -1153,19 +1154,37 @@ public final class EyeTimeStore {
 
         int thresholdMinutes = getContinuousReminderMinutes();
         int step = ReminderPolicy.reachedStep(sessionSeconds, thresholdMinutes);
+        if (prefs.getInt(CONTINUOUS_CLAIM_RULE_VERSION, 0) < 2) {
+            // 旧版本会把对端已弹次数固化进本端认领，导致本端永久沉默，升级后清零一次
+            prefs.edit()
+                    .putInt(CONTINUOUS_REMINDER_LAST_STEP, 0)
+                    .putInt(CONTINUOUS_CLAIM_RULE_VERSION, 2)
+                    .apply();
+        }
         long storedLocalSession = prefs.getLong(CONTINUOUS_REMINDER_LOCAL_SESSION_STARTED, 0L);
         long storedResolvedSession = prefs.getLong(CONTINUOUS_REMINDER_SESSION_STARTED, 0L);
         int storedLastStep = prefs.getInt(CONTINUOUS_REMINDER_LAST_STEP, 0);
-        // 三路取大：本端起点匹配（基线变化不丢进度）、共享起点匹配（解锁续上不补弹）、对端认领（双端对齐）
+        // 三路取大：本端起点匹配（基线变化不丢进度）、共享起点匹配（解锁续上不补弹）、对端认领。
+        // 注意对端认领只用于"补弹抑制"：只采纳到期时间早于本端会话起点的次数，
+        // 本端计时期间到期的次数必须本端自己弹，保证双端都在使用时同时提醒。
         int ownByLocal = ContinuousReminderGuard.matchingLastStep(
                 storedLocalSession, localSessionStartedUnixSeconds, storedLastStep);
         int ownByResolved = ContinuousReminderGuard.matchingLastStep(
                 storedResolvedSession, sessionStartedUnixSeconds, storedLastStep);
+        int peerStep = 0;
         ReminderRuntimeState peerState = getPeerReminderState();
-        int peerStep = ContinuousReminderGuard.matchingLastStep(
-                peerState.continuousClaimSessionStartedUnixSeconds,
-                sessionStartedUnixSeconds,
-                peerState.continuousClaimLastStep);
+        if (peerState.continuousClaimSessionStartedUnixSeconds > 0L
+                && peerState.continuousClaimSessionStartedUnixSeconds == sessionStartedUnixSeconds) {
+            peerStep = peerState.continuousClaimLastStep;
+            if (localSessionStartedUnixSeconds > sessionStartedUnixSeconds) {
+                int thresholdSeconds = thresholdMinutes * 60;
+                if (thresholdSeconds > 0) {
+                    peerStep = Math.min(
+                            peerStep,
+                            (int) Math.max(0L, (localSessionStartedUnixSeconds - sessionStartedUnixSeconds) / thresholdSeconds));
+                }
+            }
+        }
         int effectiveLastStep = Math.max(ownByLocal, Math.max(ownByResolved, peerStep));
         boolean claim = ContinuousReminderGuard.shouldClaim(sessionStartedUnixSeconds, step, effectiveLastStep);
 
@@ -1188,7 +1207,10 @@ public final class EyeTimeStore {
                             + " peerStep=" + peerStep);
         }
 
-        int newLastStep = Math.max(effectiveLastStep, Math.max(0, step));
+        // 本端认领只记录本端实际弹过的次数；对端的次数只在使用时现算，
+        // 不能把 peerStep 写进本端认领，否则会把"对端弹过"错误固化成"本端弹过"
+        int ownLastStep = Math.max(ownByLocal, ownByResolved);
+        int newLastStep = Math.max(ownLastStep, claim ? Math.max(0, step) : 0);
         if (step > 0
                 && (newLastStep != storedLastStep
                 || storedLocalSession != localSessionStartedUnixSeconds

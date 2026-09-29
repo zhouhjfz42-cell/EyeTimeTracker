@@ -893,7 +893,10 @@ public sealed class TrackingController : IDisposable
             _continuousReminderSessionStart = sessionStarted;
         }
 
-        // 合并双端已提醒次数：同一段共享会话里，任何一端弹过的次数另一端不再重复弹
+        // 合并双端已提醒次数，但只用于"补弹抑制"：本端开始计时之前就已经到期的次数，
+        // 直接采纳对端已弹结果不再补弹；本端计时期间到期的次数必须本端自己弹，
+        // 保证双端都在使用时同时提醒，而不是一端弹过另一端就沉默。
+        var thresholdSeconds = Math.Max(60, _state.Settings.ContinuousReminderThresholdSeconds);
         var localClaim = _state.Sync.LocalReminderState;
         if (localClaim is not null
             && localClaim.ContinuousClaimSessionStartedUnixSeconds == sessionStarted)
@@ -905,10 +908,19 @@ public sealed class TrackingController : IDisposable
         if (peerState is not null
             && peerState.ContinuousClaimSessionStartedUnixSeconds == sessionStarted)
         {
-            _lastContinuousReminderStep = Math.Max(_lastContinuousReminderStep, peerState.ContinuousClaimLastStep);
+            var localSessionStart = localState.CurrentSessionStartedUnixSeconds;
+            var applicablePeerStep = peerState.ContinuousClaimLastStep;
+            if (localSessionStart > sessionStarted)
+            {
+                // 只采纳到期时间早于本端会话起点的次数（本端缺席期间的补弹抑制）
+                applicablePeerStep = Math.Min(
+                    peerState.ContinuousClaimLastStep,
+                    (int)Math.Max(0L, (localSessionStart - sessionStarted) / thresholdSeconds));
+            }
+
+            _lastContinuousReminderStep = Math.Max(_lastContinuousReminderStep, applicablePeerStep);
         }
 
-        var thresholdSeconds = Math.Max(60, _state.Settings.ContinuousReminderThresholdSeconds);
         var sessionSeconds = Math.Max(0, now.ToUnixTimeSeconds() - sessionStarted);
         var step = (int)Math.Max(0, sessionSeconds / thresholdSeconds);
         if (step <= 0 || step <= _lastContinuousReminderStep
