@@ -1,0 +1,23 @@
+{
+  "name": "A07-away-without-input",
+  "desk": "ordinary",
+  "startUtc": "2026-09-29T01:00:00Z",
+  "signals": [
+    {
+      "t": 0,
+      "kind": "Input"
+    }
+  ],
+  "advanceTo": 150,
+  "expect": {
+    "state": "Away",
+    "committedSeconds": 0,
+    "breaks": [
+      {
+        "absenceT": 0,
+        "thresholdT": 120,
+        "reason": "idle_timeout"
+      }
+    ]
+  }
+}

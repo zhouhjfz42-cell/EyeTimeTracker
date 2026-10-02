@@ -1,0 +1,355 @@
+{
+  "name": "A03-movement-merged-at-2400",
+  "desk": "ordinary",
+  "startUtc": "2026-09-29T01:00:00Z",
+  "signals": [
+    {
+      "t": 0,
+      "kind": "Input"
+    },
+    {
+      "t": 30,
+      "kind": "Input"
+    },
+    {
+      "t": 60,
+      "kind": "Input"
+    },
+    {
+      "t": 90,
+      "kind": "Input"
+    },
+    {
+      "t": 120,
+      "kind": "Input"
+    },
+    {
+      "t": 150,
+      "kind": "Input"
+    },
+    {
+      "t": 180,
+      "kind": "Input"
+    },
+    {
+      "t": 210,
+      "kind": "Input"
+    },
+    {
+      "t": 240,
+      "kind": "Input"
+    },
+    {
+      "t": 270,
+      "kind": "Input"
+    },
+    {
+      "t": 300,
+      "kind": "Input"
+    },
+    {
+      "t": 330,
+      "kind": "Input"
+    },
+    {
+      "t": 360,
+      "kind": "Input"
+    },
+    {
+      "t": 390,
+      "kind": "Input"
+    },
+    {
+      "t": 420,
+      "kind": "Input"
+    },
+    {
+      "t": 450,
+      "kind": "Input"
+    },
+    {
+      "t": 480,
+      "kind": "Input"
+    },
+    {
+      "t": 510,
+      "kind": "Input"
+    },
+    {
+      "t": 540,
+      "kind": "Input"
+    },
+    {
+      "t": 570,
+      "kind": "Input"
+    },
+    {
+      "t": 600,
+      "kind": "Input"
+    },
+    {
+      "t": 630,
+      "kind": "Input"
+    },
+    {
+      "t": 660,
+      "kind": "Input"
+    },
+    {
+      "t": 690,
+      "kind": "Input"
+    },
+    {
+      "t": 720,
+      "kind": "Input"
+    },
+    {
+      "t": 750,
+      "kind": "Input"
+    },
+    {
+      "t": 780,
+      "kind": "Input"
+    },
+    {
+      "t": 810,
+      "kind": "Input"
+    },
+    {
+      "t": 840,
+      "kind": "Input"
+    },
+    {
+      "t": 870,
+      "kind": "Input"
+    },
+    {
+      "t": 900,
+      "kind": "Input"
+    },
+    {
+      "t": 930,
+      "kind": "Input"
+    },
+    {
+      "t": 960,
+      "kind": "Input"
+    },
+    {
+      "t": 990,
+      "kind": "Input"
+    },
+    {
+      "t": 1020,
+      "kind": "Input"
+    },
+    {
+      "t": 1050,
+      "kind": "Input"
+    },
+    {
+      "t": 1080,
+      "kind": "Input"
+    },
+    {
+      "t": 1110,
+      "kind": "Input"
+    },
+    {
+      "t": 1140,
+      "kind": "Input"
+    },
+    {
+      "t": 1170,
+      "kind": "Input"
+    },
+    {
+      "t": 1200,
+      "kind": "Input"
+    },
+    {
+      "t": 1230,
+      "kind": "Input"
+    },
+    {
+      "t": 1260,
+      "kind": "Input"
+    },
+    {
+      "t": 1290,
+      "kind": "Input"
+    },
+    {
+      "t": 1320,
+      "kind": "Input"
+    },
+    {
+      "t": 1350,
+      "kind": "Input"
+    },
+    {
+      "t": 1380,
+      "kind": "Input"
+    },
+    {
+      "t": 1410,
+      "kind": "Input"
+    },
+    {
+      "t": 1440,
+      "kind": "Input"
+    },
+    {
+      "t": 1470,
+      "kind": "Input"
+    },
+    {
+      "t": 1500,
+      "kind": "Input"
+    },
+    {
+      "t": 1530,
+      "kind": "Input"
+    },
+    {
+      "t": 1560,
+      "kind": "Input"
+    },
+    {
+      "t": 1590,
+      "kind": "Input"
+    },
+    {
+      "t": 1620,
+      "kind": "Input"
+    },
+    {
+      "t": 1650,
+      "kind": "Input"
+    },
+    {
+      "t": 1680,
+      "kind": "Input"
+    },
+    {
+      "t": 1710,
+      "kind": "Input"
+    },
+    {
+      "t": 1740,
+      "kind": "Input"
+    },
+    {
+      "t": 1770,
+      "kind": "Input"
+    },
+    {
+      "t": 1800,
+      "kind": "Input"
+    },
+    {
+      "t": 1830,
+      "kind": "Input"
+    },
+    {
+      "t": 1860,
+      "kind": "Input"
+    },
+    {
+      "t": 1890,
+      "kind": "Input"
+    },
+    {
+      "t": 1920,
+      "kind": "Input"
+    },
+    {
+      "t": 1950,
+      "kind": "Input"
+    },
+    {
+      "t": 1980,
+      "kind": "Input"
+    },
+    {
+      "t": 2010,
+      "kind": "Input"
+    },
+    {
+      "t": 2040,
+      "kind": "Input"
+    },
+    {
+      "t": 2070,
+      "kind": "Input"
+    },
+    {
+      "t": 2100,
+      "kind": "Input"
+    },
+    {
+      "t": 2130,
+      "kind": "Input"
+    },
+    {
+      "t": 2160,
+      "kind": "Input"
+    },
+    {
+      "t": 2190,
+      "kind": "Input"
+    },
+    {
+      "t": 2220,
+      "kind": "Input"
+    },
+    {
+      "t": 2250,
+      "kind": "Input"
+    },
+    {
+      "t": 2280,
+      "kind": "Input"
+    },
+    {
+      "t": 2310,
+      "kind": "Input"
+    },
+    {
+      "t": 2340,
+      "kind": "Input"
+    },
+    {
+      "t": 2370,
+      "kind": "Input"
+    },
+    {
+      "t": 2400,
+      "kind": "Input"
+    }
+  ],
+  "advanceTo": 2410,
+  "expect": {
+    "committedSeconds": 2400,
+    "opportunities": [
+      {
+        "type": "eye",
+        "dueActiveSeconds": 1200,
+        "merged": false
+      },
+      {
+        "type": "eye",
+        "dueActiveSeconds": 2400,
+        "merged": true,
+        "deliveryGroupId": "group-1"
+      },
+      {
+        "type": "movement",
+        "dueActiveSeconds": 2400,
+        "merged": true,
+        "deliveryGroupId": "group-1"
+      }
+    ],
+    "over40": false
+  }
+}

@@ -1,91 +1,320 @@
-using System.Drawing.Drawing2D;
 using EyeTimeTracker.App.Localization;
 using EyeTimeTracker.App.Platform;
 using EyeTimeTracker.App.Tracking;
-using EyeTimeTracker.Core.Formatting;
-using EyeTimeTracker.Core.Models;
-using EyeTimeTracker.Core.Reminders;
+using EyeTimeTracker.App.UI.Controls;
+using EyeTimeTracker.Core.DesktopActivity;
 
 namespace EyeTimeTracker.App.UI;
 
-public sealed class MainForm : Form
+/// <summary>主页（主界面尺寸标注图）：窗口固定 480×890 物理像素（锁定，不随 DPI 缩放），
+/// 字体全部 GraphicsUnit.Pixel 按标注 px 值创建。卡片坐标严格对齐标注：
+/// 久坐卡 (26,154) 428×150 / 提醒卡 (26,375) 428×142 / 概览卡 (26,585)+(246,585) 208×104 /
+/// 时间线卡 (26,750) 428×116、时间条 (48,800) 384×30；外边距 26、卡内边距 22、圆角 R18、概览卡间距 12。</summary>
+public sealed class MainForm : AppPageForm
 {
-    private static readonly Color PageBackground = Color.FromArgb(248, 251, 250);
-    private static readonly Color SoftGreen = Color.FromArgb(238, 249, 245);
-    private static readonly Color AccentGreen = Color.FromArgb(22, 166, 125);
-    private static readonly Color AccentYellow = Color.FromArgb(224, 162, 42);
-    private static readonly Color AccentRed = Color.FromArgb(222, 82, 72);
-    private static readonly Color TextPrimary = Color.FromArgb(17, 24, 39);
-    private static readonly Color TextSecondary = Color.FromArgb(102, 112, 133);
-    private static readonly Color BorderColor = Color.FromArgb(225, 232, 229);
+    // 标注图硬指标（单位 px）
+    private const int PageWidth = 480;
+    private const int PageHeight = 890;
+    private const int PageMargin = 26;
+    private const int CardPadding = 22;
+    private const int CardRadius = 18;
 
-    private readonly TrackingController _controller;
-    private readonly FitTextLabel _todayValue;
-    private readonly FitTextLabel _yesterdayValue;
-    private readonly FitTextLabel _weekValue;
-    private readonly FitTextLabel _monthValue;
-    private readonly FitTextLabel _reminderValue;
-    private readonly FitTextLabel _statusValue;
-    private readonly StatusDot _statusDot;
+    private const int TitlePx = 34;          // 软件标题
+    private const int BodyPx = 20;           // 副标题、日期、状态、概览说明（最低字号 20px）
+    private const int SectionPx = 24;        // 分区标题、卡片标题、提醒名称、分钟单位
+    private const int BigNumberPx = 80;      // 久坐数字
+    private const int PlanTextPx = 20;       // 提醒周期、倒计时
+    private const int OverviewValuePx = 28;  // 概览数值
+    private const int SmallPx = 20;          // 图例、刻度（最低字号 20px）
+
+    private readonly DesktopTrackingController _controller;
     private readonly StartupManager _startupManager;
     private readonly Icon _appIcon;
-    private readonly Action? _showPairingDialog;
-    private readonly Action? _disconnectPairing;
-    private ToggleSwitch? _startupSwitch;
-    private RoundedButton? _pairingButton;
-    private RoundedButton? _statsButton;
-    private DateOnly? _displayResetDate;
-    private long _todayDisplayBaseline;
-    private long _yesterdayDisplayBaseline;
-    private long _weekDisplayBaseline;
-    private long _monthDisplayBaseline;
+    private readonly StatusPill _statusPill;
+    private readonly CanvasLabel _dateLabel;
+    private CanvasLabel _sessionTitle = null!;
+    private InfoDotButton _infoButton = null!;
+    private MiniTag _deskTag = null!;
+    private CanvasLabel _sessionValue = null!;
+    private CanvasLabel _sessionUnit = null!;
+    private CanvasLabel _eyeIntervalLabel = null!;
+    private CanvasLabel _eyeDueLabel = null!;
+    private CanvasLabel _movementIntervalLabel = null!;
+    private CanvasLabel _movementDueLabel = null!;
+    private CanvasLabel _todayActiveValue = null!;
+    private CanvasLabel _todayMaxValue = null!;
+    private TimelineBar _timelineBar = null!;
+    private readonly System.Windows.Forms.Timer _refreshTimer;
     private bool _closingForExit;
 
-    public MainForm(
-        TrackingController controller,
-        StartupManager startupManager,
-        Icon appIcon,
-        Action? showPairingDialog = null,
-        Action? disconnectPairing = null)
+    public MainForm(DesktopTrackingController controller, StartupManager startupManager, Icon appIcon)
     {
         _controller = controller ?? throw new ArgumentNullException(nameof(controller));
         _startupManager = startupManager ?? throw new ArgumentNullException(nameof(startupManager));
-        _showPairingDialog = showPairingDialog;
-        _disconnectPairing = disconnectPairing;
 
-        AutoScaleMode = AutoScaleMode.None;
         Text = AppText.Get("app.name");
         _appIcon = (Icon)(appIcon ?? throw new ArgumentNullException(nameof(appIcon))).Clone();
-        Icon = (Icon)_appIcon.Clone();
+        SetAppIcon(appIcon);
         StartPosition = FormStartPosition.CenterScreen;
-        FormBorderStyle = FormBorderStyle.FixedSingle;
-        MaximizeBox = false;
-        MinimizeBox = true;
-        ClientSize = new Size(660, 760);
-        BackColor = PageBackground;
-        Font = AppFonts.Create(9F, FontStyle.Regular, GraphicsUnit.Point);
 
         var root = new Panel
         {
             Dock = DockStyle.Fill,
-            BackColor = PageBackground
+            BackColor = Color.Transparent
         };
-
-        BuildDashboard(root, out var todayValue, out var yesterdayValue, out var weekValue, out var monthValue, out var reminderValue, out var statusDot, out var statusValue);
-
-        _todayValue = todayValue;
-        _yesterdayValue = yesterdayValue;
-        _weekValue = weekValue;
-        _monthValue = monthValue;
-        _reminderValue = reminderValue;
-        _statusDot = statusDot;
-        _statusValue = statusValue;
-
         Controls.Add(root);
 
+        BuildBrandRow(root);
+
+        // 日期 + 状态胶囊
+        _dateLabel = new CanvasLabel
+        {
+            Bounds = new Rectangle(PageMargin, 118, 300, 26),
+            Font = AppFonts.Create(BodyPx, FontStyle.Regular, GraphicsUnit.Pixel),
+            ForeColor = AppPalette.TextSecondary
+        };
+        root.Controls.Add(_dateLabel);
+
+        _statusPill = new StatusPill { Bounds = new Rectangle(26 + 428 - 200, 116, 200, 30) };
+        root.Controls.Add(_statusPill);
+
+        BuildMainCard(root);
+        BuildPlanSection(root);
+        BuildTodaySection(root);
+        BuildTimelineSection(root);
+
+        ClientSize = new Size(PageWidth, PageHeight);
+        CompleteLayoutScaling();
+
         _controller.Updated += OnTrackingUpdated;
-        UpdateReminderDisplay();
-        UpdateSummary(_controller.Current);
+        _refreshTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+        _refreshTimer.Tick += (_, _) => RefreshData();
+        _refreshTimer.Start();
+        RefreshData();
+    }
+
+    /// <summary>品牌区：蓝底白字「坐」芯片 + 34px 标题 + 18px 副标题（标题下方）+ 右上蓝色齿轮。</summary>
+    private void BuildBrandRow(Control root)
+    {
+        root.Controls.Add(new IconChip
+        {
+            Glyph = AppText.Get("desktop.brand.chip"),
+            ChipColor = Color.White,
+            ChipBackground = AppPalette.Primary,
+            Bounds = new Rectangle(26, 28, 40, 40),
+            Font = AppFonts.Create(22, FontStyle.Bold, GraphicsUnit.Pixel)
+        });
+        root.Controls.Add(new CanvasLabel
+        {
+            Text = AppText.Get("app.name"),
+            Bounds = new Rectangle(76, 26, 240, 42),
+            Font = AppFonts.Create(TitlePx, FontStyle.Bold, GraphicsUnit.Pixel),
+            ForeColor = AppPalette.Primary
+        });
+        root.Controls.Add(new CanvasLabel
+        {
+            Text = AppText.Get("desktop.brand.subtitle"),
+            Bounds = new Rectangle(76, 70, 340, 26),
+            Font = AppFonts.Create(BodyPx, FontStyle.Regular, GraphicsUnit.Pixel),
+            ForeColor = AppPalette.TextSecondary
+        });
+
+        var gearButton = new GearButton
+        {
+            Bounds = new Rectangle(424, 24, 34, 34)
+        };
+        gearButton.Click += (_, _) => ShowSettings();
+        root.Controls.Add(gearButton);
+    }
+
+    /// <summary>久坐卡片 (26,154) 428×150：标题行（本次估算久坐 ⓘ + 桌型标签靠右）+ 80px 数字行。</summary>
+    private void BuildMainCard(Control root)
+    {
+        var card = new RoundedCardPanel
+        {
+            Bounds = new Rectangle(26, 154, 428, 150),
+            Radius = CardRadius
+        };
+        _sessionTitle = new CanvasLabel
+        {
+            Bounds = new Rectangle(CardPadding, 20, 200, 32),
+            Font = AppFonts.Create(SectionPx, FontStyle.Bold, GraphicsUnit.Pixel),
+            ForeColor = AppPalette.TextPrimary
+        };
+        card.Controls.Add(_sessionTitle);
+
+        _infoButton = new InfoDotButton { Bounds = new Rectangle(220, 24, 24, 24) };
+        _infoButton.Click += (_, _) => AppMessageDialog.Info(this, _sessionTitle.Text, AppText.Get("desktop.main.infoTip"), _appIcon);
+        card.Controls.Add(_infoButton);
+
+        _deskTag = new MiniTag { Bounds = new Rectangle(428 - CardPadding - 100, 22, 100, 30) };
+        card.Controls.Add(_deskTag);
+
+        _sessionValue = new CanvasLabel
+        {
+            Bounds = new Rectangle(CardPadding, 54, 160, 88),
+            Font = AppFonts.Create(BigNumberPx, FontStyle.Bold, GraphicsUnit.Pixel),
+            ForeColor = GearButton.GearBlue
+        };
+        card.Controls.Add(_sessionValue);
+        _sessionUnit = new CanvasLabel
+        {
+            Bounds = new Rectangle(190, 106, 120, 32),
+            Font = AppFonts.Create(SectionPx, FontStyle.Regular, GraphicsUnit.Pixel),
+            ForeColor = AppPalette.TextSecondary
+        };
+        card.Controls.Add(_sessionUnit);
+
+        root.Controls.Add(card);
+    }
+
+    /// <summary>当前提醒计划：分区标题 + 提醒卡 (26,375) 428×142，两行列「名称 左｜每 N 分钟 居中｜约 N 分钟后 右」。</summary>
+    private void BuildPlanSection(Control root)
+    {
+        root.Controls.Add(new CanvasLabel
+        {
+            Text = AppText.Get("desktop.main.planTitle"),
+            Bounds = new Rectangle(PageMargin, 337, 170, 32),
+            Font = AppFonts.Create(SectionPx, FontStyle.Bold, GraphicsUnit.Pixel),
+            ForeColor = AppPalette.TextPrimary
+        });
+        using (var noteFont = AppFonts.Create(SmallPx, FontStyle.Regular, GraphicsUnit.Pixel))
+        {
+            var note = AppText.Get("desktop.main.planTimingNote");
+            root.Controls.Add(new RightAlignedLabel
+            {
+                Text = note,
+                Bounds = new Rectangle(200, 341, 254, 26),
+                Font = AppFonts.Create(SmallPx, FontStyle.Regular, GraphicsUnit.Pixel),
+                ForeColor = AppPalette.TextSecondary
+            });
+        }
+
+        var card = new RoundedCardPanel
+        {
+            Bounds = new Rectangle(26, 375, 428, 142),
+            Radius = CardRadius
+        };
+        BuildPlanRow(card, AppText.Get("desktop.main.plan.eye"), AppPalette.Teal, CardPadding,
+            out _eyeIntervalLabel, out _eyeDueLabel);
+        var divider = new Control { Bounds = new Rectangle(CardPadding, 71, 428 - CardPadding * 2, 1), BackColor = AppPalette.CardBorder };
+        card.Controls.Add(divider);
+        BuildPlanRow(card, AppText.Get("desktop.main.plan.movement"), AppPalette.Orange, 71,
+            out _movementIntervalLabel, out _movementDueLabel);
+        root.Controls.Add(card);
+    }
+
+    private static void BuildPlanRow(Control card, string name, Color dueColor, int rowTop,
+        out CanvasLabel interval, out CanvasLabel due)
+    {
+        var nameLabel = new CanvasLabel
+        {
+            Name = "name",
+            Text = name,
+            Font = AppFonts.Create(SectionPx, FontStyle.Bold, GraphicsUnit.Pixel),
+            ForeColor = AppPalette.TextPrimary,
+            Bounds = new Rectangle(CardPadding, rowTop, 120, 49)
+        };
+        card.Controls.Add(nameLabel);
+
+        interval = new CanvasLabel
+        {
+            Name = "interval",
+            Bounds = new Rectangle(CardPadding + 120, rowTop, 160, 49),
+            Font = AppFonts.Create(PlanTextPx, FontStyle.Regular, GraphicsUnit.Pixel),
+            ForeColor = AppPalette.TextSecondary,
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+        card.Controls.Add(interval);
+
+        due = new CanvasLabel
+        {
+            Name = "due",
+            Bounds = new Rectangle(428 - CardPadding - 150, rowTop, 150, 49),
+            Font = AppFonts.Create(PlanTextPx, FontStyle.Bold, GraphicsUnit.Pixel),
+            ForeColor = dueColor,
+            TextAlign = ContentAlignment.MiddleRight
+        };
+        card.Controls.Add(due);
+    }
+
+    /// <summary>今日概览：标题 + 两卡 (26,585) / (246,585) 208×104，间距 12。</summary>
+    private void BuildTodaySection(Control root)
+    {
+        root.Controls.Add(new CanvasLabel
+        {
+            Text = AppText.Get("desktop.main.todayTitle"),
+            Bounds = new Rectangle(PageMargin, 545, 260, 32),
+            Font = AppFonts.Create(SectionPx, FontStyle.Bold, GraphicsUnit.Pixel),
+            ForeColor = AppPalette.TextPrimary
+        });
+
+        _todayActiveValue = BuildTodayCard(root, AppText.Get("desktop.main.today.active"), 26);
+        _todayMaxValue = BuildTodayCard(root, AppText.Get("desktop.main.today.maxContinuous"), 246);
+    }
+
+    private static CanvasLabel BuildTodayCard(Control root, string label, int left)
+    {
+        var card = new RoundedCardPanel
+        {
+            Bounds = new Rectangle(left, 585, 208, 104),
+            Radius = CardRadius
+        };
+        card.Controls.Add(new CanvasLabel
+        {
+            Text = label,
+            Bounds = new Rectangle(CardPadding, 14, 208 - CardPadding * 2, 26),
+            Font = AppFonts.Create(BodyPx, FontStyle.Regular, GraphicsUnit.Pixel),
+            ForeColor = AppPalette.TextSecondary
+        });
+        var value = new CanvasLabel
+        {
+            Bounds = new Rectangle(CardPadding, 44, 208 - CardPadding * 2, 36),
+            Font = AppFonts.Create(OverviewValuePx, FontStyle.Bold, GraphicsUnit.Pixel),
+            ForeColor = AppPalette.TextPrimary
+        };
+        card.Controls.Add(value);
+        root.Controls.Add(card);
+        return value;
+    }
+
+    /// <summary>时间线卡 (26,750) 428×116：图例行 + 时间条 (48,800) 384×30 + 刻度行。</summary>
+    private void BuildTimelineSection(Control root)
+    {
+        root.Controls.Add(new CanvasLabel
+        {
+            Text = AppText.Get("desktop.records.timeline.title"),
+            Bounds = new Rectangle(PageMargin, 714, 320, 32),
+            Font = AppFonts.Create(SectionPx, FontStyle.Bold, GraphicsUnit.Pixel),
+            ForeColor = AppPalette.TextPrimary
+        });
+
+        var card = new RoundedCardPanel
+        {
+            Bounds = new Rectangle(26, 750, 428, 116),
+            Radius = CardRadius
+        };
+        card.Controls.Add(new TimelineLegend { Bounds = new Rectangle(CardPadding, 14, 428 - CardPadding * 2, 26) });
+        _timelineBar = new TimelineBar { Bounds = new Rectangle(48 - 26, 50, 384, 30) };
+        card.Controls.Add(_timelineBar);
+
+        for (var tick = 0; tick <= 4; tick++)
+        {
+            var tickWidth = 30;
+            var tickLeft = tick == 4
+                ? 48 - 26 + 384 - tickWidth
+                : 48 - 26 + tick * 96 - 4;
+            card.Controls.Add(new CanvasLabel
+            {
+                Text = (tick * 6).ToString(),
+                Bounds = new Rectangle(tickLeft, 82, tickWidth, 26),
+                Font = AppFonts.Create(SmallPx, FontStyle.Regular, GraphicsUnit.Pixel),
+                ForeColor = AppPalette.TextSecondary,
+                TextAlign = tick == 4 ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft
+            });
+        }
+
+        root.Controls.Add(card);
     }
 
     public void CloseForExit()
@@ -110,221 +339,12 @@ public sealed class MainForm : Form
     {
         if (disposing)
         {
+            _refreshTimer.Stop();
+            _refreshTimer.Dispose();
             _controller.Updated -= OnTrackingUpdated;
         }
 
         base.Dispose(disposing);
-    }
-
-    private void BuildDashboard(
-        Control root,
-        out FitTextLabel todayValue,
-        out FitTextLabel yesterdayValue,
-        out FitTextLabel weekValue,
-        out FitTextLabel monthValue,
-        out FitTextLabel reminderValue,
-        out StatusDot statusDot,
-        out FitTextLabel statusValue)
-    {
-        root.Controls.Add(new FitTextLabel
-        {
-            Text = AppText.Get("app.mainTitle"),
-            Bounds = MainFormLayout.TitleBounds,
-            MaxFontSize = 22F,
-            MinFontSize = 20F,
-            FontStyle = FontStyle.Bold,
-            ForeColor = TextPrimary,
-            BackColor = Color.Transparent,
-            TextAlign = ContentAlignment.MiddleLeft
-        });
-
-        root.Controls.Add(new FitTextLabel
-        {
-            Text = AppText.Get("main.subtitle.pc"),
-            Bounds = MainFormLayout.SubtitleBounds,
-            MaxFontSize = 11F,
-            MinFontSize = 10F,
-            FontStyle = FontStyle.Regular,
-            ForeColor = TextSecondary,
-            BackColor = Color.Transparent,
-            TextAlign = ContentAlignment.MiddleLeft
-        });
-
-        var startupLabel = new FitTextLabel
-        {
-            Text = AppText.Get("main.autostart"),
-            Bounds = MainFormLayout.StartupLabelBounds,
-            MaxFontSize = 10.5F,
-            MinFontSize = 9F,
-            FontStyle = FontStyle.Regular,
-            ForeColor = TextSecondary,
-            BackColor = Color.Transparent,
-            TextAlign = ContentAlignment.MiddleRight
-        };
-        root.Controls.Add(startupLabel);
-
-        _startupSwitch = new ToggleSwitch
-        {
-            Bounds = MainFormLayout.StartupSwitchBounds,
-            Checked = _controller.Settings.StartWithWindows
-        };
-        _startupSwitch.Click += (_, _) => UpdateStartupSetting(_startupSwitch.Checked);
-        root.Controls.Add(_startupSwitch);
-        startupLabel.BringToFront();
-        _startupSwitch.BringToFront();
-
-        root.Controls.Add(new FitTextLabel
-        {
-            Text = AppText.Get("common.today"),
-            Bounds = new Rectangle(34, 144, 104, 52),
-            MaxFontSize = 14F,
-            MinFontSize = 14F,
-            FontStyle = FontStyle.Regular,
-            ForeColor = TextSecondary,
-            BackColor = Color.Transparent,
-            TextAlign = ContentAlignment.MiddleLeft
-        });
-
-        statusDot = new StatusDot
-        {
-            Bounds = new Rectangle(154, 162, 16, 16)
-        };
-        root.Controls.Add(statusDot);
-        statusDot.BringToFront();
-
-        statusValue = new FitTextLabel
-        {
-            Text = AppText.Get("main.status.tracking"),
-            Bounds = new Rectangle(178, 144, 310, 52),
-            MaxFontSize = 14F,
-            MinFontSize = 10F,
-            FontStyle = FontStyle.Regular,
-            ForeColor = TextSecondary,
-            BackColor = Color.Transparent,
-            TextAlign = ContentAlignment.MiddleLeft
-        };
-        root.Controls.Add(statusValue);
-        statusValue.BringToFront();
-
-        todayValue = new FitTextLabel
-        {
-            Text = AppText.Get("duration.zeroMinutes"),
-            Bounds = new Rectangle(34, 194, 600, 104),
-            MaxFontSize = 44F,
-            MinFontSize = 24F,
-            FontStyle = FontStyle.Bold,
-            ForeColor = AccentGreen,
-            BackColor = Color.Transparent,
-            TextAlign = ContentAlignment.MiddleLeft
-        };
-        root.Controls.Add(todayValue);
-
-        root.Controls.Add(BuildMetricCard(AppText.Get("main.card.yesterday"), new Rectangle(34, 320, 282, 136), out yesterdayValue));
-        root.Controls.Add(BuildMetricCard(AppText.Get("main.card.week"), new Rectangle(344, 320, 282, 136), out weekValue));
-        root.Controls.Add(BuildMetricCard(AppText.Get("main.card.month"), new Rectangle(34, 484, 282, 136), out monthValue));
-        root.Controls.Add(BuildReminderCard(new Rectangle(344, 484, 282, 136), out reminderValue));
-
-        if (_showPairingDialog is not null)
-        {
-            _pairingButton = new RoundedButton
-            {
-                Text = AppText.Get("pair.pc.title"),
-                Bounds = MainFormLayout.PairingButtonBounds,
-                ButtonColor = AccentGreen,
-                HoverColor = Color.FromArgb(19, 145, 111),
-                PressedColor = Color.FromArgb(17, 124, 96),
-                TextColor = Color.White,
-                Font = AppFonts.Create(11F, FontStyle.Bold, GraphicsUnit.Point)
-            };
-            _pairingButton.Click += (_, _) => HandlePairingButtonClick();
-            root.Controls.Add(_pairingButton);
-            _pairingButton.BringToFront();
-        }
-
-        _statsButton = new RoundedButton
-        {
-            Text = AppText.Get("common.statsPage"),
-            Bounds = new Rectangle(200, 668, 260, 58),
-            ButtonColor = AccentGreen,
-            HoverColor = Color.FromArgb(19, 145, 111),
-            PressedColor = Color.FromArgb(17, 124, 96),
-            TextColor = Color.White,
-            Font = AppFonts.Create(13F, FontStyle.Bold, GraphicsUnit.Point)
-        };
-        _statsButton.Click += (_, _) => ShowStats();
-        root.Controls.Add(_statsButton);
-    }
-
-    private void ShowStats()
-    {
-        using var statsForm = new StatsForm(_controller, _appIcon);
-        statsForm.ShowDialog(this);
-    }
-
-    private static Control BuildMetricCard(string title, Rectangle bounds, out FitTextLabel value)
-    {
-        var card = CreateMetricShell(bounds);
-        AddMetricTitle(card, title);
-        value = new FitTextLabel
-        {
-            Text = AppText.Get("duration.zeroMinutes"),
-            Bounds = new Rectangle(24, 58, bounds.Width - 40, 66),
-            MaxFontSize = 22F,
-            MinFontSize = 14F,
-            FontStyle = FontStyle.Bold,
-            ForeColor = TextPrimary,
-            TextAlign = ContentAlignment.MiddleLeft,
-            BackColor = Color.Transparent
-        };
-        card.Controls.Add(value);
-        return card;
-    }
-
-    private Control BuildReminderCard(Rectangle bounds, out FitTextLabel value)
-    {
-        var card = CreateMetricShell(bounds);
-        AddMetricTitle(card, AppText.Get("eyeCareReminders.entryTitle"));
-        value = new FitTextLabel
-        {
-            Text = AppText.Get("eyeCareReminders.entryValue"),
-            Bounds = new Rectangle(24, 58, bounds.Width - 40, 66),
-            MaxFontSize = 22F,
-            MinFontSize = 14F,
-            FontStyle = FontStyle.Bold,
-            ForeColor = TextPrimary,
-            TextAlign = ContentAlignment.MiddleLeft,
-            BackColor = Color.Transparent
-        };
-        card.Controls.Add(value);
-        WireClick(card, (_, _) => ShowEyeCareRemindersPage());
-        return card;
-    }
-
-    private static RoundedPanel CreateMetricShell(Rectangle bounds)
-    {
-        return new RoundedPanel
-        {
-            Bounds = bounds,
-            FillColor = SoftGreen,
-            BorderColor = Color.FromArgb(226, 245, 238),
-            Radius = 24,
-            Padding = new Padding(20, 16, 20, 16)
-        };
-    }
-
-    private static void AddMetricTitle(Control card, string title)
-    {
-        card.Controls.Add(new FitTextLabel
-        {
-            Text = title,
-            Bounds = new Rectangle(24, 14, 228, 44),
-            MaxFontSize = 11.5F,
-            MinFontSize = 9.5F,
-            FontStyle = FontStyle.Regular,
-            ForeColor = TextSecondary,
-            BackColor = Color.Transparent,
-            TextAlign = ContentAlignment.MiddleLeft
-        });
     }
 
     private void OnTrackingUpdated(object? sender, TrackingUpdatedEventArgs e)
@@ -336,238 +356,351 @@ public sealed class MainForm : Form
 
         try
         {
-            if (InvokeRequired)
-            {
-                BeginInvoke(() => UpdateSummary(e));
-            }
-            else
-            {
-                UpdateSummary(e);
-            }
+            BeginInvoke(RefreshData);
         }
         catch (InvalidOperationException)
         {
         }
     }
 
-    private void UpdateSummary(TrackingUpdatedEventArgs current)
+    protected override void OnDpiChanged(DpiChangedEventArgs e)
     {
-        var records = _controller.GetRecordsSnapshot();
-        var today = current.Date;
-        var totals = MainSummaryTotals.FromRecords(today, records);
-        var todayTotal = totals.TodaySeconds;
-        var yesterdayTotal = totals.YesterdaySeconds;
-        var weekTotal = totals.WeekSeconds;
-        var monthTotal = totals.MonthSeconds;
-
-        if (_displayResetDate is not null && _displayResetDate != today)
+        base.OnDpiChanged(e);
+        // 尺寸不跟随 DPI；仅刷新测量驱动的布局
+        if (IsHandleCreated && !IsDisposed)
         {
-            ClearDisplayReset();
-        }
-
-        if (_displayResetDate == today)
-        {
-            todayTotal -= _todayDisplayBaseline;
-            yesterdayTotal -= _yesterdayDisplayBaseline;
-            weekTotal -= _weekDisplayBaseline;
-            monthTotal -= _monthDisplayBaseline;
-        }
-
-        _todayValue.Text = FormatDuration(todayTotal);
-        _todayValue.ForeColor = TodayColor(todayTotal);
-        _yesterdayValue.Text = FormatDuration(yesterdayTotal);
-        _weekValue.Text = FormatDuration(weekTotal);
-        _monthValue.Text = FormatDuration(monthTotal);
-        UpdateReminderDisplay();
-        _statusValue.Text = FormatConnectionStatus(
-            current.IsCounting ? AppText.Get("main.status.tracking") : AppText.Get("main.status.paused"),
-            _controller.IsPaired,
-            _controller.IsPeerOnline,
-            AppText.Get("common.phone"));
-        _statusDot.IsActive = current.IsCounting;
-        if (_pairingButton is not null)
-        {
-            _pairingButton.Text = _controller.IsPaired ? AppText.Get("common.disconnect") : AppText.Get("pair.pc.title");
+            RefreshData();
         }
     }
 
-    private void HandlePairingButtonClick()
+    private void RefreshData()
     {
-        if (_controller.IsPaired)
-        {
-            _disconnectPairing?.Invoke();
-            return;
-        }
-
-        _showPairingDialog?.Invoke();
-    }
-
-    private static string FormatConnectionStatus(string baseStatus, bool isPaired, bool isOnline, string peerName)
-    {
-        if (!isPaired || string.IsNullOrWhiteSpace(peerName))
-        {
-            return baseStatus;
-        }
-
-        return AppText.Format(
-            isOnline ? "main.status.connected" : "main.status.offline",
-            ("status", baseStatus),
-            ("device", peerName));
-    }
-
-    private void ShowEyeCareRemindersPage()
-    {
-        using var dialog = new EyeCareRemindersForm(_controller.Settings, !_controller.IsPaired, Icon);
-
-        if (dialog.ShowDialog(this) != DialogResult.OK)
+        if (IsDisposed)
         {
             return;
         }
 
-        _controller.Settings = dialog.Settings;
-        _controller.SaveNow();
-        UpdateReminderDisplay();
-    }
-
-    private void UpdateReminderDisplay()
-    {
-        _reminderValue.Text = AppText.Get("eyeCareReminders.entryValue");
-    }
-
-    private void UpdateStartupSetting(bool enabled)
-    {
-        _controller.Settings = _controller.Settings with
+        if (!IsHandleCreated)
         {
-            StartWithWindows = enabled
-        };
-        _controller.SaveNow();
-
-        try
-        {
-            _startupManager.SetEnabled(enabled);
+            _ = Handle;
         }
-        catch (Exception)
+
+        var settings = _controller.DesktopSettings;
+        var state = _controller.State;
+        var today = DateOnly.FromDateTime(DateTime.Now);
+        var now = DateTimeOffset.UtcNow;
+        using var deviceGraphics = CreateGraphics();
+
+        var nowLocal = DateTime.Now;
+        _dateLabel.Text = AppText.Format(
+            "desktop.main.dateLine",
+            ("today", AppText.Get("desktop.main.todayLabel")),
+            ("month", nowLocal.Month),
+            ("day", nowLocal.Day),
+            ("weekday", DesktopDisplayText.WeekdayLabel(nowLocal.DayOfWeek)));
+        var dateWidth = UiText.SingleLineWidth(deviceGraphics, _dateLabel.Text, _dateLabel.Font) + 6;
+
+        var counting = state is ClassifierState.Active or ClassifierState.IdleCandidate;
+        // 状态胶囊可用宽度 = 内容右缘 - 日期右缘 - 间隔；超长按两行显示，不与日期重叠
+        var pillMaxWidth = (26 + 428) - (26 + dateWidth) - 12;
+        if (state == ClassifierState.Unavailable)
         {
+            _statusPill.SetStatus(AppText.Get("desktop.status.unavailable"), StatusTone.Bad, pillMaxWidth);
+        }
+        else if (_controller.RemindersPaused)
+        {
+            _statusPill.SetStatus(AppText.Get("desktop.status.remindersPaused"), StatusTone.Warn, pillMaxWidth);
+        }
+        else
+        {
+            switch (state)
+            {
+                case ClassifierState.Active:
+                    _statusPill.SetStatus(AppText.Get("desktop.status.recording"), StatusTone.Good, pillMaxWidth);
+                    break;
+                case ClassifierState.IdleCandidate:
+                    _statusPill.SetStatus(AppText.Get("desktop.status.idleCandidate"), StatusTone.Warn, pillMaxWidth);
+                    break;
+                case ClassifierState.Away:
+                case ClassifierState.LockAbsence:
+                    _statusPill.SetStatus(AppText.Get("desktop.status.away"), StatusTone.Neutral, pillMaxWidth);
+                    break;
+                default:
+                    _statusPill.SetStatus(AppText.Get("desktop.status.noData"), StatusTone.Neutral, pillMaxWidth);
+                    break;
+            }
+        }
+
+        _dateLabel.Width = dateWidth;
+
+        _sessionTitle.Text = settings.Desk == DeskType.Ordinary
+            ? AppText.Get("desktop.main.sessionTitle.ordinary")
+            : AppText.Get("desktop.main.sessionTitle.other");
+        var titleWidth = UiText.SingleLineWidth(deviceGraphics, _sessionTitle.Text, _sessionTitle.Font) + 6;
+        _sessionTitle.Width = titleWidth;
+        _infoButton.Left = _sessionTitle.Right + 8;
+
+        _deskTag.SetText(DesktopDisplayText.DeskLabel(settings.Desk));
+        var tagWidth = _deskTag.PreferredWidth();
+        _deskTag.Bounds = new Rectangle(428 - CardPadding - tagWidth, 22, tagWidth, 30);
+
+        var (sessionSeconds, _, provisionalTailStartUtc) = _controller.CurrentSessionInfo();
+        var displaySeconds = sessionSeconds;
+        if (state == ClassifierState.Active && provisionalTailStartUtc is { } tailStart && tailStart < now)
+        {
+            // 主数字可含暂存尾部（估算口径，未确认前不进统计）
+            displaySeconds += (long)(now - tailStart).TotalSeconds;
+        }
+
+        var displayMinutes = displaySeconds / 60;
+        if (displayMinutes < 120)
+        {
+            _sessionValue.Font = AppFonts.Create(BigNumberPx, FontStyle.Bold, GraphicsUnit.Pixel);
+            _sessionValue.Text = displayMinutes.ToString();
+            _sessionUnit.Text = AppText.Get("desktop.main.minutesUnit");
+            var numberWidth = UiText.SingleLineWidth(deviceGraphics, _sessionValue.Text, _sessionValue.Font) + 6;
+            _sessionValue.Bounds = new Rectangle(CardPadding, 54, Math.Max(60, numberWidth), 88);
+            _sessionUnit.Bounds = new Rectangle(_sessionValue.Right + 10, 106, 120, 32);
+        }
+        else
+        {
+            _sessionValue.Font = AppFonts.Create(56, FontStyle.Bold, GraphicsUnit.Pixel);
+            _sessionValue.Text = DesktopDisplayText.Duration(displaySeconds);
+            _sessionValue.Bounds = new Rectangle(CardPadding, 54, 428 - CardPadding * 2, 88);
+            _sessionUnit.Text = string.Empty;
+        }
+
+        var (eyeDueSeconds, movementDueSeconds) = _controller.NextDueActiveSeconds();
+        _eyeIntervalLabel.Text = AppText.Format("desktop.main.plan.everyMinutes", ("minutes", settings.EyeIntervalSeconds / 60));
+        _movementIntervalLabel.Text = AppText.Format("desktop.main.plan.everyMinutes", ("minutes", settings.MovementIntervalSeconds / 60));
+        _eyeDueLabel.Text = counting && settings.EyeEnabled
+            ? DesktopDisplayText.DueIn(eyeDueSeconds)
+            : AppText.Get("desktop.common.dash");
+        _movementDueLabel.Text = counting && settings.MovementEnabled
+            ? DesktopDisplayText.DueIn(movementDueSeconds)
+            : AppText.Get("desktop.common.dash");
+        // 计划行三段：名称左、周期居中、到期右，按实测宽度分配互不重叠的区间
+        RepackPlanRow(deviceGraphics, _eyeIntervalLabel, _eyeDueLabel);
+        RepackPlanRow(deviceGraphics, _movementIntervalLabel, _movementDueLabel);
+
+        var metrics = _controller.GetDailyMetrics(today);
+        _todayActiveValue.Text = DesktopDisplayText.Duration(metrics.DesktopActiveSeconds);
+        _todayMaxValue.Text = DesktopDisplayText.Duration(metrics.MaxContinuousActiveSeconds);
+
+        var (intervals, _, breaks, gaps) = _controller.GetDayDetailSnapshot();
+        _timelineBar.SetData(today, DesktopTimeline.Build(today, intervals, breaks, gaps, now, TimeZoneInfo.Local), isToday: true);
+    }
+
+    private static void RepackPlanRow(Graphics graphics, CanvasLabel interval, CanvasLabel due)
+    {
+        // 三段按实测宽度分配互不重叠区间：名称左、周期居中、到期右
+        var card = interval.Parent!;
+        var name = card.Controls.OfType<CanvasLabel>().First(c => c.Name == "name" && c.Top == interval.Top);
+        var nameWidth = UiText.SingleLineWidth(graphics, name.Text, name.Font) + 6;
+        name.Width = nameWidth;
+        var dueWidth = UiText.SingleLineWidth(graphics, due.Text, due.Font) + 6;
+        var dueLeft = 428 - CardPadding - dueWidth;
+        due.Bounds = new Rectangle(dueLeft, due.Top, dueWidth, due.Height);
+        var intervalLeft = name.Right + 8;
+        interval.Bounds = new Rectangle(intervalLeft, interval.Top, dueLeft - 8 - intervalLeft, interval.Height);
+    }
+
+    private void ShowSettings()
+    {
+        using var form = new SettingsForm(_controller, _startupManager, _appIcon);
+        form.ShowDialog(this);
+        RefreshData();
+    }
+
+    private enum StatusTone
+    {
+        Good,
+        Warn,
+        Neutral,
+        Bad
+    }
+
+    /// <summary>状态胶囊：圆点 + 文字，颜色不是唯一状态线索（文字完整描述），宽度按实测。</summary>
+    private sealed class StatusPill : Control
+    {
+        private string _text = string.Empty;
+        private StatusTone _tone = StatusTone.Neutral;
+        private bool _twoLines;
+
+        public StatusPill()
+        {
+            SetStyle(
+                ControlStyles.UserPaint
+                | ControlStyles.AllPaintingInWmPaint
+                | ControlStyles.OptimizedDoubleBuffer
+                | ControlStyles.SupportsTransparentBackColor
+                | ControlStyles.ResizeRedraw,
+                true);
+            BackColor = Color.Transparent;
+            TabStop = false;
+        }
+
+        /// <summary>设置状态文字与色调；maxWidth 为胶囊可用最大宽度（超出则两行显示，不与左侧日期重叠）。</summary>
+        public void SetStatus(string text, StatusTone tone, int maxWidth)
+        {
+            _text = text;
+            _tone = tone;
+            using var font = AppFonts.Create(20, FontStyle.Bold, GraphicsUnit.Pixel);
+            using var graphics = CreateGraphics();
+            var needed = UiText.SingleLineWidth(graphics, text, font) + 42;
+            if (needed <= maxWidth)
+            {
+                _twoLines = false;
+                Width = Math.Max(90, needed);
+                Height = 30;
+            }
+            else
+            {
+                _twoLines = true;
+                Width = Math.Max(90, maxWidth);
+                Height = 56;
+            }
+
+            Left = (26 + 428) - Width;
+            Top = 148 - Height; // 底边对齐到久坐卡片上方
+            Invalidate();
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            var (background, foreground) = _tone switch
+            {
+                StatusTone.Good => (AppPalette.SoftTeal, AppPalette.Teal),
+                StatusTone.Warn => (AppPalette.SoftOrange, Color.FromArgb(0xC9, 0x77, 0x1F)),
+                StatusTone.Bad => (AppPalette.SoftDanger, AppPalette.Danger),
+                _ => (Color.FromArgb(0xEC, 0xEF, 0xF5), AppPalette.TextSecondary)
+            };
+            var bounds = new Rectangle(0, 0, Width - 1, Height - 1);
+            using (var path = UiGraphics.RoundedRect(bounds, Height / 2))
+            using (var fill = new SolidBrush(background))
+            {
+                e.Graphics.FillPath(fill, path);
+            }
+
+            using (var dotBrush = new SolidBrush(foreground))
+            {
+                e.Graphics.FillEllipse(dotBrush, 14, (Height - 8) / 2, 8, 8);
+            }
+
+            using var font = AppFonts.Create(20, FontStyle.Bold, GraphicsUnit.Pixel);
+            var textFlags = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix
+                | (_twoLines ? TextFormatFlags.WordBreak : TextFormatFlags.SingleLine);
+            TextRenderer.DrawText(
+                e.Graphics,
+                _text,
+                font,
+                new Rectangle(30, 0, Width - 36, Height),
+                foreground,
+                textFlags);
         }
     }
 
-    private void ResetDisplayedStatistics()
+    /// <summary>桌型小标签，宽度按实测。</summary>
+    private sealed class MiniTag : Control
     {
-        var current = _controller.Current;
-        var records = _controller.GetRecordsSnapshot();
-        var today = current.Date;
-        var totals = MainSummaryTotals.FromRecords(today, records);
+        private string _text = string.Empty;
 
-        _displayResetDate = today;
-        _todayDisplayBaseline = totals.TodaySeconds;
-        _yesterdayDisplayBaseline = totals.YesterdaySeconds;
-        _weekDisplayBaseline = totals.WeekSeconds;
-        _monthDisplayBaseline = totals.MonthSeconds;
-
-        UpdateSummary(current);
-    }
-
-    private void ClearDisplayReset()
-    {
-        _displayResetDate = null;
-        _todayDisplayBaseline = 0;
-        _yesterdayDisplayBaseline = 0;
-        _weekDisplayBaseline = 0;
-        _monthDisplayBaseline = 0;
-    }
-
-    private static void WireClick(Control control, EventHandler handler)
-    {
-        control.Cursor = Cursors.Hand;
-        control.Click += handler;
-
-        foreach (Control child in control.Controls)
+        public MiniTag()
         {
-            WireClick(child, handler);
+            SetStyle(
+                ControlStyles.UserPaint
+                | ControlStyles.AllPaintingInWmPaint
+                | ControlStyles.OptimizedDoubleBuffer
+                | ControlStyles.SupportsTransparentBackColor
+                | ControlStyles.ResizeRedraw,
+                true);
+            BackColor = Color.Transparent;
+            TabStop = false;
+        }
+
+        public void SetText(string text)
+        {
+            _text = text;
+            Invalidate();
+        }
+
+        public int PreferredWidth()
+        {
+            using var font = AppFonts.Create(20, FontStyle.Bold, GraphicsUnit.Pixel);
+            using var graphics = CreateGraphics();
+            return UiText.SingleLineWidth(graphics, _text, font) + 26;
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            var bounds = new Rectangle(0, 0, Width - 1, Height - 1);
+            using (var path = UiGraphics.RoundedRect(bounds, Height / 2))
+            using (var fill = new SolidBrush(AppPalette.SoftBlue))
+            {
+                e.Graphics.FillPath(fill, path);
+            }
+
+            using var font = AppFonts.Create(20, FontStyle.Bold, GraphicsUnit.Pixel);
+            TextRenderer.DrawText(
+                e.Graphics,
+                _text,
+                font,
+                bounds,
+                AppPalette.Primary,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
         }
     }
 
-    private static string FormatDuration(long totalSeconds)
+    /// <summary>右对齐单行文字：绘制时在真实 DC 上测量并从右缘向左排，避免右对齐裁剪首字。</summary>
+    private sealed class RightAlignedLabel : Control
     {
-        var duration = TimeSpan.FromSeconds(Math.Max(0, totalSeconds));
-        var totalHours = (int)duration.TotalHours;
-        return totalHours > 0
-            ? AppText.Format("duration.hoursMinutesPadded", ("hours", totalHours), ("minutes:00", duration.Minutes.ToString("00")))
-            : AppText.Format("duration.minutes", ("minutes", duration.Minutes));
-    }
-
-    private static Color TodayColor(long totalSeconds)
-    {
-        return TodayTonePolicy.FromSeconds(totalSeconds) switch
+        public RightAlignedLabel()
         {
-            TodayTone.Warn => AccentYellow,
-            TodayTone.Danger => AccentRed,
-            _ => AccentGreen
-        };
-    }
-
-    private static GraphicsPath CreateRoundRect(Rectangle bounds, int radius)
-    {
-        var path = new GraphicsPath();
-        var diameter = Math.Max(1, radius * 2);
-        var arc = new Rectangle(bounds.Location, new Size(diameter, diameter));
-
-        path.AddArc(arc, 180, 90);
-        arc.X = bounds.Right - diameter;
-        path.AddArc(arc, 270, 90);
-        arc.Y = bounds.Bottom - diameter;
-        path.AddArc(arc, 0, 90);
-        arc.X = bounds.Left;
-        path.AddArc(arc, 90, 90);
-        path.CloseFigure();
-        return path;
-    }
-
-    private sealed class RoundedPanel : Panel
-    {
-        public Color FillColor { get; set; } = Color.White;
-
-        public Color BorderColor { get; set; } = MainForm.BorderColor;
-
-        public int Radius { get; set; } = 18;
-
-        public RoundedPanel()
-        {
-            DoubleBuffered = true;
+            TabStop = false;
+            SetStyle(
+                ControlStyles.UserPaint
+                | ControlStyles.AllPaintingInWmPaint
+                | ControlStyles.OptimizedDoubleBuffer
+                | ControlStyles.SupportsTransparentBackColor
+                | ControlStyles.ResizeRedraw,
+                true);
             BackColor = Color.Transparent;
         }
 
         protected override void OnPaint(PaintEventArgs e)
         {
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            var bounds = new Rectangle(0, 0, Width - 1, Height - 1);
-            using var path = CreateRoundRect(bounds, Radius);
-            using var fill = new SolidBrush(FillColor);
-            using var border = new Pen(BorderColor);
-            e.Graphics.FillPath(fill, path);
-            e.Graphics.DrawPath(border, path);
-            base.OnPaint(e);
+            if (string.IsNullOrEmpty(Text) || ClientRectangle.Width <= 0)
+            {
+                return;
+            }
+
+            const TextFormatFlags flags = TextFormatFlags.Left | TextFormatFlags.VerticalCenter
+                | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix;
+            var measured = TextRenderer.MeasureText(e.Graphics, Text, Font, new Size(int.MaxValue, Height), flags);
+            var left = Math.Max(0, Width - measured.Width);
+            TextRenderer.DrawText(e.Graphics, Text, Font, new Rectangle(left, 0, measured.Width, Height), ForeColor, flags);
         }
     }
 
-    private sealed class RoundedButton : Control
+    /// <summary>ⓘ 圈 i 说明按钮。</summary>
+    private sealed class InfoDotButton : Control
     {
         private bool _hovered;
-        private bool _pressed;
 
-        public Color ButtonColor { get; set; } = AccentGreen;
-
-        public Color HoverColor { get; set; } = Color.FromArgb(19, 145, 111);
-
-        public Color PressedColor { get; set; } = Color.FromArgb(17, 124, 96);
-
-        public Color TextColor { get; set; } = Color.White;
-
-        public RoundedButton()
+        public InfoDotButton()
         {
             Cursor = Cursors.Hand;
-            Font = AppFonts.Create(11F, FontStyle.Bold, GraphicsUnit.Point);
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+            TabStop = false;
+            SetStyle(
+                ControlStyles.UserPaint
+                | ControlStyles.AllPaintingInWmPaint
+                | ControlStyles.OptimizedDoubleBuffer
+                | ControlStyles.SupportsTransparentBackColor
+                | ControlStyles.ResizeRedraw,
+                true);
+            BackColor = Color.Transparent;
         }
 
         protected override void OnMouseEnter(EventArgs e)
@@ -579,551 +712,36 @@ public sealed class MainForm : Form
         protected override void OnMouseLeave(EventArgs e)
         {
             _hovered = false;
-            _pressed = false;
-            Invalidate();
-        }
-
-        protected override void OnMouseDown(MouseEventArgs e)
-        {
-            _pressed = true;
             Invalidate();
         }
 
         protected override void OnMouseUp(MouseEventArgs e)
         {
-            _pressed = false;
-            Invalidate();
+            // 不手动调 OnClick：框架在 MouseUp 之后会自行触发 Click（StandardClick），手动会双触发
             base.OnMouseUp(e);
         }
 
-        protected override void OnPaint(PaintEventArgs pevent)
+        protected override void OnPaint(PaintEventArgs e)
         {
-            pevent.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            var bounds = new Rectangle(0, 0, Width - 1, Height - 1);
-            var color = _pressed ? PressedColor : _hovered ? HoverColor : ButtonColor;
-            using var path = CreateRoundRect(bounds, Height / 2);
-            using var brush = new SolidBrush(Enabled ? color : Color.FromArgb(230, 234, 238));
-            pevent.Graphics.FillPath(brush, path);
+            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            var size = Math.Min(Width, Height) - 1;
+            var bounds = new Rectangle((Width - size) / 2, (Height - size) / 2, size, size);
+            if (_hovered)
+            {
+                using var hoverBrush = new SolidBrush(AppPalette.SoftBlue);
+                e.Graphics.FillEllipse(hoverBrush, bounds);
+            }
 
+            using var pen = new Pen(AppPalette.TextSecondary, Math.Max(1.2F, size / 16F));
+            e.Graphics.DrawEllipse(pen, bounds);
+            using var font = AppFonts.Create(14, FontStyle.Bold, GraphicsUnit.Pixel);
             TextRenderer.DrawText(
-                pevent.Graphics,
-                Text,
-                Font,
+                e.Graphics,
+                "i",
+                font,
                 bounds,
-                Enabled ? TextColor : TextSecondary,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+                AppPalette.TextSecondary,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
         }
     }
-
-    private sealed class CloseIconButton : Control
-    {
-        private bool _hovered;
-        private bool _pressed;
-
-        public CloseIconButton()
-        {
-            Cursor = Cursors.Hand;
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
-        }
-
-        protected override void OnMouseEnter(EventArgs e)
-        {
-            _hovered = true;
-            Invalidate();
-        }
-
-        protected override void OnMouseLeave(EventArgs e)
-        {
-            _hovered = false;
-            _pressed = false;
-            Invalidate();
-        }
-
-        protected override void OnMouseDown(MouseEventArgs e)
-        {
-            _pressed = true;
-            Invalidate();
-        }
-
-        protected override void OnMouseUp(MouseEventArgs e)
-        {
-            _pressed = false;
-            Invalidate();
-
-            if (ClientRectangle.Contains(e.Location))
-            {
-                OnClick(EventArgs.Empty);
-            }
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            var fillColor = _pressed
-                ? Color.FromArgb(220, 226, 232)
-                : _hovered
-                    ? Color.FromArgb(232, 236, 240)
-                    : Color.FromArgb(242, 244, 247);
-
-            using (var fill = new SolidBrush(fillColor))
-            {
-                e.Graphics.FillEllipse(fill, 0, 0, Width - 1, Height - 1);
-            }
-
-            using var pen = new Pen(TextSecondary, 2.2F)
-            {
-                StartCap = LineCap.Round,
-                EndCap = LineCap.Round
-            };
-            var centerX = Width / 2F;
-            var centerY = Height / 2F;
-            const float half = 6.4F;
-            e.Graphics.DrawLine(pen, centerX - half, centerY - half, centerX + half, centerY + half);
-            e.Graphics.DrawLine(pen, centerX + half, centerY - half, centerX - half, centerY + half);
-        }
-    }
-
-    private sealed class ToggleSwitch : Control
-    {
-        private bool _checked;
-        private bool _hovered;
-        private bool _pressed;
-
-        public bool Checked
-        {
-            get => _checked;
-            set
-            {
-                if (_checked == value)
-                {
-                    return;
-                }
-
-                _checked = value;
-                Invalidate();
-            }
-        }
-
-        public ToggleSwitch()
-        {
-            Cursor = Cursors.Hand;
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
-        }
-
-        protected override void OnMouseEnter(EventArgs e)
-        {
-            _hovered = true;
-            Invalidate();
-        }
-
-        protected override void OnMouseLeave(EventArgs e)
-        {
-            _hovered = false;
-            _pressed = false;
-            Invalidate();
-        }
-
-        protected override void OnMouseDown(MouseEventArgs e)
-        {
-            _pressed = true;
-            Invalidate();
-        }
-
-        protected override void OnMouseUp(MouseEventArgs e)
-        {
-            _pressed = false;
-            if (ClientRectangle.Contains(e.Location))
-            {
-                Checked = !Checked;
-                OnClick(EventArgs.Empty);
-            }
-
-            Invalidate();
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            var track = new Rectangle(0, 0, Width - 1, Height - 1);
-            var offColor = _hovered || _pressed
-                ? Color.FromArgb(226, 231, 235)
-                : Color.FromArgb(236, 240, 244);
-            var trackColor = Checked ? AccentGreen : offColor;
-            using (var path = CreateRoundRect(track, Height / 2))
-            using (var brush = new SolidBrush(trackColor))
-            {
-                e.Graphics.FillPath(brush, path);
-            }
-
-            var knobSize = Math.Max(4, Height - 8);
-            var knobX = Checked ? Width - knobSize - 4 : 4;
-            var knob = new Rectangle(knobX, 4, knobSize, knobSize);
-            using var knobBrush = new SolidBrush(Color.White);
-            e.Graphics.FillEllipse(knobBrush, knob);
-        }
-    }
-
-    private sealed class ReminderThresholdDialog : Form
-    {
-        private readonly TextBox _minutesInput;
-        private readonly FitTextLabel _hintLabel;
-        private readonly bool _canEdit;
-
-        public int ReminderMinutes { get; private set; }
-        public bool RepeatReminder { get; private set; }
-
-        public ReminderThresholdDialog(int currentMinutes, bool repeatReminder, bool canEdit, Icon? icon)
-        {
-            ReminderMinutes = Math.Clamp(currentMinutes, ReminderThreshold.MinMinutes, ReminderThreshold.MaxMinutes);
-            RepeatReminder = true;
-            _canEdit = canEdit;
-            AutoScaleMode = AutoScaleMode.None;
-            Text = AppText.Get("reminder.title");
-            if (icon is not null)
-            {
-                Icon = (Icon)icon.Clone();
-            }
-
-            StartPosition = FormStartPosition.CenterParent;
-            FormBorderStyle = FormBorderStyle.None;
-            MaximizeBox = false;
-            MinimizeBox = false;
-            ShowInTaskbar = false;
-            ClientSize = new Size(470, 284);
-            BackColor = Color.White;
-            Font = AppFonts.Create(9F, FontStyle.Regular, GraphicsUnit.Point);
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
-
-            Controls.Add(new FitTextLabel
-            {
-                Text = AppText.Get("reminder.title"),
-                Bounds = new Rectangle(28, 20, 240, 60),
-                MaxFontSize = 19F,
-                MinFontSize = 17F,
-                FontStyle = FontStyle.Bold,
-                ForeColor = TextPrimary,
-                BackColor = Color.Transparent,
-                TextAlign = ContentAlignment.MiddleLeft
-            });
-
-            var closeButton = new CloseIconButton
-            {
-                Bounds = new Rectangle(404, 24, 38, 38)
-            };
-            closeButton.Click += (_, _) =>
-            {
-                DialogResult = DialogResult.Cancel;
-                Close();
-            };
-            Controls.Add(closeButton);
-
-            _hintLabel = new FitTextLabel
-            {
-                Bounds = new Rectangle(28, 82, 414, 34),
-                MaxFontSize = 12F,
-                MinFontSize = 10F,
-                FontStyle = FontStyle.Regular,
-                ForeColor = TextSecondary,
-                BackColor = Color.Transparent,
-                TextAlign = ContentAlignment.MiddleLeft
-            };
-            Controls.Add(_hintLabel);
-
-            var inputShell = new RoundedPanel
-            {
-                Bounds = new Rectangle(28, 122, 414, 76),
-                FillColor = Color.FromArgb(249, 253, 251),
-                BorderColor = Color.FromArgb(206, 226, 218),
-                Radius = 18
-            };
-
-            _minutesInput = new TextBox
-            {
-                Text = ReminderMinutes.ToString(),
-                Bounds = new Rectangle(24, 7, 150, 58),
-                BorderStyle = BorderStyle.None,
-                Font = AppFonts.Create(20F, FontStyle.Bold, GraphicsUnit.Point),
-                ForeColor = TextPrimary,
-                BackColor = Color.FromArgb(249, 253, 251),
-                MaxLength = 5,
-                Multiline = true,
-                WordWrap = false,
-                ScrollBars = ScrollBars.None
-            };
-            _minutesInput.KeyPress += OnMinutesKeyPress;
-            _minutesInput.TextChanged += (_, _) => UpdateHint();
-            inputShell.Controls.Add(_minutesInput);
-
-            inputShell.Controls.Add(new FitTextLabel
-            {
-                Text = AppText.Get("reminder.unitMinute"),
-                Bounds = new Rectangle(306, 8, 84, 58),
-                MaxFontSize = 14F,
-                MinFontSize = 13F,
-                FontStyle = FontStyle.Regular,
-                ForeColor = TextSecondary,
-                BackColor = Color.Transparent,
-                TextAlign = ContentAlignment.MiddleRight
-            });
-            Controls.Add(inputShell);
-
-            var cancelButton = new RoundedButton
-            {
-                Text = AppText.Get("common.cancel"),
-                Bounds = new Rectangle(28, 216, 190, 48),
-                ButtonColor = Color.FromArgb(242, 244, 247),
-                HoverColor = Color.FromArgb(232, 236, 240),
-                PressedColor = Color.FromArgb(220, 226, 232),
-                TextColor = Color.FromArgb(52, 64, 84),
-                Font = AppFonts.Create(13F, FontStyle.Bold, GraphicsUnit.Point)
-            };
-            cancelButton.Click += (_, _) =>
-            {
-                DialogResult = DialogResult.Cancel;
-                Close();
-            };
-            Controls.Add(cancelButton);
-
-            var okButton = new RoundedButton
-            {
-                Text = _canEdit ? AppText.Get("common.save") : AppText.Get("common.ok"),
-                Bounds = new Rectangle(238, 216, 204, 48),
-                ButtonColor = AccentGreen,
-                HoverColor = Color.FromArgb(19, 145, 111),
-                PressedColor = Color.FromArgb(17, 124, 96),
-                TextColor = Color.White,
-                Font = AppFonts.Create(13F, FontStyle.Bold, GraphicsUnit.Point)
-            };
-            okButton.Click += (_, _) => SaveAndClose();
-            Controls.Add(okButton);
-
-            if (!_canEdit)
-            {
-                _minutesInput.ReadOnly = true;
-                _minutesInput.ForeColor = TextSecondary;
-            }
-
-            UpdateHint();
-        }
-
-        protected override void OnShown(EventArgs e)
-        {
-            base.OnShown(e);
-            _minutesInput.Focus();
-            _minutesInput.SelectAll();
-        }
-
-        protected override void OnResize(EventArgs e)
-        {
-            base.OnResize(e);
-            using var path = CreateRoundRect(new Rectangle(0, 0, Width, Height), 26);
-            Region = new Region(path);
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            var bounds = new Rectangle(0, 0, Width - 1, Height - 1);
-            using var path = CreateRoundRect(bounds, 26);
-            using var fill = new SolidBrush(Color.White);
-            using var border = new Pen(BorderColor);
-            e.Graphics.FillPath(fill, path);
-            e.Graphics.DrawPath(border, path);
-            base.OnPaint(e);
-        }
-
-        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
-        {
-            if (keyData == Keys.Enter)
-            {
-                SaveAndClose();
-                return true;
-            }
-
-            if (keyData == Keys.Escape)
-            {
-                DialogResult = DialogResult.Cancel;
-                Close();
-                return true;
-            }
-
-            return base.ProcessCmdKey(ref msg, keyData);
-        }
-
-        private void OnMinutesKeyPress(object? sender, KeyPressEventArgs e)
-        {
-            if (!char.IsControl(e.KeyChar) && !char.IsDigit(e.KeyChar))
-            {
-                e.Handled = true;
-            }
-        }
-
-        private void SaveAndClose()
-        {
-            if (!TryReadMinutes(out var minutes))
-            {
-                return;
-            }
-
-            if (!_canEdit)
-            {
-                DialogResult = DialogResult.Cancel;
-                Close();
-                return;
-            }
-
-            ReminderMinutes = minutes;
-            RepeatReminder = true;
-            DialogResult = DialogResult.OK;
-            Close();
-        }
-
-        private void UpdateHint()
-        {
-            if (TryReadMinutes(out var minutes))
-            {
-                _hintLabel.ForeColor = TextSecondary;
-                _hintLabel.Text = _canEdit
-                    ? AppText.Format(
-                        "reminder.unitHint",
-                        ("equivalent", ReminderThreshold.FormatEquivalent(ReminderThreshold.FromMinutes(minutes))))
-                    : AppText.Get("reminder.pcConnectedReadonly");
-                return;
-            }
-
-            _hintLabel.ForeColor = Color.FromArgb(190, 80, 68);
-            _hintLabel.Text = AppText.Format(
-                "reminder.validation.minutesRange",
-                ("min", ReminderThreshold.MinMinutes),
-                ("max", ReminderThreshold.MaxMinutes));
-        }
-
-        private bool TryReadMinutes(out int minutes)
-        {
-            return int.TryParse(_minutesInput.Text.Trim(), out minutes)
-                && minutes >= ReminderThreshold.MinMinutes
-                && minutes <= ReminderThreshold.MaxMinutes;
-        }
-    }
-
-    private sealed class StatusDot : Control
-    {
-        private bool _isActive;
-
-        public bool IsActive
-        {
-            get => _isActive;
-            set
-            {
-                if (_isActive == value)
-                {
-                    return;
-                }
-
-                _isActive = value;
-                Invalidate();
-            }
-        }
-
-        public StatusDot()
-        {
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            var size = Math.Min(12, Math.Min(Width, Height));
-            var x = (Width - size) / 2;
-            var y = (Height - size) / 2;
-            using var brush = new SolidBrush(IsActive ? AccentGreen : Color.FromArgb(152, 162, 179));
-            e.Graphics.FillEllipse(brush, x, y, size, size);
-        }
-    }
-
-    private sealed class FitTextLabel : Control
-    {
-        public float MaxFontSize { get; set; } = 20F;
-
-        public float MinFontSize { get; set; } = 10F;
-
-        public FontStyle FontStyle { get; set; } = FontStyle.Regular;
-
-        public ContentAlignment TextAlign { get; set; } = ContentAlignment.MiddleLeft;
-
-        public FitTextLabel()
-        {
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-            SetStyle(ControlStyles.SupportsTransparentBackColor, true);
-        }
-
-        protected override void OnTextChanged(EventArgs e)
-        {
-            Invalidate();
-            base.OnTextChanged(e);
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            if (BackColor.A == 255)
-            {
-                e.Graphics.Clear(BackColor);
-            }
-
-            if (ClientRectangle.Width <= 0 || ClientRectangle.Height <= 0 || string.IsNullOrEmpty(Text))
-            {
-                return;
-            }
-
-            using var font = CreateFittingFont(e.Graphics, ClientRectangle);
-            TextRenderer.DrawText(e.Graphics, Text, font, ClientRectangle, ForeColor, CreateTextFormatFlags());
-        }
-
-        private Font CreateFittingFont(Graphics graphics, Rectangle bounds)
-        {
-            for (var size = MaxFontSize; size >= MinFontSize; size -= 0.5F)
-            {
-                var font = AppFonts.Create(size, FontStyle, GraphicsUnit.Point);
-                var measured = TextRenderer.MeasureText(
-                    graphics,
-                    Text,
-                    font,
-                    new Size(bounds.Width, int.MaxValue),
-                    CreateMeasureTextFormatFlags());
-                if (measured.Width <= bounds.Width && measured.Height <= bounds.Height)
-                {
-                    return font;
-                }
-
-                font.Dispose();
-            }
-
-            return AppFonts.Create(MinFontSize, FontStyle, GraphicsUnit.Point);
-        }
-
-        private TextFormatFlags CreateTextFormatFlags()
-        {
-            var flags = TextFormatFlags.NoPadding | TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl;
-
-            flags |= TextAlign is ContentAlignment.TopRight or ContentAlignment.MiddleRight or ContentAlignment.BottomRight
-                ? TextFormatFlags.Right
-                : TextAlign is ContentAlignment.TopCenter or ContentAlignment.MiddleCenter or ContentAlignment.BottomCenter
-                    ? TextFormatFlags.HorizontalCenter
-                    : TextFormatFlags.Left;
-
-            flags |= TextAlign is ContentAlignment.BottomLeft or ContentAlignment.BottomCenter or ContentAlignment.BottomRight
-                ? TextFormatFlags.Bottom
-                : TextAlign is ContentAlignment.TopLeft or ContentAlignment.TopCenter or ContentAlignment.TopRight
-                    ? TextFormatFlags.Top
-                    : TextFormatFlags.VerticalCenter;
-
-            return flags;
-        }
-
-        private static TextFormatFlags CreateMeasureTextFormatFlags()
-        {
-            return TextFormatFlags.NoPadding | TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl;
-        }
-    }
-
 }

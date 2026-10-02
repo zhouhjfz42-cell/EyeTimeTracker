@@ -1,0 +1,30 @@
+{
+  "name": "A06-grace-vs-gap",
+  "desk": "ordinary",
+  "startUtc": "2026-09-29T01:00:00Z",
+  "signals": [
+    {
+      "t": 0,
+      "kind": "Input"
+    },
+    {
+      "t": 90,
+      "kind": "Input"
+    },
+    {
+      "t": 180,
+      "kind": "Input"
+    }
+  ],
+  "advanceTo": 250,
+  "expect": {
+    "state": "IdleCandidate",
+    "committedSeconds": 0,
+    "sessions": [
+      {
+        "startedT": 0
+      }
+    ],
+    "breaks": []
+  }
+}

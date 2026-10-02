@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_main_title" formatted="false">用眼时间</string>
-    <string name="app_name" formatted="false">用眼时间记录</string>
+    <string name="app_name" formatted="false">久坐会死</string>
     <string name="app_stats_title" formatted="false">用眼时间统计</string>
     <string name="calendar_month_compact" formatted="false">{month}月</string>
     <string name="calendar_month_title" formatted="false">{year}年 {month}月</string>
@@ -35,6 +35,124 @@
     <string name="common_this_week" formatted="false">本周</string>
     <string name="common_today" formatted="false">今天</string>
     <string name="common_yesterday" formatted="false">昨天</string>
+    <string name="desktop_brand_chip" formatted="false">坐</string>
+    <string name="desktop_brand_subtitle" formatted="false">桌面活动与休息提醒</string>
+    <string name="desktop_channels_done" formatted="false">完成</string>
+    <string name="desktop_channels_keep_one" formatted="false">至少保留一种提醒方式</string>
+    <string name="desktop_common_back_home" formatted="false">‹ 返回主页</string>
+    <string name="desktop_common_dash" formatted="false">—</string>
+    <string name="desktop_desk_adjustable" formatted="false">升降桌</string>
+    <string name="desktop_desk_mixed" formatted="false">不确定/混合</string>
+    <string name="desktop_desk_ordinary" formatted="false">普通桌</string>
+    <string name="desktop_duration_count" formatted="false">{count}次</string>
+    <string name="desktop_duration_hours_minutes" formatted="false">{hours}小时{minutes}分</string>
+    <string name="desktop_duration_minutes" formatted="false">{minutes}分钟</string>
+    <string name="desktop_duration_sessions" formatted="false">{count}段</string>
+    <string name="desktop_eye_toast_body" formatted="false">用 {seconds} 秒看看远处，无需点击。</string>
+    <string name="desktop_eye_toast_title" formatted="false">看远处，放松一下</string>
+    <string name="desktop_main_action_records" formatted="false">查看记录 →</string>
+    <string name="desktop_main_action_reminders" formatted="false">提醒设置</string>
+    <string name="desktop_main_date_line" formatted="false">{today} · {month} 月 {day} 日 周{weekday}</string>
+    <string name="desktop_main_info_tip" formatted="false">停止键鼠活动2分钟后，会中断计时，下次从0开始；阅读和观看视频时没有操作不算离开。</string>
+    <string name="desktop_main_minutes_unit" formatted="false">分钟</string>
+    <string name="desktop_main_plan_due_in" formatted="false">约 {minutes} 分钟后</string>
+    <string name="desktop_main_plan_due_soon" formatted="false">即将到期</string>
+    <string name="desktop_main_plan_every_minutes" formatted="false">每 {minutes} 分钟</string>
+    <string name="desktop_main_plan_eye" formatted="false">远望</string>
+    <string name="desktop_main_plan_movement" formatted="false">活动</string>
+    <string name="desktop_main_plan_timing_note" formatted="false">按有效桌面活动计时</string>
+    <string name="desktop_main_plan_title" formatted="false">当前提醒计划</string>
+    <string name="desktop_main_session_title_ordinary" formatted="false">本次估算久坐</string>
+    <string name="desktop_main_session_title_other" formatted="false">本次连续静态工作</string>
+    <string name="desktop_main_today_active" formatted="false">桌面活动</string>
+    <string name="desktop_main_today_max_continuous" formatted="false">最长连续</string>
+    <string name="desktop_main_today_label" formatted="false">今天</string>
+    <string name="desktop_main_today_title" formatted="false">今日概览</string>
+    <string name="desktop_movement_toast_body" formatted="false">也让眼睛休息一下。离开电脑后会自动暂停计时。</string>
+    <string name="desktop_movement_toast_title_ordinary" formatted="false">起来走动 {minutes} 分钟</string>
+    <string name="desktop_movement_toast_title_other" formatted="false">改变姿势，走动 {minutes} 分钟</string>
+    <string name="desktop_nav_home" formatted="false">主页</string>
+    <string name="desktop_nav_settings" formatted="false">设置</string>
+    <string name="desktop_onboarding_adjust" formatted="false">调整</string>
+    <string name="desktop_onboarding_autostart" formatted="false">开机时自动启动（关闭窗口后仍在后台记录）</string>
+    <string name="desktop_onboarding_desk_adjustable_desc" formatted="false">可能坐着，也可能站着。提醒你改变姿势、走动一下。</string>
+    <string name="desktop_onboarding_desk_ordinary_desc" formatted="false">主要坐着使用电脑，我们会显示“估算久坐”时间。</string>
+    <string name="desktop_onboarding_desk_unknown_desc" formatted="false">先按“连续静态工作”记录，之后随时可改。</string>
+    <string name="desktop_onboarding_footer" formatted="false">不登录、不联网也能使用，数据保存在本机。</string>
+    <string name="desktop_onboarding_lead" formatted="false">这决定主界面怎么称呼你的连续工作时段，之后随时可以修改。</string>
+    <string name="desktop_onboarding_listen" formatted="false">试听</string>
+    <string name="desktop_onboarding_plan_line" formatted="false">每 20 分钟看远处 20 秒 · 每 40 分钟活动 2 分钟</string>
+    <string name="desktop_onboarding_plan_title" formatted="false">默认提醒计划</string>
+    <string name="desktop_onboarding_skip" formatted="false">暂时跳过</string>
+    <string name="desktop_onboarding_start" formatted="false">开始记录</string>
+    <string name="desktop_onboarding_title" formatted="false">你平时用哪种桌子？</string>
+    <string name="desktop_records_data_note" formatted="false">数据说明：根据电脑活动估算，无法确认坐姿、起身或远望。</string>
+    <string name="desktop_records_date_line" formatted="false">{month} 月 {day} 日 周{weekday}</string>
+    <string name="desktop_records_lead" formatted="false">看趋势、连续段和提醒执行情况</string>
+    <string name="desktop_records_legacy_empty" formatted="false">没有升级前的旧数据。</string>
+    <string name="desktop_records_legacy_link" formatted="false">旧版用眼记录（升级前数据）→</string>
+    <string name="desktop_records_legacy_note" formatted="false">旧数据只读展示，不计入新版指标。</string>
+    <string name="desktop_records_legacy_title" formatted="false">旧版用眼记录（升级前数据）</string>
+    <string name="desktop_records_metric_active" formatted="false">桌面活动</string>
+    <string name="desktop_records_metric_breaks" formatted="false">桌面中断</string>
+    <string name="desktop_records_metric_max_continuous" formatted="false">最长连续</string>
+    <string name="desktop_records_metric_over40" formatted="false">&gt;40分钟</string>
+    <string name="desktop_records_metric_rate" formatted="false">中断率</string>
+    <string name="desktop_records_metric_sedentary" formatted="false">估算久坐</string>
+    <string name="desktop_records_range_day" formatted="false">日</string>
+    <string name="desktop_records_range_month" formatted="false">月</string>
+    <string name="desktop_records_range_month_todo" formatted="false">月（暂未实现）</string>
+    <string name="desktop_records_range_week" formatted="false">周</string>
+    <string name="desktop_records_range_week_todo" formatted="false">周（暂未实现）</string>
+    <string name="desktop_records_reminders_eye_line" formatted="false">远望触发 {due} 次 · 实际投递 {delivered} 次 · 执行情况未知</string>
+    <string name="desktop_records_reminders_rate_footnote" formatted="false">中断率只统计提醒后的推定桌面离开，不代表全天活动达标。</string>
+    <string name="desktop_records_reminders_rate_line" formatted="false">活动机会 {matured} 次已成熟 · 响应 {responses} 次（{percent}%）· 等待观察 {pending} 次</string>
+    <string name="desktop_records_reminders_rate_line_none" formatted="false">暂无可评估提醒（—）</string>
+    <string name="desktop_records_reminders_rate_unknown" formatted="false">另有 {unknown} 次机会窗口不可观察，不计入分母</string>
+    <string name="desktop_records_reminders_title" formatted="false">提醒与中断</string>
+    <string name="desktop_records_sessions_line" formatted="false">远望 {eye} · 活动 {movement} · 中断 {breaks}</string>
+    <string name="desktop_records_sessions_ongoing" formatted="false">进行中</string>
+    <string name="desktop_records_sessions_title" formatted="false">连续段</string>
+    <string name="desktop_records_timeline_legend_active" formatted="false">有效活动</string>
+    <string name="desktop_records_timeline_legend_away" formatted="false">推定离开</string>
+    <string name="desktop_records_timeline_legend_gap" formatted="false">不可观察</string>
+    <string name="desktop_records_timeline_title" formatted="false">桌面活动时间线</string>
+    <string name="desktop_reminders_channel_notification" formatted="false">轻通知</string>
+    <string name="desktop_reminders_channel_sound" formatted="false">声音</string>
+    <string name="desktop_reminders_eye_title" formatted="false">远望提醒</string>
+    <string name="desktop_reminders_interval_minutes" formatted="false">间隔（分钟）</string>
+    <string name="desktop_reminders_movement_title" formatted="false">活动提醒</string>
+    <string name="desktop_reminders_preset_custom" formatted="false">自定义</string>
+    <string name="desktop_reminders_preset_light" formatted="false">轻提醒 30/60</string>
+    <string name="desktop_reminders_preset_standard" formatted="false">标准 20/40</string>
+    <string name="desktop_reminders_quiet_title" formatted="false">免打扰时段</string>
+    <string name="desktop_reminders_resume" formatted="false">恢复提醒</string>
+    <string name="desktop_reminders_save" formatted="false">保存</string>
+    <string name="desktop_reminders_validation_eye_suggested_range" formatted="false">建议时长请输入 5-120 之间的整数</string>
+    <string name="desktop_reminders_validation_interval_range" formatted="false">间隔请输入 1-180 之间的整数</string>
+    <string name="desktop_reminders_validation_movement_suggested_range" formatted="false">建议时长请输入 1-15 之间的整数</string>
+    <string name="desktop_reminders_validation_suggested_exceeds_interval" formatted="false">动作时长不能超过本类间隔</string>
+    <string name="desktop_settings_back_home" formatted="false">返回主页 ›</string>
+    <string name="desktop_settings_desk" formatted="false">桌型</string>
+    <string name="desktop_settings_field_eye_action" formatted="false">动作（秒）</string>
+    <string name="desktop_settings_field_interval" formatted="false">间隔（分钟）</string>
+    <string name="desktop_settings_field_movement_action" formatted="false">动作（分钟）</string>
+    <string name="desktop_settings_language" formatted="false">语言</string>
+    <string name="desktop_settings_language_value" formatted="false">简体中文</string>
+    <string name="desktop_settings_pause30" formatted="false">暂停 30 分钟</string>
+    <string name="desktop_settings_pause_temp" formatted="false">临时暂停</string>
+    <string name="desktop_settings_quiet" formatted="false">免打扰</string>
+    <string name="desktop_settings_quiet_period" formatted="false">时段</string>
+    <string name="desktop_settings_quiet_to" formatted="false">至</string>
+    <string name="desktop_settings_section_app_settings" formatted="false">应用设置</string>
+    <string name="desktop_settings_startup" formatted="false">开机启动</string>
+    <string name="desktop_settings_title" formatted="false">提醒设置</string>
+    <string name="desktop_status_away" formatted="false">已暂停桌面计时</string>
+    <string name="desktop_status_idle_candidate" formatted="false">暂未检测到操作</string>
+    <string name="desktop_status_no_data" formatted="false">开始使用电脑后，会自动记录</string>
+    <string name="desktop_status_recording" formatted="false">正在记录</string>
+    <string name="desktop_status_reminders_paused" formatted="false">提醒暂停中，记录继续</string>
+    <string name="desktop_status_unavailable" formatted="false">暂时无法记录</string>
     <string name="disconnect_android_toast" formatted="false">已断开电脑</string>
     <string name="disconnect_message" formatted="false">断开后，下次连接需要重新配对。</string>
     <string name="disconnect_pc_message" formatted="false">断开后，手机和电脑将停止同步。\n下次连接需要重新配对。</string>
@@ -316,10 +434,12 @@
     <string name="tray_pair_success_title" formatted="false">手机配对成功</string>
     <string name="tray_pair_waiting_body" formatted="false">电脑已开始等待手机连接，5分钟内有效。</string>
     <string name="tray_quit" formatted="false">退出</string>
-    <string name="tray_resume_reminders" formatted="false">恢复弹窗</string>
+    <string name="tray_records_page" formatted="false">查看记录</string>
+    <string name="tray_reminders_page" formatted="false">提醒设置</string>
+    <string name="tray_resume_reminders" formatted="false">恢复提醒</string>
     <string name="tray_stats_page" formatted="false">统计页</string>
     <string name="tray_status" formatted="false">统计</string>
-    <string name="tray_stop_reminders" formatted="false">停止弹窗</string>
+    <string name="tray_stop_reminders" formatted="false">暂停提醒 30 分钟</string>
     <string name="usage_status_activity_desc" formatted="false">仅用于判断是否正在走路，不读取位置或路线。</string>
     <string name="usage_status_activity_title" formatted="false">身体活动权限</string>
     <string name="usage_status_background_desc" formatted="false">建议在电池设置中允许后台运行，让统计和提醒更稳定。</string>

@@ -1,0 +1,54 @@
+{
+  "name": "A14-suspend-resume",
+  "desk": "ordinary",
+  "startUtc": "2026-09-29T01:00:00Z",
+  "signals": [
+    {
+      "t": 0,
+      "kind": "Input"
+    },
+    {
+      "t": 30,
+      "kind": "Input"
+    },
+    {
+      "t": 100,
+      "kind": "Suspend"
+    },
+    {
+      "t": 7300,
+      "kind": "Resume"
+    },
+    {
+      "t": 7310,
+      "kind": "Input"
+    },
+    {
+      "t": 7340,
+      "kind": "Input"
+    }
+  ],
+  "advanceTo": 7360,
+  "expect": {
+    "state": "Active",
+    "committedSeconds": 60,
+    "sessions": [
+      {
+        "startedT": 0,
+        "endedT": 100,
+        "endReason": "suspend"
+      },
+      {
+        "startedT": 7310
+      }
+    ],
+    "breaks": [],
+    "gaps": [
+      {
+        "fromT": 100,
+        "toT": 7300,
+        "reason": "sleep"
+      }
+    ]
+  }
+}

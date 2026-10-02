@@ -1,0 +1,692 @@
+{
+  "name": "A04-over40-and-4800",
+  "desk": "ordinary",
+  "startUtc": "2026-09-29T01:00:00Z",
+  "signals": [
+    {
+      "t": 0,
+      "kind": "Input"
+    },
+    {
+      "t": 30,
+      "kind": "Input"
+    },
+    {
+      "t": 60,
+      "kind": "Input"
+    },
+    {
+      "t": 90,
+      "kind": "Input"
+    },
+    {
+      "t": 120,
+      "kind": "Input"
+    },
+    {
+      "t": 150,
+      "kind": "Input"
+    },
+    {
+      "t": 180,
+      "kind": "Input"
+    },
+    {
+      "t": 210,
+      "kind": "Input"
+    },
+    {
+      "t": 240,
+      "kind": "Input"
+    },
+    {
+      "t": 270,
+      "kind": "Input"
+    },
+    {
+      "t": 300,
+      "kind": "Input"
+    },
+    {
+      "t": 330,
+      "kind": "Input"
+    },
+    {
+      "t": 360,
+      "kind": "Input"
+    },
+    {
+      "t": 390,
+      "kind": "Input"
+    },
+    {
+      "t": 420,
+      "kind": "Input"
+    },
+    {
+      "t": 450,
+      "kind": "Input"
+    },
+    {
+      "t": 480,
+      "kind": "Input"
+    },
+    {
+      "t": 510,
+      "kind": "Input"
+    },
+    {
+      "t": 540,
+      "kind": "Input"
+    },
+    {
+      "t": 570,
+      "kind": "Input"
+    },
+    {
+      "t": 600,
+      "kind": "Input"
+    },
+    {
+      "t": 630,
+      "kind": "Input"
+    },
+    {
+      "t": 660,
+      "kind": "Input"
+    },
+    {
+      "t": 690,
+      "kind": "Input"
+    },
+    {
+      "t": 720,
+      "kind": "Input"
+    },
+    {
+      "t": 750,
+      "kind": "Input"
+    },
+    {
+      "t": 780,
+      "kind": "Input"
+    },
+    {
+      "t": 810,
+      "kind": "Input"
+    },
+    {
+      "t": 840,
+      "kind": "Input"
+    },
+    {
+      "t": 870,
+      "kind": "Input"
+    },
+    {
+      "t": 900,
+      "kind": "Input"
+    },
+    {
+      "t": 930,
+      "kind": "Input"
+    },
+    {
+      "t": 960,
+      "kind": "Input"
+    },
+    {
+      "t": 990,
+      "kind": "Input"
+    },
+    {
+      "t": 1020,
+      "kind": "Input"
+    },
+    {
+      "t": 1050,
+      "kind": "Input"
+    },
+    {
+      "t": 1080,
+      "kind": "Input"
+    },
+    {
+      "t": 1110,
+      "kind": "Input"
+    },
+    {
+      "t": 1140,
+      "kind": "Input"
+    },
+    {
+      "t": 1170,
+      "kind": "Input"
+    },
+    {
+      "t": 1200,
+      "kind": "Input"
+    },
+    {
+      "t": 1230,
+      "kind": "Input"
+    },
+    {
+      "t": 1260,
+      "kind": "Input"
+    },
+    {
+      "t": 1290,
+      "kind": "Input"
+    },
+    {
+      "t": 1320,
+      "kind": "Input"
+    },
+    {
+      "t": 1350,
+      "kind": "Input"
+    },
+    {
+      "t": 1380,
+      "kind": "Input"
+    },
+    {
+      "t": 1410,
+      "kind": "Input"
+    },
+    {
+      "t": 1440,
+      "kind": "Input"
+    },
+    {
+      "t": 1470,
+      "kind": "Input"
+    },
+    {
+      "t": 1500,
+      "kind": "Input"
+    },
+    {
+      "t": 1530,
+      "kind": "Input"
+    },
+    {
+      "t": 1560,
+      "kind": "Input"
+    },
+    {
+      "t": 1590,
+      "kind": "Input"
+    },
+    {
+      "t": 1620,
+      "kind": "Input"
+    },
+    {
+      "t": 1650,
+      "kind": "Input"
+    },
+    {
+      "t": 1680,
+      "kind": "Input"
+    },
+    {
+      "t": 1710,
+      "kind": "Input"
+    },
+    {
+      "t": 1740,
+      "kind": "Input"
+    },
+    {
+      "t": 1770,
+      "kind": "Input"
+    },
+    {
+      "t": 1800,
+      "kind": "Input"
+    },
+    {
+      "t": 1830,
+      "kind": "Input"
+    },
+    {
+      "t": 1860,
+      "kind": "Input"
+    },
+    {
+      "t": 1890,
+      "kind": "Input"
+    },
+    {
+      "t": 1920,
+      "kind": "Input"
+    },
+    {
+      "t": 1950,
+      "kind": "Input"
+    },
+    {
+      "t": 1980,
+      "kind": "Input"
+    },
+    {
+      "t": 2010,
+      "kind": "Input"
+    },
+    {
+      "t": 2040,
+      "kind": "Input"
+    },
+    {
+      "t": 2070,
+      "kind": "Input"
+    },
+    {
+      "t": 2100,
+      "kind": "Input"
+    },
+    {
+      "t": 2130,
+      "kind": "Input"
+    },
+    {
+      "t": 2160,
+      "kind": "Input"
+    },
+    {
+      "t": 2190,
+      "kind": "Input"
+    },
+    {
+      "t": 2220,
+      "kind": "Input"
+    },
+    {
+      "t": 2250,
+      "kind": "Input"
+    },
+    {
+      "t": 2280,
+      "kind": "Input"
+    },
+    {
+      "t": 2310,
+      "kind": "Input"
+    },
+    {
+      "t": 2340,
+      "kind": "Input"
+    },
+    {
+      "t": 2370,
+      "kind": "Input"
+    },
+    {
+      "t": 2400,
+      "kind": "Input"
+    },
+    {
+      "t": 2430,
+      "kind": "Input"
+    },
+    {
+      "t": 2460,
+      "kind": "Input"
+    },
+    {
+      "t": 2490,
+      "kind": "Input"
+    },
+    {
+      "t": 2520,
+      "kind": "Input"
+    },
+    {
+      "t": 2550,
+      "kind": "Input"
+    },
+    {
+      "t": 2580,
+      "kind": "Input"
+    },
+    {
+      "t": 2610,
+      "kind": "Input"
+    },
+    {
+      "t": 2640,
+      "kind": "Input"
+    },
+    {
+      "t": 2670,
+      "kind": "Input"
+    },
+    {
+      "t": 2700,
+      "kind": "Input"
+    },
+    {
+      "t": 2730,
+      "kind": "Input"
+    },
+    {
+      "t": 2760,
+      "kind": "Input"
+    },
+    {
+      "t": 2790,
+      "kind": "Input"
+    },
+    {
+      "t": 2820,
+      "kind": "Input"
+    },
+    {
+      "t": 2850,
+      "kind": "Input"
+    },
+    {
+      "t": 2880,
+      "kind": "Input"
+    },
+    {
+      "t": 2910,
+      "kind": "Input"
+    },
+    {
+      "t": 2940,
+      "kind": "Input"
+    },
+    {
+      "t": 2970,
+      "kind": "Input"
+    },
+    {
+      "t": 3000,
+      "kind": "Input"
+    },
+    {
+      "t": 3030,
+      "kind": "Input"
+    },
+    {
+      "t": 3060,
+      "kind": "Input"
+    },
+    {
+      "t": 3090,
+      "kind": "Input"
+    },
+    {
+      "t": 3120,
+      "kind": "Input"
+    },
+    {
+      "t": 3150,
+      "kind": "Input"
+    },
+    {
+      "t": 3180,
+      "kind": "Input"
+    },
+    {
+      "t": 3210,
+      "kind": "Input"
+    },
+    {
+      "t": 3240,
+      "kind": "Input"
+    },
+    {
+      "t": 3270,
+      "kind": "Input"
+    },
+    {
+      "t": 3300,
+      "kind": "Input"
+    },
+    {
+      "t": 3330,
+      "kind": "Input"
+    },
+    {
+      "t": 3360,
+      "kind": "Input"
+    },
+    {
+      "t": 3390,
+      "kind": "Input"
+    },
+    {
+      "t": 3420,
+      "kind": "Input"
+    },
+    {
+      "t": 3450,
+      "kind": "Input"
+    },
+    {
+      "t": 3480,
+      "kind": "Input"
+    },
+    {
+      "t": 3510,
+      "kind": "Input"
+    },
+    {
+      "t": 3540,
+      "kind": "Input"
+    },
+    {
+      "t": 3570,
+      "kind": "Input"
+    },
+    {
+      "t": 3600,
+      "kind": "Input"
+    },
+    {
+      "t": 3630,
+      "kind": "Input"
+    },
+    {
+      "t": 3660,
+      "kind": "Input"
+    },
+    {
+      "t": 3690,
+      "kind": "Input"
+    },
+    {
+      "t": 3720,
+      "kind": "Input"
+    },
+    {
+      "t": 3750,
+      "kind": "Input"
+    },
+    {
+      "t": 3780,
+      "kind": "Input"
+    },
+    {
+      "t": 3810,
+      "kind": "Input"
+    },
+    {
+      "t": 3840,
+      "kind": "Input"
+    },
+    {
+      "t": 3870,
+      "kind": "Input"
+    },
+    {
+      "t": 3900,
+      "kind": "Input"
+    },
+    {
+      "t": 3930,
+      "kind": "Input"
+    },
+    {
+      "t": 3960,
+      "kind": "Input"
+    },
+    {
+      "t": 3990,
+      "kind": "Input"
+    },
+    {
+      "t": 4020,
+      "kind": "Input"
+    },
+    {
+      "t": 4050,
+      "kind": "Input"
+    },
+    {
+      "t": 4080,
+      "kind": "Input"
+    },
+    {
+      "t": 4110,
+      "kind": "Input"
+    },
+    {
+      "t": 4140,
+      "kind": "Input"
+    },
+    {
+      "t": 4170,
+      "kind": "Input"
+    },
+    {
+      "t": 4200,
+      "kind": "Input"
+    },
+    {
+      "t": 4230,
+      "kind": "Input"
+    },
+    {
+      "t": 4260,
+      "kind": "Input"
+    },
+    {
+      "t": 4290,
+      "kind": "Input"
+    },
+    {
+      "t": 4320,
+      "kind": "Input"
+    },
+    {
+      "t": 4350,
+      "kind": "Input"
+    },
+    {
+      "t": 4380,
+      "kind": "Input"
+    },
+    {
+      "t": 4410,
+      "kind": "Input"
+    },
+    {
+      "t": 4440,
+      "kind": "Input"
+    },
+    {
+      "t": 4470,
+      "kind": "Input"
+    },
+    {
+      "t": 4500,
+      "kind": "Input"
+    },
+    {
+      "t": 4530,
+      "kind": "Input"
+    },
+    {
+      "t": 4560,
+      "kind": "Input"
+    },
+    {
+      "t": 4590,
+      "kind": "Input"
+    },
+    {
+      "t": 4620,
+      "kind": "Input"
+    },
+    {
+      "t": 4650,
+      "kind": "Input"
+    },
+    {
+      "t": 4680,
+      "kind": "Input"
+    },
+    {
+      "t": 4710,
+      "kind": "Input"
+    },
+    {
+      "t": 4740,
+      "kind": "Input"
+    },
+    {
+      "t": 4770,
+      "kind": "Input"
+    },
+    {
+      "t": 4800,
+      "kind": "Input"
+    }
+  ],
+  "advanceTo": 4810,
+  "expect": {
+    "committedSeconds": 4800,
+    "opportunities": [
+      {
+        "type": "eye",
+        "dueActiveSeconds": 1200,
+        "merged": false
+      },
+      {
+        "type": "eye",
+        "dueActiveSeconds": 2400,
+        "merged": true,
+        "deliveryGroupId": "group-1"
+      },
+      {
+        "type": "movement",
+        "dueActiveSeconds": 2400,
+        "merged": true,
+        "deliveryGroupId": "group-1"
+      },
+      {
+        "type": "eye",
+        "dueActiveSeconds": 3600,
+        "merged": false
+      },
+      {
+        "type": "eye",
+        "dueActiveSeconds": 4800,
+        "merged": true,
+        "deliveryGroupId": "group-2"
+      },
+      {
+        "type": "movement",
+        "dueActiveSeconds": 4800,
+        "merged": true,
+        "deliveryGroupId": "group-2"
+      }
+    ],
+    "over40": true
+  }
+}

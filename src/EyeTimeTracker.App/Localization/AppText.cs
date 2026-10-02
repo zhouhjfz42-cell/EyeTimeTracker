@@ -35,7 +35,19 @@ public static class AppText
 
     private static IReadOnlyDictionary<string, string> LoadMessages()
     {
-        var path = FindLocaleFile(DefaultLocale);
+        // 默认 zh-CN；可用环境变量覆盖（供多语言渲染自检与未来语言设置使用）
+        var locale = Environment.GetEnvironmentVariable("EYETIMETRACKER_LOCALE");
+        if (string.IsNullOrWhiteSpace(locale))
+        {
+            locale = DefaultLocale;
+        }
+
+        var path = FindLocaleFile(locale);
+        if (string.IsNullOrEmpty(path) && !string.Equals(locale, DefaultLocale, StringComparison.OrdinalIgnoreCase))
+        {
+            path = FindLocaleFile(DefaultLocale);
+        }
+
         if (string.IsNullOrEmpty(path))
         {
             return new Dictionary<string, string>();

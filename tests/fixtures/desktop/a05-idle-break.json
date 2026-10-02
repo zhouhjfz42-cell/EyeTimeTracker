@@ -1,0 +1,134 @@
+{
+  "name": "A05-idle-break",
+  "desk": "ordinary",
+  "startUtc": "2026-09-29T01:00:00Z",
+  "signals": [
+    {
+      "t": 0,
+      "kind": "Input"
+    },
+    {
+      "t": 30,
+      "kind": "Input"
+    },
+    {
+      "t": 60,
+      "kind": "Input"
+    },
+    {
+      "t": 90,
+      "kind": "Input"
+    },
+    {
+      "t": 120,
+      "kind": "Input"
+    },
+    {
+      "t": 150,
+      "kind": "Input"
+    },
+    {
+      "t": 180,
+      "kind": "Input"
+    },
+    {
+      "t": 210,
+      "kind": "Input"
+    },
+    {
+      "t": 240,
+      "kind": "Input"
+    },
+    {
+      "t": 270,
+      "kind": "Input"
+    },
+    {
+      "t": 300,
+      "kind": "Input"
+    },
+    {
+      "t": 330,
+      "kind": "Input"
+    },
+    {
+      "t": 360,
+      "kind": "Input"
+    },
+    {
+      "t": 390,
+      "kind": "Input"
+    },
+    {
+      "t": 420,
+      "kind": "Input"
+    },
+    {
+      "t": 450,
+      "kind": "Input"
+    },
+    {
+      "t": 480,
+      "kind": "Input"
+    },
+    {
+      "t": 510,
+      "kind": "Input"
+    },
+    {
+      "t": 540,
+      "kind": "Input"
+    },
+    {
+      "t": 570,
+      "kind": "Input"
+    },
+    {
+      "t": 600,
+      "kind": "Input"
+    },
+    {
+      "t": 630,
+      "kind": "Input"
+    },
+    {
+      "t": 660,
+      "kind": "Input"
+    },
+    {
+      "t": 690,
+      "kind": "Input"
+    },
+    {
+      "t": 720,
+      "kind": "Input"
+    },
+    {
+      "t": 900,
+      "kind": "Input"
+    }
+  ],
+  "advanceTo": 890,
+  "expect": {
+    "state": "Active",
+    "committedSeconds": 720,
+    "sessions": [
+      {
+        "startedT": 0,
+        "endedT": 720,
+        "endReason": "inferred_away"
+      },
+      {
+        "startedT": 900
+      }
+    ],
+    "breaks": [
+      {
+        "absenceT": 720,
+        "thresholdT": 840,
+        "returnedT": 900,
+        "reason": "idle_timeout"
+      }
+    ]
+  }
+}

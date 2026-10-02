@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_main_title" formatted="false">Screen Time</string>
-    <string name="app_name" formatted="false">Eye Time Tracker</string>
+    <string name="app_name" formatted="false">Sitting Kills</string>
     <string name="app_stats_title" formatted="false">Screen Time Stats</string>
     <string name="calendar_month_compact" formatted="false">M{month}</string>
     <string name="calendar_month_title" formatted="false">{month} {year}</string>
@@ -35,6 +35,124 @@
     <string name="common_this_week" formatted="false">This Week</string>
     <string name="common_today" formatted="false">Today</string>
     <string name="common_yesterday" formatted="false">Yesterday</string>
+    <string name="desktop_brand_chip" formatted="false">S</string>
+    <string name="desktop_brand_subtitle" formatted="false">Desktop activity &amp; break reminders</string>
+    <string name="desktop_channels_done" formatted="false">Done</string>
+    <string name="desktop_channels_keep_one" formatted="false">Keep at least one channel</string>
+    <string name="desktop_common_back_home" formatted="false">‹ Back to home</string>
+    <string name="desktop_common_dash" formatted="false">—</string>
+    <string name="desktop_desk_adjustable" formatted="false">Standing desk</string>
+    <string name="desktop_desk_mixed" formatted="false">Not sure / mixed</string>
+    <string name="desktop_desk_ordinary" formatted="false">Fixed desk</string>
+    <string name="desktop_duration_count" formatted="false">{count}</string>
+    <string name="desktop_duration_hours_minutes" formatted="false">{hours} h {minutes} min</string>
+    <string name="desktop_duration_minutes" formatted="false">{minutes} min</string>
+    <string name="desktop_duration_sessions" formatted="false">{count}</string>
+    <string name="desktop_eye_toast_body" formatted="false">Give your eyes {seconds} seconds of distance. No click needed.</string>
+    <string name="desktop_eye_toast_title" formatted="false">Look away for a moment</string>
+    <string name="desktop_main_action_records" formatted="false">View records →</string>
+    <string name="desktop_main_action_reminders" formatted="false">Reminder settings</string>
+    <string name="desktop_main_date_line" formatted="false">{today} · {month}/{day} {weekday}</string>
+    <string name="desktop_main_info_tip" formatted="false">After 2 minutes without keyboard or mouse input, timing pauses and restarts from zero; no input while reading or watching videos does not count as leaving.</string>
+    <string name="desktop_main_minutes_unit" formatted="false">min</string>
+    <string name="desktop_main_plan_due_in" formatted="false">in ~{minutes} min</string>
+    <string name="desktop_main_plan_due_soon" formatted="false">due soon</string>
+    <string name="desktop_main_plan_every_minutes" formatted="false">every {minutes} min</string>
+    <string name="desktop_main_plan_eye" formatted="false">Look away</string>
+    <string name="desktop_main_plan_movement" formatted="false">Move</string>
+    <string name="desktop_main_plan_timing_note" formatted="false">By active desktop time</string>
+    <string name="desktop_main_plan_title" formatted="false">Reminder plan</string>
+    <string name="desktop_main_session_title_ordinary" formatted="false">Estimated sitting</string>
+    <string name="desktop_main_session_title_other" formatted="false">Continuous static work</string>
+    <string name="desktop_main_today_active" formatted="false">Desktop activity</string>
+    <string name="desktop_main_today_max_continuous" formatted="false">Longest stretch</string>
+    <string name="desktop_main_today_label" formatted="false">Today</string>
+    <string name="desktop_main_today_title" formatted="false">Today at a glance</string>
+    <string name="desktop_movement_toast_body" formatted="false">Rest your eyes too. Timing pauses automatically when you step away.</string>
+    <string name="desktop_movement_toast_title_ordinary" formatted="false">Stand up and walk for {minutes} minutes</string>
+    <string name="desktop_movement_toast_title_other" formatted="false">Change posture and walk for {minutes} minutes</string>
+    <string name="desktop_nav_home" formatted="false">Home</string>
+    <string name="desktop_nav_settings" formatted="false">Settings</string>
+    <string name="desktop_onboarding_adjust" formatted="false">Adjust</string>
+    <string name="desktop_onboarding_autostart" formatted="false">Start with Windows (keeps recording after the window is closed)</string>
+    <string name="desktop_onboarding_desk_adjustable_desc" formatted="false">You may sit or stand. We remind you to change posture and move.</string>
+    <string name="desktop_onboarding_desk_ordinary_desc" formatted="false">You mostly sit at the computer, so we show estimated sitting time.</string>
+    <string name="desktop_onboarding_desk_unknown_desc" formatted="false">Recorded as continuous static work for now; change it anytime.</string>
+    <string name="desktop_onboarding_footer" formatted="false">No sign-in or network needed. Data stays on this computer.</string>
+    <string name="desktop_onboarding_lead" formatted="false">This decides how your continuous work sessions are labeled. You can change it anytime.</string>
+    <string name="desktop_onboarding_listen" formatted="false">Listen</string>
+    <string name="desktop_onboarding_plan_line" formatted="false">Look away 20 seconds every 20 minutes · Move 2 minutes every 40 minutes</string>
+    <string name="desktop_onboarding_plan_title" formatted="false">Default reminder plan</string>
+    <string name="desktop_onboarding_skip" formatted="false">Skip for now</string>
+    <string name="desktop_onboarding_start" formatted="false">Start recording</string>
+    <string name="desktop_onboarding_title" formatted="false">What kind of desk do you use?</string>
+    <string name="desktop_records_data_note" formatted="false">Note: estimated from computer activity; sitting, standing and looking away cannot be confirmed.</string>
+    <string name="desktop_records_date_line" formatted="false">{month}/{day} {weekday}</string>
+    <string name="desktop_records_lead" formatted="false">Trends, sessions and how reminders played out</string>
+    <string name="desktop_records_legacy_empty" formatted="false">No pre-upgrade data.</string>
+    <string name="desktop_records_legacy_link" formatted="false">Legacy eye-time records (pre-upgrade data) →</string>
+    <string name="desktop_records_legacy_note" formatted="false">Shown read-only; not counted in new metrics.</string>
+    <string name="desktop_records_legacy_title" formatted="false">Legacy eye-time records (pre-upgrade data)</string>
+    <string name="desktop_records_metric_active" formatted="false">Desktop activity</string>
+    <string name="desktop_records_metric_breaks" formatted="false">Desktop breaks</string>
+    <string name="desktop_records_metric_max_continuous" formatted="false">Longest stretch</string>
+    <string name="desktop_records_metric_over40" formatted="false">&gt;40 min</string>
+    <string name="desktop_records_metric_rate" formatted="false">Break rate</string>
+    <string name="desktop_records_metric_sedentary" formatted="false">Estimated sitting</string>
+    <string name="desktop_records_range_day" formatted="false">Day</string>
+    <string name="desktop_records_range_month" formatted="false">Month</string>
+    <string name="desktop_records_range_month_todo" formatted="false">Month (not yet available)</string>
+    <string name="desktop_records_range_week" formatted="false">Week</string>
+    <string name="desktop_records_range_week_todo" formatted="false">Week (not yet available)</string>
+    <string name="desktop_records_reminders_eye_line" formatted="false">Look-away triggered {due} times · delivered {delivered} times · completion unknown</string>
+    <string name="desktop_records_reminders_rate_footnote" formatted="false">Break rate only counts inferred desktop leave after reminders; it does not measure all-day activity.</string>
+    <string name="desktop_records_reminders_rate_line" formatted="false">{matured} opportunities matured · {responses} responses ({percent}%) · {pending} pending</string>
+    <string name="desktop_records_reminders_rate_line_none" formatted="false">No evaluable reminders yet (—)</string>
+    <string name="desktop_records_reminders_rate_unknown" formatted="false">{unknown} more had unobservable windows and are excluded</string>
+    <string name="desktop_records_reminders_title" formatted="false">Reminders &amp; breaks</string>
+    <string name="desktop_records_sessions_line" formatted="false">Look-away {eye} · Move {movement} · Breaks {breaks}</string>
+    <string name="desktop_records_sessions_ongoing" formatted="false">ongoing</string>
+    <string name="desktop_records_sessions_title" formatted="false">Sessions</string>
+    <string name="desktop_records_timeline_legend_active" formatted="false">Active</string>
+    <string name="desktop_records_timeline_legend_away" formatted="false">Inferred leave</string>
+    <string name="desktop_records_timeline_legend_gap" formatted="false">Unobservable</string>
+    <string name="desktop_records_timeline_title" formatted="false">Desktop activity timeline</string>
+    <string name="desktop_reminders_channel_notification" formatted="false">Notification</string>
+    <string name="desktop_reminders_channel_sound" formatted="false">Sound</string>
+    <string name="desktop_reminders_eye_title" formatted="false">Look-away reminder</string>
+    <string name="desktop_reminders_interval_minutes" formatted="false">Interval (minutes)</string>
+    <string name="desktop_reminders_movement_title" formatted="false">Movement reminder</string>
+    <string name="desktop_reminders_preset_custom" formatted="false">Custom</string>
+    <string name="desktop_reminders_preset_light" formatted="false">Light 30/60</string>
+    <string name="desktop_reminders_preset_standard" formatted="false">Standard 20/40</string>
+    <string name="desktop_reminders_quiet_title" formatted="false">Quiet hours</string>
+    <string name="desktop_reminders_resume" formatted="false">Resume reminders</string>
+    <string name="desktop_reminders_save" formatted="false">Save</string>
+    <string name="desktop_reminders_validation_eye_suggested_range" formatted="false">Enter a duration between 5 and 120 seconds</string>
+    <string name="desktop_reminders_validation_interval_range" formatted="false">Enter an interval between 1 and 180 minutes</string>
+    <string name="desktop_reminders_validation_movement_suggested_range" formatted="false">Enter a duration between 1 and 15 minutes</string>
+    <string name="desktop_reminders_validation_suggested_exceeds_interval" formatted="false">Duration cannot exceed the interval of its reminder</string>
+    <string name="desktop_settings_back_home" formatted="false">Back to home ›</string>
+    <string name="desktop_settings_desk" formatted="false">Desk type</string>
+    <string name="desktop_settings_field_eye_action" formatted="false">Action (s)</string>
+    <string name="desktop_settings_field_interval" formatted="false">Interval (min)</string>
+    <string name="desktop_settings_field_movement_action" formatted="false">Action (min)</string>
+    <string name="desktop_settings_language" formatted="false">Language</string>
+    <string name="desktop_settings_language_value" formatted="false">Simplified Chinese</string>
+    <string name="desktop_settings_pause30" formatted="false">Pause 30 min</string>
+    <string name="desktop_settings_pause_temp" formatted="false">Snooze</string>
+    <string name="desktop_settings_quiet" formatted="false">Quiet hours</string>
+    <string name="desktop_settings_quiet_period" formatted="false">Period</string>
+    <string name="desktop_settings_quiet_to" formatted="false">to</string>
+    <string name="desktop_settings_section_app_settings" formatted="false">App settings</string>
+    <string name="desktop_settings_startup" formatted="false">Start with Windows</string>
+    <string name="desktop_settings_title" formatted="false">Reminder settings</string>
+    <string name="desktop_status_away" formatted="false">Desktop timing paused</string>
+    <string name="desktop_status_idle_candidate" formatted="false">No input detected yet</string>
+    <string name="desktop_status_no_data" formatted="false">Auto-records when you use the computer</string>
+    <string name="desktop_status_recording" formatted="false">Recording</string>
+    <string name="desktop_status_reminders_paused" formatted="false">Reminders paused; recording continues</string>
+    <string name="desktop_status_unavailable" formatted="false">Recording temporarily unavailable</string>
     <string name="disconnect_android_toast" formatted="false">Computer disconnected</string>
     <string name="disconnect_message" formatted="false">After disconnecting, you will need to pair again next time.</string>
     <string name="disconnect_pc_message" formatted="false">After disconnecting, phone and computer sync will stop.\nPair again to reconnect next time.</string>
@@ -316,10 +434,12 @@
     <string name="tray_pair_success_title" formatted="false">Phone paired</string>
     <string name="tray_pair_waiting_body" formatted="false">Waiting for your phone to connect. The code is valid for 5 minutes.</string>
     <string name="tray_quit" formatted="false">Quit</string>
-    <string name="tray_resume_reminders" formatted="false">Resume Alerts</string>
+    <string name="tray_records_page" formatted="false">View records</string>
+    <string name="tray_reminders_page" formatted="false">Reminder settings</string>
+    <string name="tray_resume_reminders" formatted="false">Resume reminders</string>
     <string name="tray_stats_page" formatted="false">Stats</string>
     <string name="tray_status" formatted="false">Tracking</string>
-    <string name="tray_stop_reminders" formatted="false">Pause Alerts</string>
+    <string name="tray_stop_reminders" formatted="false">Pause reminders 30 min</string>
     <string name="usage_status_activity_desc" formatted="false">Only used to tell whether you are walking. It does not read location or routes.</string>
     <string name="usage_status_activity_title" formatted="false">Physical activity permission</string>
     <string name="usage_status_background_desc" formatted="false">Allow background operation in battery settings for more reliable tracking and reminders.</string>

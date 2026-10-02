@@ -502,10 +502,7 @@ public sealed class PcPairingDialog : Form
         {
             _pressed = false;
             Invalidate();
-            if (ClientRectangle.Contains(e.Location))
-            {
-                OnClick(EventArgs.Empty);
-            }
+            // 不手动调 OnClick：框架在 MouseUp 之后会自行触发 Click（StandardClick），手动会双触发
         }
 
         protected override void OnPaint(PaintEventArgs e)

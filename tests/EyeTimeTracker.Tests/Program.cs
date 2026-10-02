@@ -11,6 +11,45 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
 
+if (args.Length > 0 && args[0] == "render-dump")
+{
+    // 页面渲染自检：dotnet run -- render-dump <输出目录>（可用 EYETIMETRACKER_LOCALE 指定语言）
+    var outputDirectory = args.Length > 1
+        ? args[1]
+        : Path.Combine(Path.GetTempPath(), "p04-renders");
+    DesktopPageRenderDump.RunAll(outputDirectory);
+    Console.WriteLine("render dump written: " + outputDirectory);
+    return;
+}
+
+if (args.Length > 0 && args[0] == "toast-live")
+{
+    // 真机演示轻通知：右下角依次弹出远望/活动提醒（各约 4 秒），无需等到点
+    // dotnet run -- toast-live
+    ApplicationConfiguration.Initialize();
+    DesktopReminderToast.ShowToast(
+        false,
+        AppText.Get("desktop.eye.toastTitle"),
+        AppText.Format("desktop.eye.toastBody", ("seconds", "20")),
+        null);
+    var swapTimer = new System.Windows.Forms.Timer { Interval = 4000 };
+    swapTimer.Tick += (_, _) =>
+    {
+        swapTimer.Stop();
+        DesktopReminderToast.ShowToast(
+            true,
+            AppText.Format("desktop.movement.toastTitle.ordinary", ("minutes", "2")),
+            AppText.Get("desktop.movement.toastBody"),
+            null);
+    };
+    swapTimer.Start();
+    var exitTimer = new System.Windows.Forms.Timer { Interval = 9000 };
+    exitTimer.Tick += (_, _) => Application.Exit();
+    exitTimer.Start();
+    Application.Run();
+    return;
+}
+
 static void AssertEqual<T>(T expected, T actual, string name)
 {
     if (!EqualityComparer<T>.Default.Equals(expected, actual))
@@ -530,7 +569,7 @@ static void TestAppTextLoadsReminderCopy()
 
 static void TestAppTextLoadsGeneratedDotNetCopy()
 {
-    AssertEqual("\u7528\u773c\u65f6\u95f4\u8bb0\u5f55", AppText.Get("app.name"), nameof(TestAppTextLoadsGeneratedDotNetCopy));
+    AssertEqual("\u4e45\u5750\u4f1a\u6b7b", AppText.Get("app.name"), nameof(TestAppTextLoadsGeneratedDotNetCopy));
 }
 
 static void TestMainFormStartupControlsDoNotOverlapSubtitle()
@@ -2089,6 +2128,11 @@ TestPcSyncCoordinatorRejectsUnpairedSync();
 TestPcSyncCoordinatorRejectsUnsignedPairedSync();
 TestPcSyncCoordinatorOmitsSegmentsOlderThanCursor();
 TestPcSyncCoordinatorReplacesPeerTodayAppUsageEntries();
+DesktopDomainTests.RunAll();
+DesktopMigrationTests.RunAll();
+DesktopReminderSchedulerTests.RunAll();
+DesktopPageLogicTests.RunAll();
+ReminderToneTests.RunAll();
 TestPcSyncCoordinatorBackfillsLegacyDailyRecordsAsSegments();
 TestPcSyncCoordinatorBackfillsLegacyDailyRecordsWhenDateHasModernSegment();
 TestLegacyBackfillSubtractsModernSegmentsInSameHour();

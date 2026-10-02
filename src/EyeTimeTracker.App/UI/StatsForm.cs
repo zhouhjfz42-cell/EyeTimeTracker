@@ -1,2178 +1,653 @@
-using System.Drawing.Drawing2D;
 using EyeTimeTracker.App.Localization;
 using EyeTimeTracker.App.Tracking;
+using EyeTimeTracker.App.UI.Controls;
+using EyeTimeTracker.Core.DesktopActivity;
+using EyeTimeTracker.Core.DesktopReminders;
 using EyeTimeTracker.Core.Models;
-using EyeTimeTracker.Core.Reminders;
-using EyeTimeTracker.Core.Sync;
+using EyeTimeTracker.Core.Storage;
+using System.Drawing.Drawing2D;
 
 namespace EyeTimeTracker.App.UI;
 
-public sealed class StatsForm : Form
+/// <summary>记录页（效果图 3）：日视图（周/月暂未实现），概览 → 时间线 → 连续段 → 提醒与中断 → 数据说明。
+/// 尺寸按设计像素固定；切换日期在运行时重建内容，Bounds 统一经 Sc()（恒等）换算。
+/// 排版按实际文字测量自适应，连续段很多时纵向滚动。</summary>
+public sealed class StatsForm : AppPageForm
 {
-    private static readonly Color PageBackground = Color.FromArgb(248, 251, 250);
-    private static readonly Color PanelBackground = Color.FromArgb(252, 254, 253);
-    private static readonly Color SoftGreen = Color.FromArgb(238, 249, 245);
-    private static readonly Color AccentGreen = Color.FromArgb(22, 163, 127);
-    private static readonly Color AccentBlue = Color.FromArgb(91, 92, 226);
-    private static readonly Color AccentYellow = Color.FromArgb(240, 184, 58);
-    private static readonly Color AccentRed = Color.FromArgb(233, 104, 104);
-    private static readonly Color TextPrimary = Color.FromArgb(17, 24, 39);
-    private static readonly Color TextSecondary = Color.FromArgb(101, 114, 137);
-    private static readonly Color BorderColor = Color.FromArgb(217, 238, 231);
+    private const int PageWidth = 600;
+    private const int PageMargin = 24;
+    private const int ContentWidth = PageWidth - PageMargin * 2;
+    private const int MaxWindowHeight = 820;
 
-    private readonly TrackingController _controller;
-    private readonly FitTextLabel _dayTotalValue;
-    private readonly FitTextLabel _longestSessionValue;
-    private readonly FitTextLabel _deviceShareValue;
-    private readonly FitTextLabel _reminderCountValue;
-    private readonly HourlyHeatChart _hourlyChart;
-    private readonly FitTextLabel _summaryTitle;
-    private readonly FitTextLabel _summaryLineOne;
-    private readonly FitTextLabel _summaryLineTwo;
-    private readonly FitTextLabel _summaryLineThree;
-    private readonly FitTextLabel _summaryLineFour;
-    private readonly WeekBarChart _weekChart;
-    private readonly MonthTrendChart _monthChart;
-    private readonly AppUsageRankingControl _appUsageRanking;
-    private readonly FitTextLabel _weekNote;
-    private readonly FitTextLabel _monthNote;
-    private readonly FitTextLabel _daySelectorText;
-    private readonly FitTextLabel _weekSelectorText;
-    private readonly FitTextLabel _monthSelectorText;
-    private readonly FitTextLabel _rangeStartSelectorText;
-    private readonly FitTextLabel _rangeEndSelectorText;
-    private DateOnly _selectedDay;
-    private DateOnly _selectedWeekStart;
-    private DateOnly _selectedMonthStart;
-    private DateOnly _rangeStart;
-    private DateOnly _rangeEnd;
-    private int _refreshGeneration;
+    private readonly DesktopTrackingController _controller;
+    private readonly Icon? _appIcon;
+    private readonly Panel _root;
+    private readonly CanvasLabel _dateLabel;
+    private readonly PillButton _nextDayButton;
+    private readonly int _contentTop;
+    private DateOnly _selectedDate;
 
-    public StatsForm(TrackingController controller, Icon? icon)
+    public StatsForm(DesktopTrackingController controller, Icon? icon)
     {
         _controller = controller ?? throw new ArgumentNullException(nameof(controller));
-        var today = DateOnly.FromDateTime(DateTime.Now);
-        _selectedDay = today;
-        _selectedWeekStart = today.AddDays(-GetMondayOffset(today.DayOfWeek));
-        _selectedMonthStart = new DateOnly(today.Year, today.Month, 1);
-        _rangeStart = _selectedMonthStart;
-        _rangeEnd = today;
+        _appIcon = icon;
+        _selectedDate = DateOnly.FromDateTime(DateTime.Now);
 
-        AutoScaleMode = AutoScaleMode.None;
-        Text = AppText.Get("app.statsTitle");
-        if (icon is not null)
-        {
-            Icon = (Icon)icon.Clone();
-        }
+        Text = AppText.Get("desktop.records.lead");
+        SetAppIcon(icon);
 
-        StartPosition = FormStartPosition.CenterParent;
-        FormBorderStyle = FormBorderStyle.FixedSingle;
-        MaximizeBox = false;
-        MinimizeBox = true;
-        ClientSize = new Size(1180, 760);
-        BackColor = PageBackground;
-        Font = AppFonts.Create(9F, FontStyle.Regular, GraphicsUnit.Point);
-
-        var root = new Panel
+        _root = new Panel
         {
             Dock = DockStyle.Fill,
-            BackColor = PageBackground
-        };
-        Controls.Add(root);
-
-        root.Controls.Add(new FitTextLabel
-        {
-            Text = AppText.Get("stats.title"),
-            Bounds = new Rectangle(30, 12, 140, 76),
-            MaxFontSize = 24F,
-            MinFontSize = 21F,
-            FontStyle = FontStyle.Bold,
-            ForeColor = TextPrimary,
-            BackColor = Color.Transparent,
-            TextAlign = ContentAlignment.MiddleLeft
-        });
-        root.Controls.Add(new FitTextLabel
-        {
-            Text = AppText.Get("stats.subtitle"),
-            Bounds = new Rectangle(168, 45, 380, 30),
-            MaxFontSize = 11F,
-            MinFontSize = 10F,
-            ForeColor = TextSecondary,
-            BackColor = Color.Transparent,
-            TextAlign = ContentAlignment.MiddleLeft
-        });
-
-        var dayPanel = CreatePanel(new Rectangle(30, 98, 1120, 290));
-        root.Controls.Add(dayPanel);
-        AddPanelTitle(dayPanel, AppText.Get("stats.daily.title"), new Rectangle(24, 18, 132, 36));
-        _daySelectorText = AddPill(dayPanel, SelectorText(AppText.Get("common.today")), new Rectangle(170, 22, 112, 30), ShowDayMenu);
-        AddLegend(dayPanel, new Point(314, 27));
-
-        dayPanel.Controls.Add(BuildSmallMetric(AppText.Get("stats.daily.metric.total"), out _dayTotalValue, new Rectangle(24, 88, 174, 78), AccentGreen));
-        dayPanel.Controls.Add(BuildSmallMetric(AppText.Get("stats.daily.metric.longest"), out _longestSessionValue, new Rectangle(214, 88, 174, 78), AccentYellow));
-        dayPanel.Controls.Add(BuildSmallMetric(AppText.Get("stats.daily.metric.deviceShare"), out _deviceShareValue, new Rectangle(24, 186, 174, 78), TextPrimary));
-        dayPanel.Controls.Add(BuildSmallMetric(AppText.Get("stats.daily.metric.reminders"), out _reminderCountValue, new Rectangle(214, 186, 174, 78), TextPrimary));
-
-        _hourlyChart = new HourlyHeatChart
-        {
-            Bounds = new Rectangle(404, 12, 255, 260),
+            AutoScroll = true,
             BackColor = Color.Transparent
         };
-        dayPanel.Controls.Add(_hourlyChart);
+        Controls.Add(_root);
 
-        AddPanelTitle(dayPanel, AppText.Get("stats.appUsage.title"), new Rectangle(704, 36, 220, 36));
-        _appUsageRanking = new AppUsageRankingControl { Bounds = new Rectangle(704, 82, 376, 190), BackColor = Color.Transparent };
-        dayPanel.Controls.Add(_appUsageRanking);
+        var top = 18;
+        var brand = new BrandHeader { Bounds = new Rectangle(PageMargin, top, ContentWidth, 40) };
+        brand.Height = brand.PreferredHeight(ContentWidth);
+        _root.Controls.Add(brand);
+        top = brand.Bottom + 4;
 
-        var weekPanel = CreatePanel(new Rectangle(30, 410, 350, 300));
-        root.Controls.Add(weekPanel);
-        AddPanelTitle(weekPanel, AppText.Get("stats.week.title"), new Rectangle(22, 18, 150, 34));
-        _weekSelectorText = AddPill(weekPanel, SelectorText(AppText.Get("common.thisWeek")), new Rectangle(232, 18, 96, 30), ShowWeekMenu);
-        _weekChart = new WeekBarChart { Bounds = new Rectangle(22, 62, 306, 180), BackColor = Color.Transparent };
-        weekPanel.Controls.Add(_weekChart);
-        _weekNote = AddNote(weekPanel, new Rectangle(22, 250, 300, 34));
-
-        var monthPanel = CreatePanel(new Rectangle(405, 410, 350, 300));
-        root.Controls.Add(monthPanel);
-        AddPanelTitle(monthPanel, AppText.Get("stats.month.title"), new Rectangle(22, 18, 150, 34));
-        _monthSelectorText = AddPill(monthPanel, SelectorText(AppText.Get("common.thisMonth")), new Rectangle(232, 18, 96, 30), ShowMonthMenu);
-        _monthChart = new MonthTrendChart { Bounds = new Rectangle(22, 64, 306, 170), BackColor = Color.Transparent };
-        monthPanel.Controls.Add(_monthChart);
-        _monthNote = AddNote(monthPanel, new Rectangle(22, 250, 300, 34));
-
-        var continuousPanel = CreatePanel(new Rectangle(780, 410, 370, 300));
-        root.Controls.Add(continuousPanel);
-        AddPanelTitle(continuousPanel, AppText.Get("stats.summary.title"), new Rectangle(22, 18, 150, 34));
-        _rangeStartSelectorText = AddPill(continuousPanel, SelectorText("7/1"), new Rectangle(178, 18, 84, 30), ShowRangeStartMenu);
-        _rangeEndSelectorText = AddPill(continuousPanel, SelectorText("7/1"), new Rectangle(270, 18, 84, 30), ShowRangeEndMenu);
-        _summaryTitle = new FitTextLabel { Visible = false };
-        _summaryLineOne = AddSummaryLabel(continuousPanel, "", new Rectangle(22, 68, 320, 32), 10.5F, 9F, TextSecondary, FontStyle.Regular);
-        _summaryLineTwo = AddSummaryLabel(continuousPanel, "", new Rectangle(22, 112, 320, 32), 10.5F, 9F, TextSecondary, FontStyle.Regular);
-        _summaryLineThree = AddSummaryLabel(continuousPanel, "", new Rectangle(22, 156, 320, 32), 10.5F, 9F, TextSecondary, FontStyle.Regular);
-        _summaryLineFour = AddSummaryLabel(continuousPanel, "", new Rectangle(22, 204, 320, 52), 10.5F, 9F, AccentGreen, FontStyle.Bold);
-
-        _controller.Updated += OnTrackingUpdated;
-        Shown += OnShown;
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing)
+        var backButton = new PillButton
         {
-            _controller.Updated -= OnTrackingUpdated;
-            Shown -= OnShown;
-        }
-
-        base.Dispose(disposing);
-    }
-
-    private void OnShown(object? sender, EventArgs e)
-    {
-        if (!IsDisposed && IsHandleCreated)
-        {
-            BeginInvoke((MethodInvoker)RefreshStats);
-        }
-    }
-
-    private void OnTrackingUpdated(object? sender, TrackingUpdatedEventArgs e)
-    {
-        if (!IsDisposed && IsHandleCreated)
-        {
-            BeginInvoke((MethodInvoker)RefreshStats);
-        }
-    }
-
-    private async void RefreshStats()
-    {
-        var generation = System.Threading.Interlocked.Increment(ref _refreshGeneration);
-        var selectedDay = _selectedDay;
-        var selectedWeekStart = _selectedWeekStart;
-        var selectedMonthStart = _selectedMonthStart;
-        var selectedRangeStart = _rangeStart;
-        var selectedRangeEnd = _rangeEnd;
-
-        StatsViewModel model;
-        try
-        {
-            model = await Task.Run(() => BuildStatsViewModel(
-                selectedDay,
-                selectedWeekStart,
-                selectedMonthStart,
-                selectedRangeStart,
-                selectedRangeEnd));
-        }
-        catch
-        {
-            return;
-        }
-
-        if (IsDisposed || !IsHandleCreated || generation != _refreshGeneration)
-        {
-            return;
-        }
-
-        ApplyStats(model);
-    }
-
-    private StatsViewModel BuildStatsViewModel(
-        DateOnly selectedDay,
-        DateOnly selectedWeekStart,
-        DateOnly selectedMonthStart,
-        DateOnly selectedRangeStart,
-        DateOnly selectedRangeEnd)
-    {
-        var actualToday = DateOnly.FromDateTime(DateTime.Now);
-        var weekDates = Enumerable.Range(0, 7)
-            .Select(offset => selectedWeekStart.AddDays(offset))
-            .ToList();
-
-        var daysInMonth = selectedMonthStart.Year == actualToday.Year && selectedMonthStart.Month == actualToday.Month
-            ? actualToday.Day
-            : DateTime.DaysInMonth(selectedMonthStart.Year, selectedMonthStart.Month);
-        var monthDates = Enumerable.Range(0, daysInMonth)
-            .Select(offset => selectedMonthStart.AddDays(offset))
-            .ToList();
-
-        var rangeStart = selectedRangeStart <= selectedRangeEnd ? selectedRangeStart : selectedRangeEnd;
-        var rangeEnd = selectedRangeStart <= selectedRangeEnd ? selectedRangeEnd : selectedRangeStart;
-        var rangeDates = DatesBetween(rangeStart, rangeEnd).ToList();
-        var statsByDate = _controller.GetDailyStatsSnapshots(
-            new[] { selectedDay }
-                .Concat(weekDates)
-                .Concat(monthDates)
-                .Concat(rangeDates));
-
-        DailyStatsSnapshot StatsFor(DateOnly date)
-        {
-            return statsByDate.TryGetValue(date, out var snapshot)
-                ? snapshot
-                : new DailyStatsSnapshot(new DailyRecord(date), new UsageDeviceBreakdown(0, 0));
-        }
-
-        var dayStats = StatsFor(selectedDay);
-        var todayRecord = dayStats.Record;
-        AppState.NormalizeRecord(todayRecord);
-
-        var weekStats = weekDates.Select(StatsFor).ToList();
-        var weekRecords = weekStats.Select(snapshot => snapshot.Record).ToList();
-        foreach (var record in weekRecords)
-        {
-            AppState.NormalizeRecord(record);
-        }
-
-        var monthRecords = monthDates.Select(date => StatsFor(date).Record).ToList();
-        foreach (var record in monthRecords)
-        {
-            AppState.NormalizeRecord(record);
-        }
-
-        var sessions = SessionValues(todayRecord).ToList();
-        var longest = sessions.Count == 0 ? todayRecord.CurrentSessionSeconds : sessions.Max();
-        var deviceBreakdown = dayStats.Breakdown;
-        var weekBreakdowns = weekStats.Select(snapshot => snapshot.Breakdown).ToList();
-        var appUsageRows = BuildAppUsageRows(_controller.GetAppUsageEntries(selectedDay, selectedDay), 4);
-
-        var rangeStats = rangeDates.Select(StatsFor).ToList();
-        var rangeRecords = rangeStats.Select(snapshot => snapshot.Record).ToList();
-        foreach (var record in rangeRecords)
-        {
-            AppState.NormalizeRecord(record);
-        }
-        var rangeTotal = rangeRecords.Sum(record => record.TotalSeconds);
-        var rangeSessions = rangeRecords.SelectMany(SessionValues).ToList();
-        var rangeLongest = rangeSessions.Count == 0 ? 0L : rangeSessions.Max();
-        var rangeHourly = SumHourlySeconds(rangeRecords);
-        var rangeBreakdown = new UsageDeviceBreakdown(
-            rangeStats.Sum(snapshot => snapshot.Breakdown.PcSeconds),
-            rangeStats.Sum(snapshot => snapshot.Breakdown.PhoneSeconds));
-
-        return new StatsViewModel(
-            actualToday,
-            todayRecord,
-            longest,
-            deviceBreakdown,
-            weekRecords,
-            weekBreakdowns,
-            monthRecords,
-            appUsageRows,
-            rangeTotal,
-            rangeLongest,
-            rangeHourly,
-            rangeBreakdown);
-    }
-
-    private static IEnumerable<DateOnly> DatesBetween(DateOnly start, DateOnly end)
-    {
-        for (var date = start; date <= end; date = date.AddDays(1))
-        {
-            yield return date;
-        }
-    }
-
-    private void ApplyStats(StatsViewModel model)
-    {
-        _dayTotalValue.Text = FormatDuration(model.TodayRecord.TotalSeconds);
-        _dayTotalValue.ForeColor = TodayColor(model.TodayRecord.TotalSeconds);
-        _longestSessionValue.Text = FormatDuration(model.LongestSessionSeconds);
-        _deviceShareValue.Text = $"{model.DayBreakdown.PcPercent}%/{model.DayBreakdown.PhonePercent}%";
-        _reminderCountValue.Text = CountText(ReminderDisplayCount.FromSeconds(model.TodayRecord.TotalSeconds, _controller.Settings));
-        _hourlyChart.HourlySeconds = model.TodayRecord.HourlySeconds;
-        _hourlyChart.SetSourceHourlySeconds(model.DayBreakdown.PcHourlySeconds, model.DayBreakdown.PhoneHourlySeconds);
-        _appUsageRanking.Entries = model.AppUsageRows;
-
-        _weekChart.Records = model.WeekRecords;
-        _weekChart.DeviceBreakdowns = model.WeekBreakdowns;
-        _weekNote.Text = AppText.Format("stats.week.total", ("duration", FormatDuration(model.WeekRecords.Sum(record => record.TotalSeconds))));
-
-        _monthChart.Records = model.MonthRecords;
-        _monthNote.Text = AppText.Format("stats.month.recordedDays", ("count", model.MonthRecords.Count(record => record.TotalSeconds > 0)));
-
-        _summaryTitle.Text = string.Empty;
-        _summaryLineOne.Text = AppText.Format("stats.week.total", ("duration", FormatDuration(model.RangeTotalSeconds)));
-        _summaryLineTwo.Text = AppText.Format("stats.daily.summary.peak", ("range", PeakHourText(model.RangeHourlySeconds)));
-        _summaryLineThree.Text = AppText.Format("stats.daily.summary.longest", ("duration", FormatDuration(model.RangeLongestSessionSeconds)));
-        _summaryLineFour.Text = SummaryCareText(model.RangeLongestSessionSeconds, NightSeconds(model.RangeHourlySeconds), model.RangeBreakdown.PhonePercent);
-        UpdateSelectorTexts(model.ActualToday);
-    }
-
-    private void ShowDayMenu(object? sender, EventArgs e)
-    {
-        ShowCalendarPicker(sender, CalendarSelectionMode.Day, _selectedDay, date =>
-        {
-            _selectedDay = date;
-            RefreshStats();
-        });
-    }
-
-    private void ShowWeekMenu(object? sender, EventArgs e)
-    {
-        ShowCalendarPicker(sender, CalendarSelectionMode.Week, _selectedWeekStart, weekStart =>
-        {
-            _selectedWeekStart = weekStart;
-            RefreshStats();
-        });
-    }
-
-    private void ShowMonthMenu(object? sender, EventArgs e)
-    {
-        ShowCalendarPicker(sender, CalendarSelectionMode.Month, _selectedMonthStart, monthStart =>
-        {
-            _selectedMonthStart = new DateOnly(monthStart.Year, monthStart.Month, 1);
-            RefreshStats();
-        });
-    }
-
-    private void ShowRangeStartMenu(object? sender, EventArgs e)
-    {
-        ShowRangeMenu(sender, isStart: true);
-    }
-
-    private void ShowRangeEndMenu(object? sender, EventArgs e)
-    {
-        ShowRangeMenu(sender, isStart: false);
-    }
-
-    private void ShowRangeMenu(object? sender, bool isStart)
-    {
-        var picker = new CalendarPickerForm(CalendarSelectionMode.Range, _rangeStart, _rangeStart, _rangeEnd);
-        picker.RangeSelected += range =>
-        {
-            _rangeStart = range.Start;
-            _rangeEnd = range.End;
-            RefreshStats();
+            Text = AppText.Get("desktop.common.backHome"),
+            Style = PillButtonStyle.Text,
+            Font = AppFonts.Create(10F, FontStyle.Regular, GraphicsUnit.Point),
+            Bounds = new Rectangle(PageMargin - 8, top, 130, 24)
         };
-        ShowPicker(sender, picker);
-    }
+        backButton.Click += (_, _) => Close();
+        _root.Controls.Add(backButton);
 
-    private List<DateOnly> DateCandidates()
-    {
-        var today = DateOnly.FromDateTime(DateTime.Now);
-        var dates = _controller.GetRecordsSnapshot()
-            .Select(record => record.Date)
-            .Append(today)
-            .Append(_selectedDay)
-            .Append(_rangeStart)
-            .Append(_rangeEnd)
-            .Distinct()
-            .ToList();
-        dates.Sort();
-        return dates;
-    }
-
-    private static IReadOnlyList<AppUsageRow> BuildAppUsageRows(IEnumerable<AppUsageEntry> entries, int take)
-    {
-        return (entries ?? Array.Empty<AppUsageEntry>())
-            .Where(entry => entry.DurationSeconds > 0)
-            .GroupBy(entry => (
-                Source: SourceLabel(entry),
-                AppName: string.IsNullOrWhiteSpace(entry.AppName) ? entry.AppId : entry.AppName))
-            .Select(group =>
-            {
-                var best = group
-                    .OrderByDescending(entry => entry.DurationSeconds)
-                    .ThenByDescending(entry => entry.UpdatedAtUnixSeconds)
-                    .First();
-                return new AppUsageRow(
-                    group.Key.AppName,
-                    group.Key.Source,
-                    best.AppId,
-                    best.Platform,
-                    string.Empty,
-                    best.DurationSeconds);
-            })
-            .OrderByDescending(row => row.DurationSeconds)
-            .ThenBy(row => row.AppName, StringComparer.CurrentCultureIgnoreCase)
-            .Take(take)
-            .ToList();
-    }
-
-    private sealed record StatsViewModel(
-        DateOnly ActualToday,
-        DailyRecord TodayRecord,
-        long LongestSessionSeconds,
-        UsageDeviceBreakdown DayBreakdown,
-        IReadOnlyList<DailyRecord> WeekRecords,
-        IReadOnlyList<UsageDeviceBreakdown> WeekBreakdowns,
-        IReadOnlyList<DailyRecord> MonthRecords,
-        IReadOnlyList<AppUsageRow> AppUsageRows,
-        long RangeTotalSeconds,
-        long RangeLongestSessionSeconds,
-        long[] RangeHourlySeconds,
-        UsageDeviceBreakdown RangeBreakdown);
-
-    private UsageDeviceBreakdown SumDeviceBreakdowns(DateOnly start, DateOnly end)
-    {
-        long pcSeconds = 0L;
-        long phoneSeconds = 0L;
-        for (var date = start; date <= end; date = date.AddDays(1))
+        _root.Controls.Add(new CanvasLabel
         {
-            var breakdown = _controller.GetDeviceBreakdown(date);
-            pcSeconds += breakdown.PcSeconds;
-            phoneSeconds += breakdown.PhoneSeconds;
-        }
-
-        return new UsageDeviceBreakdown(pcSeconds, phoneSeconds);
-    }
-
-    private static long[] SumHourlySeconds(IEnumerable<DailyRecord> records)
-    {
-        var values = new long[24];
-        foreach (var record in records)
-        {
-            AppState.NormalizeRecord(record);
-            for (var hour = 0; hour < values.Length; hour++)
-            {
-                values[hour] += record.HourlySeconds[hour];
-            }
-        }
-
-        return values;
-    }
-
-    private static string SourceLabel(AppUsageEntry entry)
-    {
-        return string.Equals(entry.Source, "pc", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(entry.Platform, "windows", StringComparison.OrdinalIgnoreCase)
-                ? AppText.Get("common.pc")
-                : AppText.Get("common.phone");
-    }
-
-    private static void ShowCalendarPicker(object? sender, CalendarSelectionMode mode, DateOnly initialDate, Action<DateOnly> onSelected)
-    {
-        var picker = new CalendarPickerForm(mode, initialDate, initialDate, initialDate);
-        picker.DateSelected += onSelected;
-        ShowPicker(sender, picker);
-    }
-
-    private static void ShowPicker(object? sender, Form picker)
-    {
-        if (sender is Control control)
-        {
-            var screen = control.PointToScreen(new Point(0, control.Height + 6));
-            picker.StartPosition = FormStartPosition.Manual;
-            picker.Location = KeepOnScreen(screen, picker.Size);
-            picker.Show(control.FindForm());
-            return;
-        }
-
-        picker.StartPosition = FormStartPosition.Manual;
-        picker.Location = KeepOnScreen(Cursor.Position, picker.Size);
-        picker.Show();
-    }
-
-    private static Point KeepOnScreen(Point desired, Size size)
-    {
-        var area = Screen.FromPoint(desired).WorkingArea;
-        var x = Math.Min(Math.Max(area.Left, desired.X), Math.Max(area.Left, area.Right - size.Width));
-        var y = Math.Min(Math.Max(area.Top, desired.Y), Math.Max(area.Top, area.Bottom - size.Height));
-        return new Point(x, y);
-    }
-
-    private void UpdateSelectorTexts(DateOnly actualToday)
-    {
-        _daySelectorText.Text = SelectorText(DateLabel(_selectedDay, actualToday));
-        _weekSelectorText.Text = SelectorText(WeekLabel(_selectedWeekStart, actualToday));
-        _monthSelectorText.Text = SelectorText(MonthLabel(_selectedMonthStart, actualToday));
-        _rangeStartSelectorText.Text = SelectorText(CompactDateLabel(_rangeStart));
-        _rangeEndSelectorText.Text = SelectorText(CompactDateLabel(_rangeEnd));
-    }
-
-    private static string DateLabel(DateOnly date)
-    {
-        return DateLabel(date, DateOnly.FromDateTime(DateTime.Now));
-    }
-
-    private static string DateLabel(DateOnly date, DateOnly today)
-    {
-        return date == today ? AppText.Get("common.today") : ShortDateLabel(date);
-    }
-
-    private static string WeekLabel(DateOnly weekStart, DateOnly today)
-    {
-        var currentWeekStart = today.AddDays(-GetMondayOffset(today.DayOfWeek));
-        return weekStart == currentWeekStart ? AppText.Get("common.thisWeek") : CompactDateLabel(weekStart);
-    }
-
-    private static string MonthLabel(DateOnly monthStart, DateOnly today)
-    {
-        return monthStart.Year == today.Year && monthStart.Month == today.Month
-            ? AppText.Get("common.thisMonth")
-            : AppText.Format("calendar.monthCompact", ("month", monthStart.Month));
-    }
-
-    private static string ShortDateLabel(DateOnly date)
-    {
-        return $"{date.Month}/{date.Day}";
-    }
-
-    private static string CompactDateLabel(DateOnly date)
-    {
-        return $"{date.Month}/{date.Day}";
-    }
-
-    private static IEnumerable<long> SessionValues(DailyRecord record)
-    {
-        AppState.NormalizeRecord(record);
-        foreach (var seconds in record.SessionSeconds.Where(seconds => seconds > 0))
-        {
-            yield return seconds;
-        }
-
-        if (record.CurrentSessionSeconds > 0)
-        {
-            yield return record.CurrentSessionSeconds;
-        }
-    }
-
-    private static string PeakHourText(long[] hourlySeconds)
-    {
-        var max = hourlySeconds.Length == 0 ? 0 : hourlySeconds.Max();
-        if (max <= 0)
-        {
-            return AppText.Get("common.none");
-        }
-
-        var hour = Array.IndexOf(hourlySeconds, max);
-        return AppText.Format("time.hourRange", ("start:00", hour.ToString("00")), ("end:00", ((hour + 1) % 24).ToString("00")));
-    }
-
-    private static string SummarySourceText(UsageDeviceBreakdown breakdown)
-    {
-        if (breakdown.PcSeconds + breakdown.PhoneSeconds <= 0)
-        {
-            return AppText.Get("stats.source.empty");
-        }
-
-        return breakdown.PhonePercent >= breakdown.PcPercent
-            ? AppText.Format("stats.source.phoneHighShort", ("percent", breakdown.PhonePercent))
-            : AppText.Format("stats.source.pcHigh", ("percent", breakdown.PcPercent));
-    }
-
-    private static string SummaryCareText(long longestSessionSeconds, long nightSeconds, int phonePercent)
-    {
-        if (longestSessionSeconds >= 45L * 60L)
-        {
-            return AppText.Get("stats.care.continuousHigh");
-        }
-
-        if (nightSeconds >= 60L * 60L)
-        {
-            return AppText.Get("stats.care.nightHigh");
-        }
-
-        if (phonePercent >= 60)
-        {
-            return AppText.Get("stats.care.phoneHigh");
-        }
-
-        return longestSessionSeconds <= 0 && nightSeconds <= 0
-            ? AppText.Get("stats.care.noPressure")
-            : AppText.Get("stats.care.steady");
-    }
-
-    private static long NightSeconds(long[] hourlySeconds)
-    {
-        long total = 0;
-        for (var hour = 0; hour < hourlySeconds.Length; hour++)
-        {
-            if (hour >= 22 || hour < 6)
-            {
-                total += hourlySeconds[hour];
-            }
-        }
-
-        return total;
-    }
-
-    private static int GetMondayOffset(DayOfWeek dayOfWeek)
-    {
-        return dayOfWeek == DayOfWeek.Sunday ? 6 : (int)dayOfWeek - (int)DayOfWeek.Monday;
-    }
-
-    private static RoundedPanel CreatePanel(Rectangle bounds)
-    {
-        return new RoundedPanel
-        {
-            Bounds = bounds,
-            FillColor = Color.FromArgb(252, 254, 253),
-            BorderColor = BorderColor,
-            Radius = 22
-        };
-    }
-
-    private static Control BuildSmallMetric(string label, out FitTextLabel value, Rectangle bounds, Color valueColor)
-    {
-        var panel = new RoundedPanel
-        {
-            Bounds = bounds,
-            FillColor = Color.White,
-            BorderColor = BorderColor,
-            Radius = 16
-        };
-        panel.Controls.Add(new FitTextLabel
-        {
-            Text = label,
-            Bounds = new Rectangle(16, 12, bounds.Width - 30, 24),
-            MaxFontSize = 9.5F,
-            MinFontSize = 8.5F,
-            ForeColor = TextSecondary,
-            BackColor = Color.Transparent,
-            TextAlign = ContentAlignment.MiddleLeft
+            Text = AppText.Get("desktop.records.lead"),
+            Bounds = new Rectangle(PageMargin + 130, top + 2, ContentWidth - 130, 20),
+            Font = AppFonts.Create(9.5F, FontStyle.Regular, GraphicsUnit.Point),
+            ForeColor = AppPalette.TextSecondary,
+            TextAlign = ContentAlignment.MiddleRight
         });
-        value = new FitTextLabel
-        {
-            Text = AppText.Get("duration.zeroMinutes"),
-            Bounds = new Rectangle(16, 38, bounds.Width - 24, 32),
-            MaxFontSize = 17F,
-            MinFontSize = 11F,
-            FontStyle = FontStyle.Bold,
-            ForeColor = valueColor,
-            BackColor = Color.Transparent,
-            TextAlign = ContentAlignment.MiddleLeft
-        };
-        panel.Controls.Add(value);
-        return panel;
-    }
+        top += 24 + 8;
 
-    private static void AddPanelTitle(Control parent, string title, Rectangle bounds)
-    {
-        parent.Controls.Add(new FitTextLabel
-        {
-            Text = title,
-            Bounds = bounds,
-            MaxFontSize = 13F,
-            MinFontSize = 11F,
-            FontStyle = FontStyle.Bold,
-            ForeColor = TextPrimary,
-            BackColor = Color.Transparent,
-            TextAlign = ContentAlignment.MiddleLeft
-        });
-    }
+        BuildRangeCapsules(ref top);
 
-    private static FitTextLabel AddPill(Control parent, string text, Rectangle bounds, EventHandler? clickHandler = null)
-    {
-        var pill = new RoundedPanel
+        var prevDayButton = new PillButton
         {
-            Bounds = bounds,
-            FillColor = SoftGreen,
-            BorderColor = BorderColor,
-            Radius = bounds.Height / 2
+            Text = "‹",
+            Style = PillButtonStyle.Secondary,
+            Font = AppFonts.Create(12F, FontStyle.Bold, GraphicsUnit.Point),
+            Bounds = new Rectangle(PageMargin, top, 40, 30)
         };
-        var label = new FitTextLabel
+        prevDayButton.Click += (_, _) => ChangeDay(-1);
+        _root.Controls.Add(prevDayButton);
+
+        _dateLabel = new CanvasLabel
         {
-            Text = text,
-            Dock = DockStyle.Fill,
-            MaxFontSize = 8F,
-            MinFontSize = 7F,
-            FontStyle = FontStyle.Bold,
-            ForeColor = TextPrimary,
-            BackColor = Color.Transparent,
+            Bounds = new Rectangle(PageMargin + 46, top, ContentWidth - 92, 30),
+            Font = AppFonts.Create(11F, FontStyle.Bold, GraphicsUnit.Point),
+            ForeColor = AppPalette.TextPrimary,
             TextAlign = ContentAlignment.MiddleCenter
         };
-        pill.Controls.Add(label);
-        if (clickHandler is not null)
+        _root.Controls.Add(_dateLabel);
+
+        _nextDayButton = new PillButton
         {
-            pill.Cursor = Cursors.Hand;
-            label.Cursor = Cursors.Hand;
-            pill.Click += clickHandler;
-            label.Click += clickHandler;
+            Text = "›",
+            Style = PillButtonStyle.Secondary,
+            Font = AppFonts.Create(12F, FontStyle.Bold, GraphicsUnit.Point),
+            Bounds = new Rectangle(PageMargin + ContentWidth - 40, top, 40, 30)
+        };
+        _nextDayButton.Click += (_, _) => ChangeDay(1);
+        _root.Controls.Add(_nextDayButton);
+        top += 30 + 10;
+
+        _contentTop = top;
+        ClientSize = new Size(PageWidth, MaxWindowHeight);
+        RefreshContent();
+        CompleteLayoutScaling();
+        ApplyScrollMinSize();
+    }
+
+    private int _contentBottomDesign;
+
+    private void ApplyScrollMinSize()
+    {
+        _root.AutoScrollMinSize = new Size(0, Sc(_contentBottomDesign));
+    }
+
+    private void BuildRangeCapsules(ref int top)
+    {
+        using var capsuleFont = AppFonts.Create(9.5F, FontStyle.Bold, GraphicsUnit.Point);
+        var dayWidth = UiText.SingleLineWidth(AppText.Get("desktop.records.range.day"), capsuleFont) + 40;
+        var weekWidth = UiText.SingleLineWidth(AppText.Get("desktop.records.range.week"), capsuleFont) + 40;
+        var monthWidth = UiText.SingleLineWidth(AppText.Get("desktop.records.range.month"), capsuleFont) + 40;
+        var totalWidth = dayWidth + weekWidth + monthWidth + 20;
+        var left = PageMargin + (ContentWidth - totalWidth) / 2;
+
+        var dayCapsule = new PillButton
+        {
+            Text = AppText.Get("desktop.records.range.day"),
+            Style = PillButtonStyle.Primary,
+            Font = AppFonts.Create(9.5F, FontStyle.Bold, GraphicsUnit.Point),
+            Bounds = new Rectangle(left, top, dayWidth, 34)
+        };
+        _root.Controls.Add(dayCapsule);
+
+        var weekCapsule = new PillButton
+        {
+            Text = AppText.Get("desktop.records.range.week"),
+            Style = PillButtonStyle.Secondary,
+            Font = AppFonts.Create(9.5F, FontStyle.Bold, GraphicsUnit.Point),
+            Bounds = new Rectangle(left + dayWidth + 10, top, weekWidth, 34),
+            Enabled = false
+        };
+        _root.Controls.Add(weekCapsule);
+
+        var monthCapsule = new PillButton
+        {
+            Text = AppText.Get("desktop.records.range.month"),
+            Style = PillButtonStyle.Secondary,
+            Font = AppFonts.Create(9.5F, FontStyle.Bold, GraphicsUnit.Point),
+            Bounds = new Rectangle(left + dayWidth + 10 + weekWidth + 10, top, monthWidth, 34),
+            Enabled = false
+        };
+        _root.Controls.Add(monthCapsule);
+        top += 34 + 2;
+
+        _root.Controls.Add(new CanvasLabel
+        {
+            Text = AppText.Get("desktop.records.range.weekTodo") + " · " + AppText.Get("desktop.records.range.monthTodo"),
+            Bounds = new Rectangle(PageMargin, top, ContentWidth, 14),
+            Font = AppFonts.Create(8F, FontStyle.Regular, GraphicsUnit.Point),
+            ForeColor = AppPalette.TextSecondary,
+            TextAlign = ContentAlignment.MiddleCenter
+        });
+        top += 14 + 6;
+    }
+
+    private void ChangeDay(int deltaDays)
+    {
+        var today = DateOnly.FromDateTime(DateTime.Now);
+        var next = _selectedDate.AddDays(deltaDays);
+        if (next > today)
+        {
+            return;
         }
 
-        parent.Controls.Add(pill);
-        return label;
+        _selectedDate = next;
+        RefreshContent();
     }
 
-    private static void AddLegend(Control parent, Point location)
+    protected override void OnDpiChanged(DpiChangedEventArgs e)
     {
-        parent.Controls.Add(new LegendDot { Bounds = new Rectangle(location.X, location.Y, 14, 14), DotColor = AccentGreen });
-        parent.Controls.Add(new FitTextLabel
+        base.OnDpiChanged(e);
+        // 跨显示器拖动后滚动范围按新 DPI 重算（子控件由 WinForms 自动等比重缩放）
+        if (IsHandleCreated && !IsDisposed)
         {
-            Text = AppText.Get("common.pc"),
-            Bounds = new Rectangle(location.X + 20, location.Y - 5, 44, 24),
-            MaxFontSize = 9F,
-            MinFontSize = 8F,
-            ForeColor = TextSecondary,
-            BackColor = Color.Transparent
-        });
-        parent.Controls.Add(new LegendDot { Bounds = new Rectangle(location.X + 76, location.Y, 14, 14), DotColor = AccentBlue });
-        parent.Controls.Add(new FitTextLabel
-        {
-            Text = AppText.Get("common.phone"),
-            Bounds = new Rectangle(location.X + 96, location.Y - 5, 44, 24),
-            MaxFontSize = 9F,
-            MinFontSize = 8F,
-            ForeColor = TextSecondary,
-            BackColor = Color.Transparent
-        });
+            ApplyScrollMinSize();
+        }
     }
 
-    private static FitTextLabel AddSummaryLabel(
-        Control parent,
-        string text,
-        Rectangle bounds,
-        float maxFontSize,
-        float minFontSize,
-        Color color,
-        FontStyle style)
+    private void RefreshContent()
     {
-        var label = new FitTextLabel
+        foreach (var stale in _root.Controls.OfType<Control>().Where(control => control.Tag as string == "day").ToList())
         {
-            Text = text,
-            Bounds = bounds,
-            MaxFontSize = maxFontSize,
-            MinFontSize = minFontSize,
-            FontStyle = style,
-            ForeColor = color,
-            BackColor = Color.Transparent,
-            TextAlign = ContentAlignment.MiddleLeft
-        };
-        parent.Controls.Add(label);
-        return label;
+            _root.Controls.Remove(stale);
+            stale.Dispose();
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.Now);
+        _nextDayButton.Enabled = _selectedDate < today;
+        _dateLabel.Text = _selectedDate == today
+            ? AppText.Format(
+                "desktop.main.dateLine",
+                ("today", AppText.Get("desktop.main.todayLabel")),
+                ("month", _selectedDate.Month),
+                ("day", _selectedDate.Day),
+                ("weekday", DesktopDisplayText.WeekdayLabel(_selectedDate.DayOfWeek)))
+            : AppText.Format(
+                "desktop.records.dateLine",
+                ("month", _selectedDate.Month),
+                ("day", _selectedDate.Day),
+                ("weekday", DesktopDisplayText.WeekdayLabel(_selectedDate.DayOfWeek)));
+
+        var metrics = _controller.GetDailyMetrics(_selectedDate);
+        var (intervals, sessions, breaks, gaps) = _controller.GetDayDetailSnapshot();
+        var instances = _controller.GetReminderInstancesSnapshot();
+
+        var top = _contentTop;
+        top = BuildMetrics(top, metrics);
+        top = BuildTimeline(top, intervals, breaks, gaps);
+        top = BuildSessions(top, intervals, sessions, breaks, instances);
+        top = BuildReminderSummary(top, metrics, instances);
+        top = BuildLegacyLink(top);
+        top = BuildDataNote(top);
+        _contentBottomDesign = top + 8;
+        ApplyScrollMinSize();
+        if (!IsHandleCreated)
+        {
+            // 初次布局设定窗口尺寸；运行时不再改窗口尺寸
+            ClientSize = new Size(PageWidth, Math.Min(MaxWindowHeight, top + 8));
+        }
     }
 
-    private static FitTextLabel AddInsight(Control parent, string label, Rectangle bounds)
+    private Control Track(Control control)
     {
-        var title = new FitTextLabel
+        control.Tag = "day";
+        _root.Controls.Add(control);
+        return control;
+    }
+
+    private int BuildMetrics(int top, DailyMetrics metrics)
+    {
+        const int gap = 8;
+        const int cardHeight = 74;
+        var cardWidth = (ContentWidth - gap * 2) / 3;
+        var thirdWidth = ContentWidth - 2 * (cardWidth + gap);
+        BuildMetricCard(PageMargin, top, cardWidth, cardHeight, AppText.Get("desktop.records.metric.active"),
+            DesktopDisplayText.Duration(metrics.DesktopActiveSeconds), AppPalette.TextPrimary);
+        BuildMetricCard(PageMargin + cardWidth + gap, top, cardWidth, cardHeight, AppText.Get("desktop.records.metric.sedentary"),
+            DesktopDisplayText.Duration(metrics.EstimatedSedentarySeconds), AppPalette.Primary);
+        BuildMetricCard(PageMargin + 2 * (cardWidth + gap), top, thirdWidth, cardHeight, AppText.Get("desktop.records.metric.maxContinuous"),
+            DesktopDisplayText.Duration(metrics.MaxContinuousActiveSeconds), AppPalette.Teal);
+        BuildMetricCard(PageMargin, top + cardHeight + gap, cardWidth, cardHeight, AppText.Get("desktop.records.metric.over40"),
+            DesktopDisplayText.Sessions(metrics.SessionsOver40mCount), AppPalette.Purple);
+        BuildMetricCard(PageMargin + cardWidth + gap, top + cardHeight + gap, cardWidth, cardHeight, AppText.Get("desktop.records.metric.breaks"),
+            DesktopDisplayText.Count(metrics.InferredDesktopBreakCount), AppPalette.Purple);
+        BuildMetricCard(PageMargin + 2 * (cardWidth + gap), top + cardHeight + gap, thirdWidth, cardHeight, AppText.Get("desktop.records.metric.rate"),
+            DesktopDisplayText.Rate(metrics.ResponseRate), AppPalette.Orange);
+        return top + 2 * cardHeight + gap + 16;
+    }
+
+    private void BuildMetricCard(int left, int top, int width, int height, string label, string value, Color valueColor)
+    {
+        var card = new RoundedCardPanel { Bounds = Sc(left, top, width, height) };
+        card.Controls.Add(new CanvasLabel
         {
             Text = label,
-            Bounds = new Rectangle(bounds.X, bounds.Y, bounds.Width, 24),
-            MaxFontSize = 9F,
-            MinFontSize = 7.5F,
-            ForeColor = TextSecondary,
-            BackColor = Color.Transparent,
-            TextAlign = ContentAlignment.MiddleLeft
-        };
-        parent.Controls.Add(title);
-
-        var value = new FitTextLabel
+            Bounds = Sc(12, 10, width - 24, 16),
+            Font = AppFonts.Create(8.5F, FontStyle.Regular, GraphicsUnit.Point),
+            ForeColor = AppPalette.TextSecondary
+        });
+        card.Controls.Add(new CanvasLabel
         {
-            Text = AppText.Get("common.none"),
-            Bounds = new Rectangle(bounds.X, bounds.Y + 28, bounds.Width, 30),
-            MaxFontSize = 12F,
-            MinFontSize = 8.5F,
-            FontStyle = FontStyle.Bold,
-            ForeColor = TextPrimary,
-            BackColor = Color.Transparent,
-            TextAlign = ContentAlignment.MiddleLeft
-        };
-        parent.Controls.Add(value);
-        return value;
+            Text = value,
+            Bounds = Sc(12, 32, width - 24, 28),
+            Font = AppFonts.Create(12.5F, FontStyle.Bold, GraphicsUnit.Point),
+            ForeColor = valueColor
+        });
+        Track(card);
     }
 
-    private static FitTextLabel AddNote(Control parent, Rectangle bounds)
+    private int BuildTimeline(int top, List<CommittedInterval> intervals, List<InferredBreak> breaks, List<CoverageGapRecord> gaps)
     {
-        var note = new FitTextLabel
+        Track(new CanvasLabel
         {
-            Bounds = bounds,
-            MaxFontSize = 8.5F,
-            MinFontSize = 7.5F,
-            ForeColor = TextSecondary,
-            BackColor = Color.Transparent,
-            TextAlign = ContentAlignment.MiddleLeft
-        };
-        parent.Controls.Add(note);
-        return note;
-    }
+            Text = AppText.Get("desktop.records.timeline.title"),
+            Bounds = Sc(PageMargin, top, 300, 20),
+            Font = AppFonts.Create(11.5F, FontStyle.Bold, GraphicsUnit.Point),
+            ForeColor = AppPalette.TextPrimary
+        });
 
-    private static string FormatDuration(long totalSeconds)
-    {
-        var duration = TimeSpan.FromSeconds(Math.Max(0, totalSeconds));
-        var totalHours = (int)duration.TotalHours;
-        return totalHours > 0
-            ? AppText.Format("duration.hoursMinutesPadded", ("hours", totalHours), ("minutes:00", duration.Minutes.ToString("00")))
-            : AppText.Format("duration.minutes", ("minutes", duration.Minutes));
-    }
+        const int cardHeight = 108;
+        var card = new RoundedCardPanel { Bounds = Sc(PageMargin, top + 26, ContentWidth, cardHeight) };
+        var legend = new TimelineLegend { Bounds = Sc(18, 8, ContentWidth - 36, 20) };
+        card.Controls.Add(legend);
 
-    private static string FormatTooltipMinutes(long totalSeconds)
-    {
-        return AppText.Format("duration.minutes", ("minutes", Math.Max(0L, totalSeconds) / 60L));
-    }
+        var segments = DesktopTimeline.Build(_selectedDate, intervals, breaks, gaps, DateTimeOffset.UtcNow, TimeZoneInfo.Local);
+        var isToday = _selectedDate == DateOnly.FromDateTime(DateTime.Now);
+        var bar = new TimelineBar { Bounds = Sc(18, 34, ContentWidth - 36, 38) };
+        bar.SetData(_selectedDate, segments, isToday);
+        card.Controls.Add(bar);
 
-    private static string FormatCompactHours(long totalSeconds)
-    {
-        var safeSeconds = Math.Max(0L, totalSeconds);
-        var halfHourUnits = (long)Math.Round(safeSeconds / 1800D, MidpointRounding.AwayFromZero);
-        var wholeHours = halfHourUnits / 2L;
-
-        return halfHourUnits % 2L == 0L
-            ? AppText.Format("duration.hours", ("hours", wholeHours))
-            : AppText.Format("duration.halfHours", ("hours", wholeHours));
-    }
-
-    private static string CountText(int count)
-    {
-        return AppText.Format("stats.sessions.count", ("count", count));
-    }
-
-    private static string[] WeekdayLabels()
-    {
-        return new[]
+        for (var tick = 0; tick <= 4; tick++)
         {
-            AppText.Get("calendar.weekday.mon"),
-            AppText.Get("calendar.weekday.tue"),
-            AppText.Get("calendar.weekday.wed"),
-            AppText.Get("calendar.weekday.thu"),
-            AppText.Get("calendar.weekday.fri"),
-            AppText.Get("calendar.weekday.sat"),
-            AppText.Get("calendar.weekday.sun")
-        };
-    }
-
-    private static string SelectorText(string text)
-    {
-        return text + " ▾";
-    }
-
-    private static Color TodayColor(long totalSeconds)
-    {
-        return TodayTonePolicy.FromSeconds(totalSeconds) switch
-        {
-            TodayTone.Warn => AccentYellow,
-            TodayTone.Danger => AccentRed,
-            _ => AccentGreen
-        };
-    }
-
-    private static GraphicsPath CreateRoundRect(Rectangle bounds, int radius)
-    {
-        var path = new GraphicsPath();
-        var diameter = Math.Max(1, radius * 2);
-        var arc = new Rectangle(bounds.Location, new Size(diameter, diameter));
-
-        path.AddArc(arc, 180, 90);
-        arc.X = bounds.Right - diameter;
-        path.AddArc(arc, 270, 90);
-        arc.Y = bounds.Bottom - diameter;
-        path.AddArc(arc, 0, 90);
-        arc.X = bounds.Left;
-        path.AddArc(arc, 90, 90);
-        path.CloseFigure();
-        return path;
-    }
-
-    private enum CalendarSelectionMode
-    {
-        Day,
-        Week,
-        Month,
-        Range
-    }
-
-    private sealed class CalendarPickerForm : Form
-    {
-        private readonly CalendarSelectionMode _mode;
-        private readonly CalendarMonthView _leftMonth;
-        private readonly CalendarMonthView? _rightMonth;
-        private readonly FitTextLabel _leftTitle;
-        private readonly FitTextLabel? _rightTitle;
-        private DateOnly _leftMonthStart;
-        private DateOnly _selectedDate;
-        private DateOnly _rangeStart;
-        private DateOnly _rangeEnd;
-        private bool _pickingRangeEnd = true;
-
-        public event Action<DateOnly>? DateSelected;
-        public event Action<(DateOnly Start, DateOnly End)>? RangeSelected;
-
-        public CalendarPickerForm(CalendarSelectionMode mode, DateOnly initialDate, DateOnly rangeStart, DateOnly rangeEnd)
-        {
-            _mode = mode;
-            _leftMonthStart = new DateOnly(initialDate.Year, initialDate.Month, 1);
-            _selectedDate = initialDate;
-            _rangeStart = rangeStart <= rangeEnd ? rangeStart : rangeEnd;
-            _rangeEnd = rangeStart <= rangeEnd ? rangeEnd : rangeStart;
-
-            AutoScaleMode = AutoScaleMode.None;
-            FormBorderStyle = FormBorderStyle.None;
-            ShowInTaskbar = false;
-            BackColor = PanelBackground;
-            Font = AppFonts.Create(9F);
-            Size = mode == CalendarSelectionMode.Range ? new Size(720, 418) : new Size(368, 390);
-
-            var root = new RoundedPanel
+            var hour = tick * 6;
+            var labelWidth = tick == 4 ? 26 : 20;
+            var labelLeft = tick == 4
+                ? 18 + (ContentWidth - 36) - labelWidth + 2
+                : 18 + tick * (ContentWidth - 36) / 4 - 4;
+            card.Controls.Add(new CanvasLabel
             {
-                Dock = DockStyle.Fill,
-                FillColor = Color.White,
-                BorderColor = Color.FromArgb(210, 226, 220),
-                Radius = 24
+                Text = hour.ToString(),
+                Bounds = Sc(labelLeft, 78, labelWidth, 16),
+                Font = AppFonts.Create(8F, FontStyle.Regular, GraphicsUnit.Point),
+                ForeColor = AppPalette.TextSecondary,
+                TextAlign = tick == 4 ? ContentAlignment.MiddleRight : ContentAlignment.MiddleLeft
+            });
+        }
+
+        Track(card);
+        return top + 26 + cardHeight + 16;
+    }
+
+    private int BuildSessions(
+        int top,
+        List<CommittedInterval> intervals,
+        List<SessionBoundary> sessions,
+        List<InferredBreak> breaks,
+        List<ReminderInstance> instances)
+    {
+        Track(new CanvasLabel
+        {
+            Text = AppText.Get("desktop.records.sessions.title"),
+            Bounds = Sc(PageMargin, top, 300, 20),
+            Font = AppFonts.Create(11.5F, FontStyle.Bold, GraphicsUnit.Point),
+            ForeColor = AppPalette.TextPrimary
+        });
+        top += 26;
+
+        var (dayStartUtc, dayEndUtc) = DailyAggregator.DayBoundsUtc(_selectedDate, TimeZoneInfo.Local);
+        var daySessions = sessions
+            .Where(session => intervals.Any(interval =>
+                interval.SessionId == session.SessionId
+                && interval.EndUtc > dayStartUtc
+                && interval.StartUtc < dayEndUtc))
+            .OrderByDescending(session => session.StartedAtUtc)
+            .ToList();
+
+        if (daySessions.Count == 0)
+        {
+            Track(new CanvasLabel
+            {
+                Text = AppText.Get("desktop.status.noData"),
+                Bounds = Sc(PageMargin, top, ContentWidth, 36),
+                Font = AppFonts.Create(10F, FontStyle.Regular, GraphicsUnit.Point),
+                ForeColor = AppPalette.TextSecondary,
+                WordWrap = true,
+                TextAlign = ContentAlignment.TopLeft
+            });
+            return top + 42;
+        }
+
+        foreach (var session in daySessions)
+        {
+            var seconds = SessionAnalyzer.CommittedSeconds(intervals.Where(interval => interval.SessionId == session.SessionId));
+            var eyeCount = instances.Count(instance => instance.SessionId == session.SessionId && instance.ReminderType == "eye");
+            var movementCount = instances.Count(instance => instance.SessionId == session.SessionId && instance.ReminderType == "movement");
+            var breakCount = breaks.Count(breakEvent => breakEvent.SessionId == session.SessionId);
+            var ongoing = session.EndedAtUtc is null;
+
+            var card = new RoundedCardPanel { Bounds = Sc(PageMargin, top, ContentWidth, 64) };
+            var accent = new Control
+            {
+                Bounds = Sc(0, 12, 4, 40),
+                BackColor = ongoing ? AppPalette.Teal : AppPalette.Primary
             };
-            Controls.Add(root);
+            card.Controls.Add(accent);
 
-            _leftTitle = AddCalendarHeader(root, new Rectangle(18, 18, mode == CalendarSelectionMode.Range ? 330 : 332, 42), true);
-            _leftMonth = CreateMonthView(new Rectangle(18, 68, mode == CalendarSelectionMode.Range ? 330 : 332, 250));
-            root.Controls.Add(_leftMonth);
-
-            if (mode == CalendarSelectionMode.Range)
+            var timeRange = session.StartedAtUtc.LocalDateTime.ToString("HH:mm")
+                + " – "
+                + (ongoing
+                    ? AppText.Get("desktop.records.sessions.ongoing")
+                    : session.EndedAtUtc!.Value.LocalDateTime.ToString("HH:mm"));
+            using (var timeFont = AppFonts.Create(11F, FontStyle.Bold, GraphicsUnit.Point))
             {
-                _rightTitle = AddCalendarHeader(root, new Rectangle(372, 18, 330, 42), false);
-                _rightMonth = CreateMonthView(new Rectangle(372, 68, 330, 250));
-                root.Controls.Add(_rightMonth);
+                var timeWidth = UiText.SingleLineWidth(timeRange, timeFont) + 10;
+                card.Controls.Add(new CanvasLabel
+                {
+                    Text = timeRange,
+                    Bounds = Sc(16, 10, timeWidth, 44),
+                    Font = AppFonts.Create(11F, FontStyle.Bold, GraphicsUnit.Point),
+                    ForeColor = AppPalette.TextPrimary
+                });
+
+                var textLeft = 16 + timeWidth + 12;
+                card.Controls.Add(new CanvasLabel
+                {
+                    Text = DesktopDisplayText.DeskLabel(session.DeskType) + " · " + DesktopDisplayText.Duration(seconds),
+                    Bounds = Sc(textLeft, 8, ContentWidth - textLeft - 14, 22),
+                    Font = AppFonts.Create(9F, FontStyle.Regular, GraphicsUnit.Point),
+                    ForeColor = AppPalette.TextSecondary
+                });
+                card.Controls.Add(new CanvasLabel
+                {
+                    Text = AppText.Format(
+                        "desktop.records.sessions.line",
+                        ("eye", eyeCount),
+                        ("movement", movementCount),
+                        ("breaks", breakCount)),
+                    Bounds = Sc(textLeft, 32, ContentWidth - textLeft - 14, 22),
+                    Font = AppFonts.Create(9F, FontStyle.Regular, GraphicsUnit.Point),
+                    ForeColor = AppPalette.TextSecondary
+                });
             }
 
-            if (mode == CalendarSelectionMode.Range)
-            {
-                var tip = new FitTextLabel
-                {
-                    Text = AppText.Get("calendar.pickRange"),
-                    Bounds = new Rectangle(24, 330, 300, 28),
-                    MaxFontSize = 9F,
-                    MinFontSize = 8F,
-                    ForeColor = TextSecondary,
-                    BackColor = Color.Transparent
-                };
-                root.Controls.Add(tip);
+            Track(card);
+            top += 64 + 6;
+        }
 
-                root.Controls.Add(CreateActionButton(AppText.Get("common.cancel"), new Rectangle(496, 330, 86, 40), Color.FromArgb(238, 242, 241), TextPrimary, (_, _) => Close()));
-                root.Controls.Add(CreateActionButton(AppText.Get("common.apply"), new Rectangle(596, 330, 86, 40), AccentGreen, Color.White, (_, _) =>
+        return top + 10;
+    }
+
+    private int BuildReminderSummary(int top, DailyMetrics metrics, List<ReminderInstance> instances)
+    {
+        Track(new CanvasLabel
+        {
+            Text = AppText.Get("desktop.records.reminders.title"),
+            Bounds = Sc(PageMargin, top, 300, 20),
+            Font = AppFonts.Create(11.5F, FontStyle.Bold, GraphicsUnit.Point),
+            ForeColor = AppPalette.TextPrimary
+        });
+        top += 24;
+
+        var textWidth = ContentWidth - 32;
+        var cursor = 10;
+        var card = new RoundedCardPanel { Bounds = Sc(PageMargin, top, ContentWidth, 100) };
+
+        var eyeInstances = instances
+            .Where(instance => instance.ReminderType == "eye"
+                && DateOnly.FromDateTime(instance.DueAtUtc.LocalDateTime) == _selectedDate)
+            .ToList();
+        var deliveredCount = eyeInstances.Count(instance => instance.Status == ReminderInstance.StatusDelivered);
+        using (var lineFont = AppFonts.Create(9.5F, FontStyle.Regular, GraphicsUnit.Point))
+        {
+            var eyeLine = AppText.Format(
+                "desktop.records.reminders.eyeLine",
+                ("due", eyeInstances.Count),
+                ("delivered", deliveredCount));
+            var eyeHeight = UiText.WrappedHeight(eyeLine, lineFont, textWidth) + 2;
+            card.Controls.Add(new CanvasLabel
+            {
+                Text = eyeLine,
+                Bounds = Sc(16, cursor, textWidth, eyeHeight),
+                Font = AppFonts.Create(9.5F, FontStyle.Regular, GraphicsUnit.Point),
+                ForeColor = AppPalette.TextPrimary,
+                WordWrap = true,
+                TextAlign = ContentAlignment.TopLeft
+            });
+            cursor += eyeHeight + 3;
+
+            var rate = metrics.ResponseRate;
+            var rateText = rate.MaturedOpportunities > 0
+                ? AppText.Format(
+                    "desktop.records.reminders.rateLine",
+                    ("matured", rate.MaturedOpportunities),
+                    ("responses", rate.Responses),
+                    ("percent", rate.RatePercent ?? 0),
+                    ("pending", rate.Pending))
+                : AppText.Get("desktop.records.reminders.rateLineNone");
+            var rateHeight = UiText.WrappedHeight(rateText, lineFont, textWidth) + 2;
+            card.Controls.Add(new CanvasLabel
+            {
+                Text = rateText,
+                Bounds = Sc(16, cursor, textWidth, rateHeight),
+                Font = AppFonts.Create(9.5F, FontStyle.Regular, GraphicsUnit.Point),
+                ForeColor = AppPalette.TextPrimary,
+                WordWrap = true,
+                TextAlign = ContentAlignment.TopLeft
+            });
+            cursor += rateHeight + 3;
+
+            if (rate.Unknown > 0)
+            {
+                using var unknownFont = AppFonts.Create(8.5F, FontStyle.Regular, GraphicsUnit.Point);
+                var unknownText = AppText.Format("desktop.records.reminders.rateUnknown", ("unknown", rate.Unknown));
+                var unknownHeight = UiText.WrappedHeight(unknownText, unknownFont, textWidth) + 2;
+                card.Controls.Add(new CanvasLabel
                 {
-                    RangeSelected?.Invoke((_rangeStart, _rangeEnd));
-                    Close();
-                }));
+                    Text = unknownText,
+                    Bounds = Sc(16, cursor, textWidth, unknownHeight),
+                    Font = AppFonts.Create(8.5F, FontStyle.Regular, GraphicsUnit.Point),
+                    ForeColor = AppPalette.TextSecondary,
+                    WordWrap = true,
+                    TextAlign = ContentAlignment.TopLeft
+                });
+                cursor += unknownHeight + 2;
+            }
+
+            using var footnoteFont = AppFonts.Create(8F, FontStyle.Regular, GraphicsUnit.Point);
+            var footnote = AppText.Get("desktop.records.reminders.rateFootnote");
+            var footnoteHeight = UiText.WrappedHeight(footnote, footnoteFont, textWidth) + 2;
+            card.Controls.Add(new CanvasLabel
+            {
+                Text = footnote,
+                Bounds = Sc(16, cursor, textWidth, footnoteHeight),
+                Font = AppFonts.Create(8F, FontStyle.Regular, GraphicsUnit.Point),
+                ForeColor = AppPalette.TextSecondary,
+                WordWrap = true,
+                TextAlign = ContentAlignment.TopLeft
+            });
+            cursor += footnoteHeight + 10;
+        }
+
+        card.Height = Sc(cursor);
+        Track(card);
+        return top + cursor + 14;
+    }
+
+    private int BuildLegacyLink(int top)
+    {
+        using var font = AppFonts.Create(9.5F, FontStyle.Regular, GraphicsUnit.Point);
+        var text = AppText.Get("desktop.records.legacyLink");
+        var width = UiText.SingleLineWidth(text, font) + 16;
+        var link = new PillButton
+        {
+            Text = text,
+            Style = PillButtonStyle.Text,
+            Font = AppFonts.Create(9.5F, FontStyle.Regular, GraphicsUnit.Point),
+            Bounds = Sc(PageMargin - 8, top, width, 26)
+        };
+        link.Click += (_, _) => ShowLegacyRecords();
+        Track(link);
+        return top + 30;
+    }
+
+    private int BuildDataNote(int top)
+    {
+        using var font = AppFonts.Create(8.5F, FontStyle.Regular, GraphicsUnit.Point);
+        var text = AppText.Get("desktop.records.dataNote");
+        var height = UiText.WrappedHeight(text, font, ContentWidth) + 2;
+        Track(new CanvasLabel
+        {
+            Text = text,
+            Bounds = Sc(PageMargin, top, ContentWidth, height),
+            Font = AppFonts.Create(8.5F, FontStyle.Regular, GraphicsUnit.Point),
+            ForeColor = AppPalette.TextSecondary,
+            WordWrap = true,
+            TextAlign = ContentAlignment.TopCenter
+        });
+        return top + height + 4;
+    }
+
+    private void ShowLegacyRecords()
+    {
+        using var dialog = new LegacyRecordsDialog(_appIcon);
+        dialog.ShowDialog(this);
+    }
+
+    /// <summary>旧版用眼记录（升级前数据）：只读展示 legacy state.json 汇总，不计入新版指标。</summary>
+    private sealed class LegacyRecordsDialog : AppPageForm
+    {
+        public LegacyRecordsDialog(Icon? icon)
+        {
+            Text = AppText.Get("desktop.records.legacyTitle");
+            SetAppIcon(icon);
+            ClientSize = new Size(460, 520);
+
+            Controls.Add(new CanvasLabel
+            {
+                Text = AppText.Get("desktop.records.legacyTitle"),
+                Bounds = new Rectangle(28, 20, 404, 26),
+                Font = AppFonts.Create(13F, FontStyle.Bold, GraphicsUnit.Point),
+                ForeColor = AppPalette.TextPrimary
+            });
+            Controls.Add(new CanvasLabel
+            {
+                Text = AppText.Get("desktop.records.legacyNote"),
+                Bounds = new Rectangle(28, 48, 404, 20),
+                Font = AppFonts.Create(9F, FontStyle.Regular, GraphicsUnit.Point),
+                ForeColor = AppPalette.TextSecondary
+            });
+
+            var listPanel = new Panel
+            {
+                Bounds = new Rectangle(28, 76, 404, 364),
+                AutoScroll = true,
+                BackColor = Color.Transparent
+            };
+            Controls.Add(listPanel);
+
+            var records = LoadLegacyRecords();
+            if (records.Count == 0)
+            {
+                listPanel.Controls.Add(new CanvasLabel
+                {
+                    Text = AppText.Get("desktop.records.legacyEmpty"),
+                    Bounds = new Rectangle(0, 8, 404, 24),
+                    Font = AppFonts.Create(10F, FontStyle.Regular, GraphicsUnit.Point),
+                    ForeColor = AppPalette.TextSecondary
+                });
             }
             else
             {
-                var tipText = mode switch
+                var top = 0;
+                foreach (var record in records)
                 {
-                    CalendarSelectionMode.Week => AppText.Get("calendar.pickWeek"),
-                    CalendarSelectionMode.Month => AppText.Get("calendar.pickMonth"),
-                    _ => AppText.Get("calendar.pickDay")
-                };
-                var tip = new FitTextLabel
-                {
-                    Text = tipText,
-                    Bounds = new Rectangle(22, 330, 220, 28),
-                    MaxFontSize = 9F,
-                    MinFontSize = 8F,
-                    ForeColor = TextSecondary,
-                    BackColor = Color.Transparent
-                };
-                root.Controls.Add(tip);
-                root.Controls.Add(CreateActionButton(AppText.Get("common.cancel"), new Rectangle(260, 328, 86, 40), Color.FromArgb(238, 242, 241), TextPrimary, (_, _) => Close()));
+                    listPanel.Controls.Add(new CanvasLabel
+                    {
+                        Text = record.Date.ToString("yyyy-MM-dd") + "：" + DesktopDisplayText.Duration(record.TotalSeconds),
+                        Bounds = new Rectangle(0, top, 404, 26),
+                        Font = AppFonts.Create(10F, FontStyle.Regular, GraphicsUnit.Point),
+                        ForeColor = AppPalette.TextPrimary
+                    });
+                    top += 28;
+                }
+
+                listPanel.AutoScrollMinSize = new Size(0, top);
             }
 
-            RefreshMonths();
-        }
-
-        protected override void OnDeactivate(EventArgs e)
-        {
-            Close();
-            base.OnDeactivate(e);
-        }
-
-        private CalendarMonthView CreateMonthView(Rectangle bounds)
-        {
-            var view = new CalendarMonthView
+            var closeButton = new PillButton
             {
-                Bounds = bounds,
-                Mode = _mode,
-                SelectedDate = _selectedDate,
-                RangeStart = _rangeStart,
-                RangeEnd = _rangeEnd,
-                BackColor = Color.Transparent
+                Text = AppText.Get("common.gotIt"),
+                Style = PillButtonStyle.Primary,
+                Bounds = new Rectangle(138, 458, 184, 42)
             };
-            view.DateClicked += OnDateClicked;
-            return view;
+            closeButton.Click += (_, _) => Close();
+            Controls.Add(closeButton);
+            CompleteLayoutScaling();
         }
 
-        private FitTextLabel AddCalendarHeader(Control parent, Rectangle bounds, bool left)
+        private static List<DailyRecord> LoadLegacyRecords()
         {
-            var previousYear = CreateHeaderButton("«", new Rectangle(bounds.X, bounds.Y + 4, 34, 34), (_, _) => MoveMonth(left ? -12 : 0));
-            var previousMonth = CreateHeaderButton("‹", new Rectangle(bounds.X + 38, bounds.Y + 4, 34, 34), (_, _) => MoveMonth(left ? -1 : 0));
-            parent.Controls.Add(previousYear);
-            parent.Controls.Add(previousMonth);
-
-            var title = new FitTextLabel
+            try
             {
-                Bounds = new Rectangle(bounds.X + 76, bounds.Y, bounds.Width - 152, bounds.Height),
-                MaxFontSize = 14F,
-                MinFontSize = 12F,
-                FontStyle = FontStyle.Bold,
-                ForeColor = TextPrimary,
-                BackColor = Color.Transparent,
-                TextAlign = ContentAlignment.MiddleCenter
-            };
-            parent.Controls.Add(title);
-
-            var nextMonth = CreateHeaderButton("›", new Rectangle(bounds.Right - 72, bounds.Y + 4, 34, 34), (_, _) => MoveMonth(left ? 1 : 0));
-            var nextYear = CreateHeaderButton("»", new Rectangle(bounds.Right - 34, bounds.Y + 4, 34, 34), (_, _) => MoveMonth(left ? 12 : 0));
-            parent.Controls.Add(nextMonth);
-            parent.Controls.Add(nextYear);
-            return title;
-        }
-
-        private static Control CreateHeaderButton(string text, Rectangle bounds, EventHandler click)
-        {
-            var label = new FitTextLabel
-            {
-                Text = text,
-                Bounds = bounds,
-                MaxFontSize = 14F,
-                MinFontSize = 12F,
-                FontStyle = FontStyle.Bold,
-                ForeColor = TextSecondary,
-                BackColor = Color.Transparent,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Cursor = Cursors.Hand
-            };
-            label.Click += click;
-            return label;
-        }
-
-        private static Control CreateActionButton(string text, Rectangle bounds, Color fill, Color fore, EventHandler click)
-        {
-            var panel = new RoundedPanel
-            {
-                Bounds = bounds,
-                FillColor = fill,
-                BorderColor = fill,
-                Radius = bounds.Height / 2,
-                Cursor = Cursors.Hand
-            };
-            var label = new FitTextLabel
-            {
-                Text = text,
-                Dock = DockStyle.Fill,
-                MaxFontSize = 10F,
-                MinFontSize = 9F,
-                FontStyle = FontStyle.Bold,
-                ForeColor = fore,
-                BackColor = Color.Transparent,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Cursor = Cursors.Hand
-            };
-            panel.Controls.Add(label);
-            panel.Click += click;
-            label.Click += click;
-            return panel;
-        }
-
-        private void MoveMonth(int deltaMonths)
-        {
-            if (deltaMonths == 0)
-            {
-                return;
-            }
-
-            _leftMonthStart = _leftMonthStart.AddMonths(deltaMonths);
-            RefreshMonths();
-        }
-
-        private void RefreshMonths()
-        {
-            _leftTitle.Text = AppText.Format("calendar.monthTitle", ("year", _leftMonthStart.Year), ("month", _leftMonthStart.Month));
-            _leftMonth.DisplayMonth = _leftMonthStart;
-            _leftMonth.SelectedDate = _selectedDate;
-            _leftMonth.RangeStart = _rangeStart;
-            _leftMonth.RangeEnd = _rangeEnd;
-            _leftMonth.Invalidate();
-
-            if (_rightMonth is not null && _rightTitle is not null)
-            {
-                var rightStart = _leftMonthStart.AddMonths(1);
-                _rightTitle.Text = AppText.Format("calendar.monthTitle", ("year", rightStart.Year), ("month", rightStart.Month));
-                _rightMonth.DisplayMonth = rightStart;
-                _rightMonth.SelectedDate = _selectedDate;
-                _rightMonth.RangeStart = _rangeStart;
-                _rightMonth.RangeEnd = _rangeEnd;
-                _rightMonth.Invalidate();
-            }
-        }
-
-        private void OnDateClicked(DateOnly date)
-        {
-            if (_mode == CalendarSelectionMode.Range)
-            {
-                if (!_pickingRangeEnd || date <= _rangeStart)
+                if (!File.Exists(AppPaths.StateFilePath))
                 {
-                    _rangeStart = date;
-                    _rangeEnd = date;
-                    _pickingRangeEnd = true;
-                }
-                else
-                {
-                    _rangeEnd = date;
-                    _pickingRangeEnd = false;
+                    return new List<DailyRecord>();
                 }
 
-                RefreshMonths();
-                return;
+                var store = new JsonStateStore(AppPaths.StateFilePath);
+                return store.Load().Records
+                    .Where(record => record.TotalSeconds > 0)
+                    .OrderByDescending(record => record.Date)
+                    .ToList();
             }
-
-            var selected = _mode switch
+            catch (Exception)
             {
-                CalendarSelectionMode.Week => date.AddDays(-GetMondayOffset(date.DayOfWeek)),
-                CalendarSelectionMode.Month => new DateOnly(date.Year, date.Month, 1),
-                _ => date
-            };
-            DateSelected?.Invoke(selected);
-            Close();
-        }
-    }
-
-    private sealed class CalendarMonthView : Control
-    {
-        public CalendarSelectionMode Mode { get; set; }
-        public DateOnly DisplayMonth { get; set; } = new(DateTime.Now.Year, DateTime.Now.Month, 1);
-        public DateOnly SelectedDate { get; set; } = DateOnly.FromDateTime(DateTime.Now);
-        public DateOnly RangeStart { get; set; } = DateOnly.FromDateTime(DateTime.Now);
-        public DateOnly RangeEnd { get; set; } = DateOnly.FromDateTime(DateTime.Now);
-
-        public event Action<DateOnly>? DateClicked;
-
-        public CalendarMonthView()
-        {
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor, true);
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            var cellWidth = Width / 7F;
-            var weekdayHeight = 28F;
-            var cellHeight = (Height - weekdayHeight) / 6F;
-            using var weekdayFont = AppFonts.Create(9F);
-            using var dayFont = AppFonts.Create(10F);
-            using var selectedFont = AppFonts.Create(10F, FontStyle.Bold);
-            using var weekdayBrush = new SolidBrush(TextSecondary);
-            using var normalBrush = new SolidBrush(TextPrimary);
-            using var mutedBrush = new SolidBrush(Color.FromArgb(174, 184, 194));
-            using var selectedBrush = new SolidBrush(Color.White);
-            using var softBrush = new SolidBrush(SoftGreen);
-            using var activeBrush = new SolidBrush(AccentGreen);
-
-            for (var i = 0; i < 7; i++)
-            {
-                DrawCenteredText(e.Graphics, WeekdayLabels()[i], weekdayFont, weekdayBrush, new RectangleF(i * cellWidth, 0, cellWidth, weekdayHeight));
+                return new List<DailyRecord>();
             }
-
-            foreach (var day in VisibleDays())
-            {
-                var index = day.Index;
-                var col = index % 7;
-                var row = index / 7;
-                var rect = new RectangleF(col * cellWidth + 3, weekdayHeight + row * cellHeight + 4, cellWidth - 6, cellHeight - 8);
-                var inMonth = day.Date.Month == DisplayMonth.Month;
-                var selected = IsSelected(day.Date);
-                var inRange = IsInRange(day.Date);
-
-                if (inRange && !selected)
-                {
-                    e.Graphics.FillRectangle(softBrush, rect);
-                }
-
-                if (selected)
-                {
-                    using var path = CreateRoundRect(Rectangle.Round(rect), 10);
-                    e.Graphics.FillPath(activeBrush, path);
-                }
-
-                var brush = selected ? selectedBrush : inMonth ? normalBrush : mutedBrush;
-                DrawCenteredText(e.Graphics, day.Date.Day.ToString(), selected ? selectedFont : dayFont, brush, rect);
-
-                if (day.Date == DateOnly.FromDateTime(DateTime.Now) && !selected)
-                {
-                    using var todayBrush = new SolidBrush(AccentBlue);
-                    e.Graphics.FillEllipse(todayBrush, rect.X + rect.Width / 2F - 2.5F, rect.Bottom - 6F, 5F, 5F);
-                }
-            }
-        }
-
-        protected override void OnMouseClick(MouseEventArgs e)
-        {
-            var date = HitTest(e.Location);
-            if (date is not null)
-            {
-                DateClicked?.Invoke(date.Value);
-            }
-
-            base.OnMouseClick(e);
-        }
-
-        private DateOnly? HitTest(Point point)
-        {
-            var weekdayHeight = 28F;
-            if (point.Y < weekdayHeight)
-            {
-                return null;
-            }
-
-            var cellWidth = Width / 7F;
-            var cellHeight = (Height - weekdayHeight) / 6F;
-            var col = (int)(point.X / cellWidth);
-            var row = (int)((point.Y - weekdayHeight) / cellHeight);
-            if (col < 0 || col > 6 || row < 0 || row > 5)
-            {
-                return null;
-            }
-
-            var index = row * 7 + col;
-            return VisibleDays().FirstOrDefault(day => day.Index == index).Date;
-        }
-
-        private bool IsSelected(DateOnly date)
-        {
-            if (Mode == CalendarSelectionMode.Range)
-            {
-                return date == RangeStart || date == RangeEnd;
-            }
-
-            if (Mode == CalendarSelectionMode.Week)
-            {
-                var weekStart = SelectedDate.AddDays(-GetMondayOffset(SelectedDate.DayOfWeek));
-                return date >= weekStart && date <= weekStart.AddDays(6) && (date.DayOfWeek is DayOfWeek.Monday or DayOfWeek.Sunday);
-            }
-
-            if (Mode == CalendarSelectionMode.Month)
-            {
-                return date.Day == 1 && date.Year == SelectedDate.Year && date.Month == SelectedDate.Month;
-            }
-
-            return date == SelectedDate;
-        }
-
-        private bool IsInRange(DateOnly date)
-        {
-            if (Mode == CalendarSelectionMode.Range)
-            {
-                return date >= RangeStart && date <= RangeEnd;
-            }
-
-            if (Mode == CalendarSelectionMode.Week)
-            {
-                var weekStart = SelectedDate.AddDays(-GetMondayOffset(SelectedDate.DayOfWeek));
-                return date >= weekStart && date <= weekStart.AddDays(6);
-            }
-
-            if (Mode == CalendarSelectionMode.Month)
-            {
-                return date.Year == SelectedDate.Year && date.Month == SelectedDate.Month;
-            }
-
-            return false;
-        }
-
-        private IEnumerable<(DateOnly Date, int Index)> VisibleDays()
-        {
-            var offset = GetMondayOffset(DisplayMonth.DayOfWeek);
-            var first = DisplayMonth.AddDays(-offset);
-            for (var i = 0; i < 42; i++)
-            {
-                yield return (first.AddDays(i), i);
-            }
-        }
-
-        private static void DrawCenteredText(Graphics graphics, string text, Font font, Brush brush, RectangleF rect)
-        {
-            using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-            graphics.DrawString(text, font, brush, rect, format);
-        }
-    }
-
-    private sealed class HourlyHeatChart : Control
-    {
-        private long[] _hourlySeconds = new long[24];
-        private long[] _pcHourlySeconds = new long[24];
-        private long[] _phoneHourlySeconds = new long[24];
-        private readonly ToolTip _tooltip = CreateChartToolTip();
-        private readonly List<ChartHit> _hits = new();
-        private string? _visibleTip;
-
-        public HourlyHeatChart()
-        {
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor, true);
-        }
-
-        public long[] HourlySeconds
-        {
-            get => _hourlySeconds;
-            set
-            {
-                _hourlySeconds = value?.Length == 24 ? (long[])value.Clone() : new long[24];
-                Invalidate();
-            }
-        }
-
-        public void SetSourceHourlySeconds(long[] pcHourlySeconds, long[] phoneHourlySeconds)
-        {
-            _pcHourlySeconds = pcHourlySeconds?.Length == 24 ? (long[])pcHourlySeconds.Clone() : new long[24];
-            _phoneHourlySeconds = phoneHourlySeconds?.Length == 24 ? (long[])phoneHourlySeconds.Clone() : new long[24];
-            Invalidate();
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            _hits.Clear();
-            var center = new PointF(Width / 2F, Height / 2F);
-            var outerRadius = Math.Min(Width, Height) / 2F - 30F;
-            var innerRadius = 42F;
-            using var border = new Pen(BorderColor, 2F);
-            e.Graphics.DrawEllipse(border, center.X - outerRadius, center.Y - outerRadius, outerRadius * 2F, outerRadius * 2F);
-
-            const long hourSeconds = 3600L;
-            var maxSeconds = hourSeconds;
-            var hasSource = _pcHourlySeconds.Sum() + _phoneHourlySeconds.Sum() > 0;
-            for (var hour = 0; hour < 24; hour++)
-            {
-                var pcSeconds = hasSource ? _pcHourlySeconds[hour] : _hourlySeconds[hour];
-                var phoneSeconds = hasSource ? _phoneHourlySeconds[hour] : 0;
-                (pcSeconds, phoneSeconds) = CapHourSourceSeconds(pcSeconds, phoneSeconds);
-                var seconds = pcSeconds + phoneSeconds;
-                if (seconds <= 0)
-                {
-                    continue;
-                }
-
-                var angle = -90F + hour * 15F;
-                var length = 10F + (float)seconds / maxSeconds * (outerRadius - innerRadius - 14F);
-                var bounds = DrawSourceHourBar(e.Graphics, center, angle, innerRadius, length, pcSeconds, phoneSeconds);
-                bounds.Inflate(8F, 8F);
-                _hits.Add(new ChartHit(bounds, FormatTooltipMinutes(seconds)));
-            }
-
-            DrawHourLabels(e.Graphics, center, outerRadius);
-
-            using var centerFill = new SolidBrush(PanelBackground);
-            e.Graphics.FillEllipse(centerFill, center.X - innerRadius, center.Y - innerRadius, innerRadius * 2F, innerRadius * 2F);
-            e.Graphics.DrawEllipse(border, center.X - innerRadius, center.Y - innerRadius, innerRadius * 2F, innerRadius * 2F);
-
-            using var titleFont = AppFonts.Create(16F, FontStyle.Bold);
-            using var titleBrush = new SolidBrush(TextPrimary);
-            using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-            e.Graphics.DrawString("24H", titleFont, titleBrush, new RectangleF(center.X - 48F, center.Y - 18F, 96F, 36F), format);
-        }
-
-        protected override void OnMouseMove(MouseEventArgs e)
-        {
-            base.OnMouseMove(e);
-            ShowHitToolTip(e.Location);
-        }
-
-        protected override void OnMouseLeave(EventArgs e)
-        {
-            base.OnMouseLeave(e);
-            HideHitToolTip();
-        }
-
-        private void ShowHitToolTip(Point point)
-        {
-            var text = _hits.FirstOrDefault(hit => hit.Bounds.Contains(point)).Text;
-            if (string.IsNullOrEmpty(text))
-            {
-                HideHitToolTip();
-                return;
-            }
-
-            if (_visibleTip == text)
-            {
-                return;
-            }
-
-            _visibleTip = text;
-            _tooltip.Show(text, this, point.X + 12, point.Y + 12, 2500);
-        }
-
-        private void HideHitToolTip()
-        {
-            if (_visibleTip is null)
-            {
-                return;
-            }
-
-            _visibleTip = null;
-            _tooltip.Hide(this);
-        }
-
-        private static RectangleF DrawHourBarSection(
-            Graphics graphics,
-            PointF center,
-            float angleDegrees,
-            float baseInnerRadius,
-            float startOffset,
-            float endOffset,
-            float fullLength,
-            Color color)
-        {
-            var angle = angleDegrees * Math.PI / 180D;
-            var innerHalf = InterpolateHalfWidth(startOffset, fullLength);
-            var outerHalf = InterpolateHalfWidth(endOffset, fullLength);
-            var dx = (float)Math.Cos(angle);
-            var dy = (float)Math.Sin(angle);
-            var px = -dy;
-            var py = dx;
-            var innerRadius = baseInnerRadius + startOffset;
-            var outerRadius = baseInnerRadius + endOffset;
-            var inner = new PointF(center.X + dx * innerRadius, center.Y + dy * innerRadius);
-            var outer = new PointF(center.X + dx * outerRadius, center.Y + dy * outerRadius);
-            var points = new[]
-            {
-                new PointF(inner.X + px * innerHalf, inner.Y + py * innerHalf),
-                new PointF(outer.X + px * outerHalf, outer.Y + py * outerHalf),
-                new PointF(outer.X - px * outerHalf, outer.Y - py * outerHalf),
-                new PointF(inner.X - px * innerHalf, inner.Y - py * innerHalf)
-            };
-
-            using var brush = new SolidBrush(color);
-            graphics.FillPolygon(brush, points);
-            return BoundsOf(points);
-        }
-
-        private static RectangleF DrawSourceHourBar(Graphics graphics, PointF center, float angleDegrees, float innerRadius, float length, long pcSeconds, long phoneSeconds)
-        {
-            var total = Math.Max(1L, pcSeconds + phoneSeconds);
-            RectangleF? bounds = null;
-            var cursor = innerRadius;
-            if (pcSeconds > 0)
-            {
-                var pcLength = length * pcSeconds / total;
-                bounds = DrawHourBarSection(graphics, center, angleDegrees, innerRadius, cursor - innerRadius, cursor + pcLength - innerRadius, length, AccentGreen);
-                cursor += pcLength;
-            }
-
-            if (phoneSeconds > 0)
-            {
-                var phoneBounds = DrawHourBarSection(graphics, center, angleDegrees, innerRadius, cursor - innerRadius, length, length, AccentBlue);
-                bounds = bounds.HasValue ? RectangleF.Union(bounds.Value, phoneBounds) : phoneBounds;
-            }
-
-            return bounds ?? RectangleF.Empty;
-        }
-
-        private static (long PcSeconds, long PhoneSeconds) CapHourSourceSeconds(long pcSeconds, long phoneSeconds)
-        {
-            const long hourSeconds = 3600L;
-            pcSeconds = Math.Max(0, pcSeconds);
-            phoneSeconds = Math.Max(0, phoneSeconds);
-            var totalSeconds = pcSeconds + phoneSeconds;
-            if (totalSeconds <= hourSeconds)
-            {
-                return (pcSeconds, phoneSeconds);
-            }
-
-            var scaledPcSeconds = (long)Math.Round(pcSeconds * (double)hourSeconds / totalSeconds);
-            scaledPcSeconds = Math.Clamp(scaledPcSeconds, 0, hourSeconds);
-            return (scaledPcSeconds, hourSeconds - scaledPcSeconds);
-        }
-
-        private static float InterpolateHalfWidth(float offset, float fullLength)
-        {
-            const float innerHalf = 3.5F;
-            const float outerHalf = 6.2F;
-            if (fullLength <= 0)
-            {
-                return innerHalf;
-            }
-
-            var ratio = Math.Clamp(offset / fullLength, 0F, 1F);
-            return innerHalf + (outerHalf - innerHalf) * ratio;
-        }
-
-        private static void DrawHourLabels(Graphics graphics, PointF center, float outerRadius)
-        {
-            using var font = AppFonts.Create(8.5F, FontStyle.Regular);
-            using var brush = new SolidBrush(TextSecondary);
-            using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-            foreach (var hour in new[] { 0, 6, 12, 18 })
-            {
-                var angle = (-90F + hour * 15F) * Math.PI / 180D;
-                var radius = outerRadius + 18F;
-                var x = center.X + (float)Math.Cos(angle) * radius;
-                var y = center.Y + (float)Math.Sin(angle) * radius;
-                graphics.DrawString(hour.ToString(), font, brush, new RectangleF(x - 24F, y - 11F, 48F, 22F), format);
-            }
-        }
-    }
-
-    private sealed class WeekBarChart : Control
-    {
-        private IReadOnlyList<DailyRecord> _records = Array.Empty<DailyRecord>();
-        private IReadOnlyList<UsageDeviceBreakdown> _deviceBreakdowns = Array.Empty<UsageDeviceBreakdown>();
-        private readonly ToolTip _tooltip = CreateChartToolTip();
-        private readonly List<ChartHit> _hits = new();
-        private string? _visibleTip;
-
-        public WeekBarChart()
-        {
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor, true);
-        }
-
-        public IReadOnlyList<DailyRecord> Records
-        {
-            get => _records;
-            set
-            {
-                _records = value ?? Array.Empty<DailyRecord>();
-                Invalidate();
-            }
-        }
-
-        public IReadOnlyList<UsageDeviceBreakdown> DeviceBreakdowns
-        {
-            get => _deviceBreakdowns;
-            set
-            {
-                _deviceBreakdowns = value ?? Array.Empty<UsageDeviceBreakdown>();
-                Invalidate();
-            }
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            _hits.Clear();
-            var records = _records.Count == 7 ? _records : Enumerable.Range(0, 7).Select(_ => new DailyRecord()).ToList();
-            var breakdowns = _deviceBreakdowns.Count == 7
-                ? _deviceBreakdowns
-                : Enumerable.Range(0, 7).Select(_ => new UsageDeviceBreakdown(0, 0)).ToList();
-            var maxSeconds = Math.Max(1L, records.Max(record => record.TotalSeconds));
-            var labels = WeekdayLabels();
-            using var textBrush = new SolidBrush(TextSecondary);
-            using var font = AppFonts.Create(7.5F);
-            using var labelFormat = new StringFormat
-            {
-                Alignment = StringAlignment.Center,
-                LineAlignment = StringAlignment.Center,
-                Trimming = StringTrimming.None
-            };
-
-            for (var i = 0; i < 7; i++)
-            {
-                var barHeight = (int)Math.Max(4, records[i].TotalSeconds * (Height - 34) / (double)maxSeconds);
-                var x = 12 + i * ((Width - 24) / 7);
-                var width = 24;
-                var y = Height - 26 - barHeight;
-                var breakdown = breakdowns[i];
-                var sourceSeconds = breakdown.PcSeconds + breakdown.PhoneSeconds;
-                if (sourceSeconds > 0)
-                {
-                    var phoneHeight = (int)Math.Round(barHeight * breakdown.PhoneSeconds / (double)sourceSeconds);
-                    var pcHeight = barHeight - phoneHeight;
-                    using var pcBrush = new SolidBrush(AccentGreen);
-                    using var phoneBrush = new SolidBrush(AccentBlue);
-                    e.Graphics.FillRectangle(phoneBrush, x, y, width, phoneHeight);
-                    e.Graphics.FillRectangle(pcBrush, x, y + phoneHeight, width, pcHeight);
-                }
-                else
-                {
-                    using var brush = new SolidBrush(AccentGreen);
-                    e.Graphics.FillRectangle(brush, x, y, width, barHeight);
-                }
-
-                var bounds = new RectangleF(x - 6, y - 6, width + 12, barHeight + 12);
-                _hits.Add(new ChartHit(bounds, FormatCompactHours(records[i].TotalSeconds)));
-                e.Graphics.DrawString(labels[i], font, textBrush, new RectangleF(x - 8, Height - 22, width + 16, 20), labelFormat);
-            }
-        }
-
-        protected override void OnMouseMove(MouseEventArgs e)
-        {
-            base.OnMouseMove(e);
-            ShowHitToolTip(e.Location);
-        }
-
-        protected override void OnMouseLeave(EventArgs e)
-        {
-            base.OnMouseLeave(e);
-            HideHitToolTip();
-        }
-
-        private void ShowHitToolTip(Point point)
-        {
-            var text = _hits.FirstOrDefault(hit => hit.Bounds.Contains(point)).Text;
-            if (string.IsNullOrEmpty(text))
-            {
-                HideHitToolTip();
-                return;
-            }
-
-            if (_visibleTip == text)
-            {
-                return;
-            }
-
-            _visibleTip = text;
-            _tooltip.Show(text, this, point.X + 12, point.Y + 12, 2500);
-        }
-
-        private void HideHitToolTip()
-        {
-            if (_visibleTip is null)
-            {
-                return;
-            }
-
-            _visibleTip = null;
-            _tooltip.Hide(this);
-        }
-    }
-
-    private sealed class MonthTrendChart : Control
-    {
-        private IReadOnlyList<DailyRecord> _records = Array.Empty<DailyRecord>();
-        private readonly ToolTip _tooltip = CreateChartToolTip();
-        private readonly List<ChartHit> _hits = new();
-        private string? _visibleTip;
-
-        public MonthTrendChart()
-        {
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor, true);
-        }
-
-        public IReadOnlyList<DailyRecord> Records
-        {
-            get => _records;
-            set
-            {
-                _records = value ?? Array.Empty<DailyRecord>();
-                Invalidate();
-            }
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            _hits.Clear();
-            using var warn = new Pen(AccentYellow, 1.5F) { DashPattern = new float[] { 4F, 5F } };
-            var warnY = Height * 0.32F;
-            e.Graphics.DrawLine(warn, 8, warnY, Width - 8, warnY);
-
-            if (_records.Count == 0)
-            {
-                return;
-            }
-
-            var maxSeconds = Math.Max(1L, Math.Max(6L * 3600L, _records.Max(record => record.TotalSeconds)));
-            var points = _records.Select((record, index) =>
-            {
-                var x = _records.Count == 1 ? Width / 2F : 12F + index * ((Width - 24F) / (_records.Count - 1));
-                var y = Height - 20F - (float)(record.TotalSeconds / (double)maxSeconds * (Height - 40F));
-                return new PointF(x, y);
-            }).ToArray();
-
-            using var pen = new Pen(AccentGreen, 4F) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
-            if (points.Length > 1)
-            {
-                e.Graphics.DrawLines(pen, points);
-            }
-
-            using var brush = new SolidBrush(AccentGreen);
-            for (var i = 0; i < points.Length; i++)
-            {
-                var point = points[i];
-                e.Graphics.FillEllipse(brush, point.X - 3F, point.Y - 3F, 6F, 6F);
-                _hits.Add(new ChartHit(new RectangleF(point.X - 12F, point.Y - 12F, 24F, 24F), FormatCompactHours(_records[i].TotalSeconds)));
-            }
-        }
-
-        protected override void OnMouseMove(MouseEventArgs e)
-        {
-            base.OnMouseMove(e);
-            ShowHitToolTip(e.Location);
-        }
-
-        protected override void OnMouseLeave(EventArgs e)
-        {
-            base.OnMouseLeave(e);
-            HideHitToolTip();
-        }
-
-        private void ShowHitToolTip(Point point)
-        {
-            var text = _hits.FirstOrDefault(hit => hit.Bounds.Contains(point)).Text;
-            if (string.IsNullOrEmpty(text))
-            {
-                HideHitToolTip();
-                return;
-            }
-
-            if (_visibleTip == text)
-            {
-                return;
-            }
-
-            _visibleTip = text;
-            _tooltip.Show(text, this, point.X + 12, point.Y + 12, 2500);
-        }
-
-        private void HideHitToolTip()
-        {
-            if (_visibleTip is null)
-            {
-                return;
-            }
-
-            _visibleTip = null;
-            _tooltip.Hide(this);
-        }
-    }
-
-    private readonly record struct ChartHit(RectangleF Bounds, string Text);
-
-    private static ToolTip CreateChartToolTip()
-    {
-        return new ToolTip
-        {
-            InitialDelay = 0,
-            ReshowDelay = 0,
-            AutoPopDelay = 2500,
-            ShowAlways = true
-        };
-    }
-
-    private static RectangleF BoundsOf(IReadOnlyList<PointF> points)
-    {
-        var minX = points.Min(point => point.X);
-        var maxX = points.Max(point => point.X);
-        var minY = points.Min(point => point.Y);
-        var maxY = points.Max(point => point.Y);
-        return new RectangleF(minX, minY, maxX - minX, maxY - minY);
-    }
-
-    private sealed class ContinuousBandsControl : Control
-    {
-        private IReadOnlyList<long> _sessions = Array.Empty<long>();
-
-        public ContinuousBandsControl()
-        {
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor, true);
-        }
-
-        public IReadOnlyList<long> Sessions
-        {
-            get => _sessions;
-            set
-            {
-                _sessions = value ?? Array.Empty<long>();
-                Invalidate();
-            }
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            var counts = new[]
-            {
-                _sessions.Count(seconds => seconds < 30 * 60),
-                _sessions.Count(seconds => seconds >= 30 * 60 && seconds < 45 * 60),
-                _sessions.Count(seconds => seconds >= 45 * 60)
-            };
-            var labels = new[] { AppText.Get("stats.sessions.band.under30"), AppText.Get("stats.sessions.band.30to45"), AppText.Get("stats.sessions.band.over45") };
-            var colors = new[] { AccentGreen, AccentYellow, AccentRed };
-            var max = Math.Max(1, counts.Max());
-
-            using var labelFont = AppFonts.Create(7.5F);
-            using var valueFont = AppFonts.Create(7.5F, FontStyle.Bold);
-            using var textBrush = new SolidBrush(TextSecondary);
-            using var labelFormat = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center };
-            using var valueFormat = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center };
-            var labelBounds = new RectangleF(0, 0, 86, 22);
-            var valueBounds = new RectangleF(Width - 72, 0, 70, 22);
-            var trackLeft = 104;
-            var trackWidth = Math.Max(20, Width - trackLeft - 92);
-
-            for (var i = 0; i < 3; i++)
-            {
-                var y = 8 + i * 45;
-                labelBounds.Y = y;
-                valueBounds.Y = y;
-                e.Graphics.DrawString(labels[i], labelFont, textBrush, labelBounds, labelFormat);
-                var track = new Rectangle(trackLeft, y + 2, trackWidth, 12);
-                using (var trackBrush = new SolidBrush(Color.FromArgb(232, 243, 239)))
-                {
-                    e.Graphics.FillRectangle(trackBrush, track);
-                }
-
-                var fill = new Rectangle(track.X, track.Y, (int)(track.Width * counts[i] / (float)max), track.Height);
-                using (var fillBrush = new SolidBrush(colors[i]))
-                {
-                    e.Graphics.FillRectangle(fillBrush, fill);
-                }
-
-                using var valueBrush = new SolidBrush(TextPrimary);
-                e.Graphics.DrawString(CountText(counts[i]), valueFont, valueBrush, valueBounds, valueFormat);
-            }
-        }
-    }
-
-    private sealed record AppUsageRow(string AppName, string SourceLabel, string AppId, string Platform, string IconData, long DurationSeconds);
-
-    private sealed class AppUsageRankingControl : Control
-    {
-        private IReadOnlyList<AppUsageRow> _entries = Array.Empty<AppUsageRow>();
-        private readonly Dictionary<string, Image?> _iconCache = new(StringComparer.OrdinalIgnoreCase);
-
-        public AppUsageRankingControl()
-        {
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor, true);
-        }
-
-        public IReadOnlyList<AppUsageRow> Entries
-        {
-            get => _entries;
-            set
-            {
-                _entries = value ?? Array.Empty<AppUsageRow>();
-                Invalidate();
-            }
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            if (_entries.Count == 0)
-            {
-                using var emptyFont = AppFonts.Create(9.5F);
-                TextRenderer.DrawText(
-                    e.Graphics,
-                    AppText.Get("stats.appUsage.empty"),
-                    emptyFont,
-                    new Rectangle(0, 44, Width, 32),
-                    TextSecondary,
-                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
-                return;
-            }
-
-            var maxSeconds = Math.Max(1L, _entries.Max(entry => entry.DurationSeconds));
-            for (var i = 0; i < _entries.Count; i++)
-            {
-                DrawRow(e.Graphics, _entries[i], i, maxSeconds);
-            }
-        }
-
-        private void DrawRow(Graphics graphics, AppUsageRow entry, int index, long maxSeconds)
-        {
-            var y = index * 47;
-            var iconBounds = new Rectangle(0, y + 4, 34, 34);
-            var iconColor = IconColor(index);
-            using (var iconBrush = new SolidBrush(iconColor))
-            using (var iconPath = CreateRoundRect(iconBounds, 10))
-            {
-                graphics.FillPath(iconBrush, iconPath);
-            }
-
-            using var iconFont = AppFonts.Create(11F, FontStyle.Bold);
-            using var iconTextBrush = new SolidBrush(Color.White);
-            using var iconFormat = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-            graphics.DrawString(Initial(entry.AppName), iconFont, iconTextBrush, iconBounds, iconFormat);
-
-            var textLeft = 48;
-            var durationWidth = 64;
-            using var nameFont = AppFonts.Create(9.2F, FontStyle.Regular);
-            var name = entry.AppName;
-            var sourceIconBounds = new Rectangle(textLeft, y + 3, 18, 18);
-            DrawSourceIcon(graphics, sourceIconBounds, IsPcSource(entry));
-            var nameLeft = textLeft + 24;
-            var nameBounds = new Rectangle(nameLeft, y, Math.Max(40, Width - durationWidth - 8 - nameLeft), 24);
-            TextRenderer.DrawText(
-                graphics,
-                name,
-                nameFont,
-                nameBounds,
-                TextPrimary,
-                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
-
-            using var durationFont = AppFonts.Create(9F, FontStyle.Bold);
-            using (var durationBrush = new SolidBrush(Color.FromArgb(142, 148, 160)))
-            using (var durationFormat = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center })
-            {
-                graphics.DrawString(
-                    FormatAppUsageDuration(entry.DurationSeconds),
-                    durationFont,
-                    durationBrush,
-                    new RectangleF(Width - durationWidth, y - 2, durationWidth, 30),
-                    durationFormat);
-            }
-
-            var track = new Rectangle(textLeft, y + 33, Math.Max(40, Width - textLeft), 7);
-            using (var trackBrush = new SolidBrush(Color.FromArgb(232, 243, 239)))
-            using (var fillBrush = new SolidBrush(Color.FromArgb(66, 133, 244)))
-            using (var trackPath = CreateRoundRect(track, 4))
-            {
-                graphics.FillPath(trackBrush, trackPath);
-                var fillWidth = (int)Math.Max(8, track.Width * (entry.DurationSeconds / (double)maxSeconds));
-                using var fillPath = CreateRoundRect(new Rectangle(track.X, track.Y, Math.Min(track.Width, fillWidth), track.Height), 4);
-                graphics.FillPath(fillBrush, fillPath);
-            }
-        }
-
-        private static void DrawSourceIcon(Graphics graphics, Rectangle bounds, bool pc)
-        {
-            using var pen = new Pen(pc ? AccentGreen : AccentBlue, 2F)
-            {
-                StartCap = LineCap.Round,
-                EndCap = LineCap.Round,
-                LineJoin = LineJoin.Round
-            };
-
-            if (pc)
-            {
-                var screen = new Rectangle(bounds.X + 2, bounds.Y + 3, bounds.Width - 4, bounds.Height - 8);
-                using var path = CreateRoundRect(screen, 2);
-                graphics.DrawPath(pen, path);
-                graphics.DrawLine(pen, bounds.X + bounds.Width / 2F, bounds.Bottom - 5, bounds.X + bounds.Width / 2F, bounds.Bottom - 1);
-                graphics.DrawLine(pen, bounds.X + 5, bounds.Bottom - 1, bounds.Right - 5, bounds.Bottom - 1);
-                return;
-            }
-
-            var phone = new Rectangle(bounds.X + 5, bounds.Y + 1, bounds.Width - 10, bounds.Height - 2);
-            using var phonePath = CreateRoundRect(phone, 3);
-            graphics.DrawPath(pen, phonePath);
-            graphics.DrawLine(pen, bounds.X + 8, bounds.Bottom - 4, bounds.Right - 8, bounds.Bottom - 4);
-        }
-
-        private static bool IsPcSource(AppUsageRow entry)
-        {
-            return string.Equals(entry.SourceLabel, AppText.Get("common.pc"), StringComparison.OrdinalIgnoreCase)
-                || string.Equals(entry.Platform, "windows", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static string FormatAppUsageDuration(long totalSeconds)
-        {
-            var duration = TimeSpan.FromSeconds(Math.Max(0, totalSeconds));
-            return $"{(int)duration.TotalHours}:{duration.Minutes:00}";
-        }
-
-        private static string Initial(string value)
-        {
-            var text = string.IsNullOrWhiteSpace(value) ? "A" : value.Trim();
-            return text.Length <= 1 ? text : text.Substring(0, 1).ToUpperInvariant();
-        }
-
-        private static Color IconColor(int index)
-        {
-            return (index % 4) switch
-            {
-                0 => Color.FromArgb(66, 133, 244),
-                1 => Color.FromArgb(22, 196, 102),
-                2 => Color.FromArgb(18, 125, 110),
-                _ => Color.FromArgb(239, 39, 67)
-            };
-        }
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                foreach (var image in _iconCache.Values)
-                {
-                    image?.Dispose();
-                }
-                _iconCache.Clear();
-            }
-            base.Dispose(disposing);
-        }
-    }
-
-    private sealed class DeviceShareControl : Control
-    {
-        private long _pcSeconds;
-        private long _phoneSeconds;
-
-        public DeviceShareControl()
-        {
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor, true);
-        }
-
-        public void SetShares(long pcSeconds, long phoneSeconds)
-        {
-            _pcSeconds = Math.Max(0, pcSeconds);
-            _phoneSeconds = Math.Max(0, phoneSeconds);
-            Invalidate();
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            using var titleFont = AppFonts.Create(9F, FontStyle.Bold);
-            TextRenderer.DrawText(
-                e.Graphics,
-                AppText.Get("stats.source.title"),
-                titleFont,
-                new Rectangle(0, 0, Width, 24),
-                TextPrimary,
-                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-
-            DrawSourceRow(e.Graphics, 36, AppText.Get("common.pc"), _pcSeconds, AccentGreen);
-            DrawSourceRow(e.Graphics, 88, AppText.Get("common.phone"), _phoneSeconds, AccentBlue);
-        }
-
-        private void DrawSourceRow(Graphics graphics, int y, string label, long seconds, Color color)
-        {
-            var total = Math.Max(1, _pcSeconds + _phoneSeconds);
-            var percent = seconds / (float)total;
-            using var trackBrush = new SolidBrush(Color.FromArgb(232, 243, 239));
-            using var fillBrush = new SolidBrush(color);
-            var track = new Rectangle(0, y + 32, Width - 6, 12);
-            graphics.FillRectangle(trackBrush, track);
-            graphics.FillRectangle(fillBrush, track.X, track.Y, (int)(track.Width * percent), track.Height);
-
-            var text = $"{label} {(int)Math.Round(percent * 100)}%";
-            using var rowFont = AppFonts.Create(9.25F, FontStyle.Regular);
-            TextRenderer.DrawText(
-                graphics,
-                text,
-                rowFont,
-                new Rectangle(0, y, Width - 6, 28),
-                TextSecondary,
-                TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
-        }
-    }
-
-    private sealed class RoundedPanel : Panel
-    {
-        public Color FillColor { get; set; } = Color.White;
-        public Color BorderColor { get; set; } = StatsForm.BorderColor;
-        public int Radius { get; set; } = 18;
-
-        public RoundedPanel()
-        {
-            DoubleBuffered = true;
-            BackColor = Color.Transparent;
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            var bounds = new Rectangle(0, 0, Width - 1, Height - 1);
-            using var path = CreateRoundRect(bounds, Radius);
-            using var fill = new SolidBrush(FillColor);
-            using var border = new Pen(BorderColor);
-            e.Graphics.FillPath(fill, path);
-            e.Graphics.DrawPath(border, path);
-            base.OnPaint(e);
-        }
-    }
-
-    private sealed class LegendDot : Control
-    {
-        public Color DotColor { get; set; } = AccentGreen;
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            using var brush = new SolidBrush(DotColor);
-            e.Graphics.FillEllipse(brush, 0, 0, Width - 1, Height - 1);
-        }
-    }
-
-    private sealed class FitTextLabel : Control
-    {
-        public float MaxFontSize { get; set; } = 20F;
-        public float MinFontSize { get; set; } = 10F;
-        public FontStyle FontStyle { get; set; } = FontStyle.Regular;
-        public ContentAlignment TextAlign { get; set; } = ContentAlignment.MiddleLeft;
-
-        public FitTextLabel()
-        {
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-            SetStyle(ControlStyles.SupportsTransparentBackColor, true);
-        }
-
-        protected override void OnTextChanged(EventArgs e)
-        {
-            Invalidate();
-            base.OnTextChanged(e);
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            if (BackColor.A == 255)
-            {
-                e.Graphics.Clear(BackColor);
-            }
-
-            if (ClientRectangle.Width <= 0 || ClientRectangle.Height <= 0 || string.IsNullOrEmpty(Text))
-            {
-                return;
-            }
-
-            using var font = CreateFittingFont(e.Graphics, ClientRectangle);
-            TextRenderer.DrawText(e.Graphics, Text, font, ClientRectangle, ForeColor, CreateTextFormatFlags());
-        }
-
-        private Font CreateFittingFont(Graphics graphics, Rectangle bounds)
-        {
-            for (var size = MaxFontSize; size >= MinFontSize; size -= 0.5F)
-            {
-                var font = AppFonts.Create(size, FontStyle, GraphicsUnit.Point);
-                var measured = TextRenderer.MeasureText(
-                    graphics,
-                    Text,
-                    font,
-                    new Size(bounds.Width, int.MaxValue),
-                    CreateMeasureTextFormatFlags());
-                if (measured.Width <= bounds.Width && measured.Height <= bounds.Height)
-                {
-                    return font;
-                }
-
-                font.Dispose();
-            }
-
-            return AppFonts.Create(MinFontSize, FontStyle, GraphicsUnit.Point);
-        }
-
-        private TextFormatFlags CreateTextFormatFlags()
-        {
-            var flags = TextFormatFlags.NoPadding | TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl;
-
-            flags |= TextAlign is ContentAlignment.TopRight or ContentAlignment.MiddleRight or ContentAlignment.BottomRight
-                ? TextFormatFlags.Right
-                : TextAlign is ContentAlignment.TopCenter or ContentAlignment.MiddleCenter or ContentAlignment.BottomCenter
-                    ? TextFormatFlags.HorizontalCenter
-                    : TextFormatFlags.Left;
-
-            flags |= TextAlign is ContentAlignment.BottomLeft or ContentAlignment.BottomCenter or ContentAlignment.BottomRight
-                ? TextFormatFlags.Bottom
-                : TextAlign is ContentAlignment.TopLeft or ContentAlignment.TopCenter or ContentAlignment.TopRight
-                    ? TextFormatFlags.Top
-                    : TextFormatFlags.VerticalCenter;
-
-            return flags;
-        }
-
-        private static TextFormatFlags CreateMeasureTextFormatFlags()
-        {
-            return TextFormatFlags.NoPadding | TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl;
         }
     }
 }
